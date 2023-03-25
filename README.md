@@ -1,2 +1,3 @@
 # python-brasa
-Extract Brazilian data from a wide range of Internet sources
+
+Extract finance market data from brazillian financial institutions: B3, ANBIMA, Tesouro Direto, CVM.
