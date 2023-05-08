@@ -1,0 +1,49 @@
+id: PremioOpcaoAcao
+filename: PExxxxxx.txt
+filetype: MCSV
+description: Prêmio de Referência para Opções sobre Ações
+separator: ;
+locale: pt
+parts:
+  Header:
+    fields:
+    - name: data_geracao_arquivo
+      description: Data de geração do arquivo
+      handler:
+        type: Date
+        format: '%Y%m%d'
+  Data:
+    fields:
+    - name: cod_opcao
+      description: Código da Opção
+    - name: tipo_opcao
+      description: Tipo de Opção
+      handler:
+        type: factor
+        levels:
+        - C
+        - V
+        labels:
+        - call
+        - put
+    - name: tipo_exercicio
+      description: Tipo de exercício
+      handler:
+        type: factor
+        levels:
+        - A
+        - E
+        labels:
+        - american
+        - european
+    - name: data_vencimento
+      description: Data de vencimento
+      handler:
+        type: Date
+        format: '%Y%m%d'
+    - name: preco_exercicio
+      description: Preço de exercício
+    - name: premio_referencia
+      description: Prêmio de referência
+    - name: valor_volatilidade
+      description: Volatilidade da opção

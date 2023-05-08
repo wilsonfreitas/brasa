@@ -1,0 +1,37 @@
+id: OpcoesAcoesEmAberto
+filename: ~
+filetype: CUSTOM
+description: Posições em aberto de opções de ações
+downloader:
+  function: brasa.downloaders.datetime_download
+  url: https://www.b3.com.br/json/%Y%m%d/Posicoes/Empresa/SI_C_OPCPOSABEMP.json
+  format: json
+reader:
+  function: options_open_interest_read
+fields:
+  - name: symbol
+    description: Código da opção
+  - name: strike
+    description: Preço de exercício da opção
+  - name: description
+    description: Nome da empresa
+  - name: covered
+    description: Posição coberta
+  - name: uncovered
+    description: Posição descoberta
+  - name: qt_holder
+    description: Quantidade de clientes comprados
+  - name: lock
+    description: Posição travada
+  - name: total_positions
+    description: Posição total
+  - name: qt_issuer
+    description: Quantidade de clientes lançadores
+  - name: maturity_date
+    description: Data de vencimento da opção
+  - name: instrument_market
+    description: Tipo de mercado (70 CALLS, 80 PUTS)
+  - name: asset_name
+    description: Código da empresa
+  - name: asset_specification
+    description: Especificação do ativo
