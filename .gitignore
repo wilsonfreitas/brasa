@@ -127,3 +127,5 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+data/big-files/BDIN.zip
+data/big-files/OpcoesAcoesEmAberto.zip
