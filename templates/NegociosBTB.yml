@@ -7,7 +7,7 @@ comment: ""
 skip: 1
 locale: pt
 downloader:
-  function: datetime_download
+  function: brasa.downloaders.datetime_download
   url: https://arquivos.b3.com.br/apinegocios/tickercsvbtb/%Y-%m-%d
   format: zip
 fields:
@@ -15,7 +15,7 @@ fields:
     description: Data de referência
     handler:
       type: Date
-      format: '%Y-%m-%d'
+      format: "%Y-%m-%d"
   - name: TckrSymb
     description: Símbolo
   - name: UpdActn
@@ -39,16 +39,16 @@ fields:
     description: Data do pregão
     handler:
       type: Date
-      format: '%Y-%m-%d'
+      format: "%Y-%m-%d"
   - name: Mkt
     description: Mercado
     handler:
       type: factor
       levels:
-      - 91
-      - 92
-      - 93
+        - 91
+        - 92
+        - 93
       labels:
-      - balcão
-      - eletrônico d0
-      - eletrônico d+1
+        - balcão
+        - eletrônico d0
+        - eletrônico d+1

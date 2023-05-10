@@ -13,7 +13,7 @@ import requests
 
 class SimpleDownloader:
     def __init__(self, **kwargs):
-        self.verify_ssl = self.attrs.get("verify_ssl", True)
+        self.verify_ssl = kwargs.get("verify_ssl", True)
         self._url = kwargs["url"]
         self.response = None
 
