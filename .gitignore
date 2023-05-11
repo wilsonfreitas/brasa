@@ -129,3 +129,10 @@ dmypy.json
 .pyre/
 data/big-files/BDIN.zip
 data/big-files/OpcoesAcoesEmAberto.zip
+legacy/parser_td.py
+legacy/test_b3_cal.py
+legacy/test_parsers_anbima.py
+legacy/test_parsers_b3.py
+legacy/test_parsers_td.py
+legacy/test_readers_csv.py
+legacy/test_unzip.py
