@@ -4,5 +4,5 @@ from brasa.downloaders.downloaders import (
 )
 
 from brasa.downloaders.helpers import (
-    simple_download, datetime_download,
+    simple_download, datetime_download, b3_url_encoded_download
 )

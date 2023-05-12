@@ -1,6 +1,7 @@
 
 from datetime import datetime
 import hashlib
+import json
 import os
 import shutil
 from typing import IO, Callable, Text
@@ -74,7 +75,7 @@ def get_checksum(fp: IO) -> str:
 def download_marketdata(template_name, **kwargs) -> str | None:
     template = retrieve_template(template_name)
     downloader = MarketDataDownloader(template.downloader)
-    fp = downloader.download(**kwargs)
+    fp, response = downloader.download(**kwargs)
     if downloader.extension == "zip":
         dest = os.path.join(os.getcwd(), ".brasa-cache", template_name, "zips")
     else:
@@ -89,6 +90,11 @@ def download_marketdata(template_name, **kwargs) -> str | None:
     shutil.copyfileobj(fp, fp_dest)
     fp.close()
     fp_dest.close()
+
+    dest = os.path.join(os.getcwd(), ".brasa-cache", template_name, "downloads")
+    os.makedirs(dest, exist_ok=True)
+    with open(os.path.join(dest, f"{timestamp_str}_response.json"), "w") as fp:
+        json.dump(dict(response.headers), fp, indent=4)
     
     if downloader.extension == "zip":
         filenames = unzip_recursive(file_path)

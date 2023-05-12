@@ -18,7 +18,7 @@ def test_download():
     assert ~ tpl.has_reader
 
     dnd = MarketDataDownloader(tpl.downloader)
-    fp = dnd.download()
+    fp, _ = dnd.download()
     assert fp is not None
     assert fp.readable()
 
@@ -68,4 +68,11 @@ def test_download_marketdata_with_refdate_and_unzip_recursive_with_many_files():
     assert isinstance(dest, list)
     assert len(dest) > 1
     assert all([os.path.exists(f) for f in dest])
+
+
+def test_download_marketdata_b3_url_encoded():
+    dest = download_marketdata("GetStockIndex")
+    assert dest is not None
+    assert isinstance(dest, str)
+    assert os.path.exists(dest)
 

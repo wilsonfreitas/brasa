@@ -4,35 +4,38 @@ filetype: MCUSTOM
 description: Composição dos índices da B3
 locale: pt
 downloader:
-  function: stock_indexes_composition_download
+  function: brasa.downloaders.b3_url_encoded_download
   url: https://sistemaswebb3-listados.b3.com.br/indexProxy/indexCall/GetStockIndex
   format: json
   encoding: latin1
+  args:
+    - pageNumber: 1
+      pageSize: 9999
 reader:
   function: stock_indexes_json_reader
 parts:
   Header:
     name: header
     fields:
-    - name: update
-      description: Data de atualização do índice
-      handler:
-        type: Date
-        format: '%Y-%m-%d'
-    - name: start_month
-      description: Mês de início de vigência do índice
-    - name: end_month
-      description: Mês de fim de vigência do índice
-    - name: year
-      description: Ano de criação do índice
+      - name: update
+        description: Data de atualização do índice
+        handler:
+          type: Date
+          format: "%Y-%m-%d"
+      - name: start_month
+        description: Mês de início de vigência do índice
+      - name: end_month
+        description: Mês de fim de vigência do índice
+      - name: year
+        description: Ano de criação do índice
   Results:
     name: results
     fields:
-    - name: company
-      description: Nome da companhia
-    - name: spotlight
-      description: Código de especificação da ação
-    - name: code
-      description: Código da ação
-    - name: indexes
-      description: Lista de índexes separados por vírgula
+      - name: company
+        description: Nome da companhia
+      - name: spotlight
+        description: Código de especificação da ação
+      - name: code
+        description: Código da ação
+      - name: indexes
+        description: Lista de índexes separados por vírgula

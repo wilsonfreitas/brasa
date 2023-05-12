@@ -52,121 +52,15 @@ class DatetimeDownloader(SimpleDownloader):
         return self.refdate.strftime(self._url)
 
 
-def get_date(dt):
-    return dt.date() if isinstance(dt, datetime) else dt
+class B3URLEncodedDownloader(SimpleDownloader):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
-
-def get_month(dt, monthdelta):
-    first = date(dt.year, dt.month, 1)
-    delta = 0
-    while delta > monthdelta:
-        first += timedelta(-1)
-        dt = first
-        first = date(dt.year, dt.month, 1)
-        delta -= 1
-    return first
-
-
-class StaticFileDownloader(SimpleDownloader):
-    SP_TZ = pytz.timezone("America/Sao_Paulo")
-
-    def get_url(self, refdate):
-        return self.attrs["url"]
-
-    def get_fname2(self, refdate):
-        if self.attrs.get("ext"):
-            ext = ".{}".format(self.attrs["ext"])
-        else:
-            _, ext = os.path.splitext(self._url)
-        fname = "{}{}".format(refdate.strftime("%Y-%m-%d"), ext)
-        return fname
-
-    def download(self, refdate=None):
-        self._url = self.get_url(refdate)
-        verify_ssl = self.attrs.get("verify_ssl", True)
-        _, tfile, status_code, res = download_url(self._url, verify_ssl=verify_ssl)
-        refdate = datetime.strptime(
-            res.headers["last-modified"], "%a, %d %b %Y %H:%M:%S %Z"
-        )
-        refdate = pytz.UTC.localize(refdate).astimezone(self.SP_TZ)
-        if status_code != 200:
-            return None, None, status_code, refdate
-
-        fname = self.get_fname2(refdate)
-        f_fname = self.get_fname(fname, refdate)
-        return f_fname, tfile, status_code, refdate
-
-
-class StaticZipFileDownloader(SimpleDownloader):
-    SP_TZ = pytz.timezone("America/Sao_Paulo")
-
-    def get_url(self, refdate):
-        return self.attrs["url"]
-
-    def get_fname2(self, refdate):
-        if self.attrs.get("ext"):
-            ext = ".{}".format(self.attrs["ext"])
-        else:
-            _, ext = os.path.splitext(self._url)
-        fname = "{}{}".format(refdate.strftime("%Y-%m-%d"), ext)
-        return fname
-
-    def download(self, refdate=None):
-        self._url = self.get_url(refdate)
-        verify_ssl = self.attrs.get("verify_ssl", True)
-        _, tfile, status_code, res = download_url(self._url, verify_ssl=verify_ssl)
-        refdate = datetime.strptime(
-            res.headers["last-modified"], "%a, %d %b %Y %H:%M:%S %Z"
-        )
-        refdate = pytz.UTC.localize(refdate).astimezone(self.SP_TZ)
-        if status_code != 200:
-            return None, None, status_code, refdate
-
-        zf = zipfile.ZipFile(tfile)
-        nl = zf.namelist()
-        if len(nl) == 0:
-            logging.error("zip file is empty url = {}".format(self._url))
-            return None, None, 204
-        name = nl[0]
-        content = zf.read(name)  # bytes
-        zf.close()
-        tfile.close()
-        temp = tempfile.TemporaryFile()
-        temp.write(content)
-        temp.seek(0)
-
-        fname = self.get_fname2(refdate)
-        f_fname = self.get_fname(fname, refdate)
-        return f_fname, temp, status_code, refdate
-
-
-class FormatDateStaticFileDownloader(StaticFileDownloader):
-    def get_url(self, refdate):
-        refdate = refdate or self.now + timedelta(self.attrs.get("timedelta", 0))
-        logging.debug("REFDATE %s", refdate)
-        logging.debug("SELF NOW %s", self.now)
-        logging.debug("TIMEDELTA %s", self.attrs.get("timedelta", 0))
-        return refdate.strftime(self.attrs["url"])
-
-
-class FundosInfDiarioDownloader(StaticZipFileDownloader):
-    def get_refmonth(self):
-        return get_month(self.now, self.attrs["month_reference"])
-
-    def get_url(self, refdate):
-        refmonth = self.get_refmonth()
-        return refmonth.strftime(self.attrs["url"])
-
-    def get_fname2(self, refdate):
-        if self.attrs.get("ext"):
-            ext = ".{}".format(self.attrs["ext"])
-        else:
-            _, ext = os.path.splitext(self._url)
-        refmonth = self.get_refmonth()
-        fname = "{}/{}{}".format(
-            refmonth.strftime("%Y-%m"), refdate.strftime("%Y-%m-%d"), ext
-        )
-        return fname
+    @property
+    def url(self) -> str:
+        params = json.dumps({"pageNumber": 1, "pageSize": 9999})
+        params_enc = base64.encodebytes(bytes(params, "utf8")).decode("utf8").strip()
+        return f"{self._url}/{params_enc}"
 
 
 class PreparedURLDownloader(SimpleDownloader):
@@ -246,28 +140,6 @@ class B3FilesURLDownloader(SimpleDownloader):
         refdate = datetime(refdate.year, refdate.month, refdate.day)
         refdate = pytz.timezone("America/Sao_Paulo").localize(refdate)
         return refdate
-
-
-class B3StockIndexInfoDownloader(SimpleDownloader):
-    calendar = bizdays.Calendar.load("ANBIMA")
-
-    def download(self, refdate=None):
-        params = json.dumps({"pageNumber": 1, "pageSize": 9999})
-        params_enc = base64.encodebytes(bytes(params, "utf8")).decode("utf8").strip()
-        url = f"https://sistemaswebb3-listados.b3.com.br/indexProxy/indexCall/GetStockIndex/{params_enc}"
-        verify_ssl = self.attrs.get("verify_ssl", True)
-        fname, temp_file, status_code, res = download_url(url, verify_ssl=verify_ssl)
-        if res.status_code != 200:
-            return None, None, res.status_code, refdate
-        f_fname = self.get_fname(None, self.now)
-        logging.info(
-            "Returned from download %s %s %s %s",
-            f_fname,
-            temp_file,
-            status_code,
-            refdate,
-        )
-        return f_fname, temp_file, status_code, refdate
 
 
 class VnaAnbimaURLDownloader(SimpleDownloader):
