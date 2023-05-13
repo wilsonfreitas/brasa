@@ -7,9 +7,11 @@ skip: 2
 comment: ""
 locale: pt
 downloader:
-  function: base64_datetime_download
+  function: brasa.downloaders.datetime_download
   url: https://bvmf.bmfbovespa.com.br/NegociosRealizados/Registro/DownloadArquivoDiretorio?data=%d-%m-%Y
   format: csv
+  args:
+    refdate: ~
 fields:
   - name: InstrumentoFinanceiro
     description: Instrumento Financeiro

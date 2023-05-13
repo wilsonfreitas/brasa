@@ -53,6 +53,10 @@ def test_download_marketdata_with_refdate():
     assert isinstance(dest, str)
     assert os.path.exists(dest)
 
+    dest = download_marketdata("NegociosBalcao", refdate=datetime(2023, 5, 10))
+    assert dest is not None
+    assert os.path.exists(dest)
+
 
 def test_download_marketdata_with_refdate_and_unzip():
     dest = download_marketdata("COTAHIST_DAILY", refdate=datetime(2023, 5, 10))
