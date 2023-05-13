@@ -8,6 +8,8 @@ downloader:
   function: brasa.downloaders.datetime_download
   url: https://bvmf.bmfbovespa.com.br/InstDados/SerHist/COTAHIST_A%Y.ZIP
   format: zip
+  args:
+    refdate: ~
 parts:
   Header:
     pattern: ^00

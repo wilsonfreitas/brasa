@@ -7,6 +7,9 @@ downloader:
   function: brasa.downloaders.b3_url_encoded_download
   url: https://sistemaswebb3-listados.b3.com.br/listedCompaniesProxy/CompanyCall/GetDetail
   format: json
+  args:
+    codeCVM: ~
+    language: pt-br
 reader:
   function: company_details_reader
 parts:

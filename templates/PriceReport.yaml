@@ -8,6 +8,8 @@ downloader:
   function: brasa.downloaders.datetime_download
   url: https://www.b3.com.br/pesquisapregao/download?filelist=PR%y%m%d.zip
   format: zip
+  args:
+    refdate: ~
 reader:
   function: pricereport_reader
 fields:

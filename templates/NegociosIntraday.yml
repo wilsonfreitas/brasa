@@ -9,6 +9,8 @@ downloader:
   function: brasa.downloaders.datetime_download
   url: https://arquivos.b3.com.br/apinegocios/tickercsv/%Y-%m-%d
   format: zip
+  args:
+    refdate: ~
 fields:
   - name: RptDt
     description: Data de referência da informação

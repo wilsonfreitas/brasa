@@ -6,6 +6,8 @@ downloader:
   function: brasa.downloaders.datetime_download
   url: https://www.b3.com.br/json/%Y%m%d/Posicoes/Empresa/SI_C_OPCPOSABEMP.json
   format: json
+  args:
+    refdate: ~
 reader:
   function: options_open_interest_read
 fields:

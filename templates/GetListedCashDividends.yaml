@@ -4,40 +4,45 @@ filetype: CUSTOM
 description: Listagem de dividendos em dinheiro
 locale: pt
 downloader:
-  function: company_cash_dividends_download
+  function: brasa.downloaders.b3_url_encoded_download
   url: https://sistemaswebb3-listados.b3.com.br/listedCompaniesProxy/CompanyCall/GetListedCashDividends
   format: json
+  args:
+    tradingName: ~
+    language: pt-br
+    pageNumber: 1
+    pageSize: 9999
 reader:
   function: company_cash_dividends_reader
 fields:
-- name: typeStock
-  description: Tipo da ação (ON, PN)
-- name: dateApproval
-  description: Data em que foi deliberado
-  handler:
-    type: Date
-    format: '%d/%m/%Y'
-- name: valueCash
-  description: Valor do dividendo
-- name: ratio
-  description: Razão
-- name: corporateAction
-  description: Tipo do provento
-- name: lastDatePriorEx
-  description: Data COM (última data antes da ação ficar EX do provento)
-  handler:
-    type: Date
-    format: '%d/%m/%Y'
-- name: dateClosingPricePriorExDate
-  description: Data COM (última data antes da ação ficar EX do provento)
-  handler:
-    type: Date
-    format: '%d/%m/%Y'
-- name: closingPricePriorExDate
-  description: Último preço COM
-- name: quotedPerShares
-  description: Provento por ações
-- name: corporateActionPrice
-  description: Razão Provento/Preço (%)
-- name: lastDateTimePriorEx
-  description: Data/Hora COM (última data antes da ação ficar EX do provento)
+  - name: typeStock
+    description: Tipo da ação (ON, PN)
+  - name: dateApproval
+    description: Data em que foi deliberado
+    handler:
+      type: Date
+      format: "%d/%m/%Y"
+  - name: valueCash
+    description: Valor do dividendo
+  - name: ratio
+    description: Razão
+  - name: corporateAction
+    description: Tipo do provento
+  - name: lastDatePriorEx
+    description: Data COM (última data antes da ação ficar EX do provento)
+    handler:
+      type: Date
+      format: "%d/%m/%Y"
+  - name: dateClosingPricePriorExDate
+    description: Data COM (última data antes da ação ficar EX do provento)
+    handler:
+      type: Date
+      format: "%d/%m/%Y"
+  - name: closingPricePriorExDate
+    description: Último preço COM
+  - name: quotedPerShares
+    description: Provento por ações
+  - name: corporateActionPrice
+    description: Razão Provento/Preço (%)
+  - name: lastDateTimePriorEx
+    description: Data/Hora COM (última data antes da ação ficar EX do provento)

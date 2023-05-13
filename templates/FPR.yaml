@@ -8,6 +8,8 @@ downloader:
   function: brasa.downloaders.datetime_download
   url: https://www.b3.com.br/pesquisapregao/download?filelist=FP%y%m%d.zip
   format: zip
+  args:
+    refdate: ~
 parts:
   Header:
     index: 1

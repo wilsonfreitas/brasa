@@ -9,8 +9,8 @@ downloader:
   format: json
   encoding: latin1
   args:
-    - pageNumber: 1
-      pageSize: 9999
+    pageNumber: 1
+    pageSize: 9999
 reader:
   function: stock_indexes_json_reader
 parts:
