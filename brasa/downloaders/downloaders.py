@@ -1,3 +1,4 @@
+import binascii
 import os
 import os.path
 import logging
@@ -6,15 +7,14 @@ from typing import IO
 import zipfile
 from datetime import datetime, timedelta, date, timezone
 import json
-import base64
 import bizdays
 import pytz
 import requests
 
 class SimpleDownloader:
-    def __init__(self, **kwargs):
-        self.verify_ssl = kwargs.get("verify_ssl", True)
-        self._url = kwargs["url"]
+    def __init__(self, url, verify_ssl, **kwargs):
+        self.verify_ssl = verify_ssl
+        self._url = url
         self.response = None
 
     @property
@@ -43,8 +43,8 @@ class SimpleDownloader:
 
 
 class DatetimeDownloader(SimpleDownloader):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, url, verify_ssl, **kwargs):
+        super().__init__(url, verify_ssl, **kwargs)
         self.refdate = kwargs["refdate"]
 
     @property
@@ -53,13 +53,14 @@ class DatetimeDownloader(SimpleDownloader):
 
 
 class B3URLEncodedDownloader(SimpleDownloader):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, url, verify_ssl, **kwargs):
+        super().__init__(url, verify_ssl, **kwargs)
+        self.args = kwargs
 
     @property
     def url(self) -> str:
-        params = json.dumps({"pageNumber": 1, "pageSize": 9999})
-        params_enc = base64.encodebytes(bytes(params, "utf8")).decode("utf8").strip()
+        params = json.dumps(self.args)
+        params_enc = binascii.b2a_base64(bytes(params, "utf8"), newline=False).decode("utf8").strip()
         return f"{self._url}/{params_enc}"
 
 

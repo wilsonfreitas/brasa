@@ -1,6 +1,8 @@
 
 from datetime import datetime
 import os
+
+import pytest
 from brasa.templates import MarketDataTemplate, MarketDataDownloader, download_marketdata, retrieve_template
 
 
@@ -34,6 +36,12 @@ def test_download_marketdata():
     dest = download_marketdata("CDIIDI")
     assert dest is not None
     assert os.path.exists(dest)
+
+
+def test_download_marketdata_missing_args_error():
+    with pytest.raises(ValueError) as exc_info:
+        download_marketdata("OpcoesAcoesEmAberto")
+    assert exc_info.value.args[0] == "Missing argument refdate"
 
 
 def test_download_marketdata_with_refdate():
@@ -76,3 +84,34 @@ def test_download_marketdata_b3_url_encoded():
     assert isinstance(dest, str)
     assert os.path.exists(dest)
 
+
+def test_download_marketdata_b3_url_encoded_with_null_argument():
+    dest = download_marketdata("GetPortfolioDay_IndexStatistics", index="IBOV", year=2022)
+    assert dest is not None
+    assert isinstance(dest, str)
+    assert os.path.exists(dest)
+
+    dest = download_marketdata("GetListedSupplementCompany", issuingCompany="ABEV")
+    assert dest is not None
+    assert isinstance(dest, str)
+    assert os.path.exists(dest)
+
+    dest = download_marketdata("GetDetailsCompany", codeCVM="24910")
+    assert dest is not None
+    assert isinstance(dest, str)
+    assert os.path.exists(dest)
+
+    dest = download_marketdata("GetListedCashDividends", tradingName="ABEV")
+    assert dest is not None
+    assert isinstance(dest, str)
+    assert os.path.exists(dest)
+
+    dest = download_marketdata("GetTheoricalPortfolio", index="IBOV")
+    assert dest is not None
+    assert isinstance(dest, str)
+    assert os.path.exists(dest)
+
+    dest = download_marketdata("GetPortfolioDay", index="IBOV")
+    assert dest is not None
+    assert isinstance(dest, str)
+    assert os.path.exists(dest)

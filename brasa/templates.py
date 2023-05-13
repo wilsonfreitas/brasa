@@ -55,13 +55,21 @@ class MarketDataDownloader:
     def __init__(self, downloader: dict):
         self.url_template = downloader["url"]
         self.extension = downloader["format"]
+        self.args = downloader.get("args", {})
+        self.encoding = downloader.get("encoding", "UTF8")
         self.verify_ssl = downloader.get("verify_ssl", True)
-        func = load_function_by_name(downloader["function"])
-        self.download_function = func
+        self.download_function = load_function_by_name(downloader["function"])
 
     def download(self, **kwargs) -> IO | None:
-        kwargs["verify_ssl"] = self.verify_ssl
-        return self.download_function(self.url_template, **kwargs)
+        args = {}
+        for key, val in self.args.items():
+            if key in kwargs.keys():
+                args[key] = kwargs[key]
+            elif val is not None:
+                args[key] = val
+            else:
+                raise ValueError(f"Missing argument {key}")
+        return self.download_function(self.url_template, self.verify_ssl, **args)
 
 
 def get_checksum(fp: IO) -> str:
@@ -76,6 +84,8 @@ def download_marketdata(template_name, **kwargs) -> str | None:
     template = retrieve_template(template_name)
     downloader = MarketDataDownloader(template.downloader)
     fp, response = downloader.download(**kwargs)
+    if fp is None:
+        return None
     if downloader.extension == "zip":
         dest = os.path.join(os.getcwd(), ".brasa-cache", template_name, "zips")
     else:
