@@ -19,8 +19,7 @@ def test_download():
     assert tpl.has_downloader
     assert ~ tpl.has_reader
 
-    dnd = MarketDataDownloader(tpl.downloader)
-    fp, _ = dnd.download()
+    fp, _ = tpl.downloader.download()
     assert fp is not None
     assert fp.readable()
 

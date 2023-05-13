@@ -5,7 +5,7 @@ import hashlib
 import json
 import os
 import shutil
-from typing import IO, Callable, Text
+from typing import IO, Callable
 import yaml
 
 from brasa.parsers.util import unzip_recursive
@@ -32,6 +32,7 @@ class MarketDataTemplate:
             self.__dict__[n] = template[n]
             if n == "downloader":
                 self.has_downloader = True
+                self.downloader = MarketDataDownloader(template[n])
             elif n == "reader":
                 self.has_reader = True
                 # self.reader = load_function_by_name(template[n]["function"])
@@ -83,11 +84,10 @@ def get_checksum(fp: IO) -> str:
 
 def download_marketdata(template_name, **kwargs) -> str | None:
     template = retrieve_template(template_name)
-    downloader = MarketDataDownloader(template.downloader)
-    fp, response = downloader.download(**kwargs)
+    fp, response = template.downloader.download(**kwargs)
     if fp is None:
         return None
-    if downloader.format in ("zip", "base64"):
+    if template.downloader.format in ("zip", "base64"):
         dest = os.path.join(os.getcwd(), ".brasa-cache", template_name, "raw")
     else:
         dest = os.path.join(os.getcwd(), ".brasa-cache", template_name, "downloads")
@@ -95,7 +95,7 @@ def download_marketdata(template_name, **kwargs) -> str | None:
     
     timestamp_str = datetime.now().strftime("%Y%m%d%H%M%S%f")
     checksum = get_checksum(fp)
-    fname = f"{timestamp_str}_{checksum}.{downloader.format}"
+    fname = f"{timestamp_str}_{checksum}.{template.downloader.format}"
     file_path = os.path.join(dest, fname)
     fp_dest = open(file_path, "wb")
     shutil.copyfileobj(fp, fp_dest)
@@ -107,7 +107,7 @@ def download_marketdata(template_name, **kwargs) -> str | None:
     with open(os.path.join(dest, f"{timestamp_str}_response.json"), "w") as fp:
         json.dump(dict(response.headers), fp, indent=4)
     
-    if downloader.format == "zip":
+    if template.downloader.format == "zip":
         filenames = unzip_recursive(file_path)
         dest = os.path.join(os.getcwd(), ".brasa-cache", template_name, "downloads")
         os.makedirs(dest, exist_ok=True)
@@ -119,12 +119,12 @@ def download_marketdata(template_name, **kwargs) -> str | None:
             _file_path = os.path.join(dest, fname)
             os.rename(filename, _file_path)
             file_path.append(_file_path)
-    elif downloader.format == "base64":
+    elif template.downloader.format == "base64":
         dest = os.path.join(os.getcwd(), ".brasa-cache", template_name, "downloads")
         os.makedirs(dest, exist_ok=True)
         with open(file_path, "rb") as fp:
             checksum = get_checksum(fp)
-            fname = f"{timestamp_str}_{checksum}.{downloader.decoded_format}"
+            fname = f"{timestamp_str}_{checksum}.{template.downloader.decoded_format}"
             with open(os.path.join(dest, fname), "wb") as fp_dest:
                 base64.decode(fp, fp_dest)
 
