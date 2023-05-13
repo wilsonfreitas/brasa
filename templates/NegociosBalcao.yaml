@@ -9,7 +9,8 @@ locale: pt
 downloader:
   function: brasa.downloaders.datetime_download
   url: https://bvmf.bmfbovespa.com.br/NegociosRealizados/Registro/DownloadArquivoDiretorio?data=%d-%m-%Y
-  format: csv
+  format: base64
+  decoded_format: csv
   args:
     refdate: ~
 fields:

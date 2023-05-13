@@ -1,4 +1,5 @@
 
+import base64
 from datetime import datetime
 import hashlib
 import json
@@ -86,13 +87,13 @@ def download_marketdata(template_name, **kwargs) -> str | None:
     fp, response = downloader.download(**kwargs)
     if fp is None:
         return None
-    if downloader.format == "zip":
-        dest = os.path.join(os.getcwd(), ".brasa-cache", template_name, "zips")
+    if downloader.format in ("zip", "base64"):
+        dest = os.path.join(os.getcwd(), ".brasa-cache", template_name, "raw")
     else:
         dest = os.path.join(os.getcwd(), ".brasa-cache", template_name, "downloads")
     os.makedirs(dest, exist_ok=True)
     
-    timestamp_str = datetime.now().strftime("%Y%m%d%H%M%S")
+    timestamp_str = datetime.now().strftime("%Y%m%d%H%M%S%f")
     checksum = get_checksum(fp)
     fname = f"{timestamp_str}_{checksum}.{downloader.format}"
     file_path = os.path.join(dest, fname)
@@ -108,7 +109,6 @@ def download_marketdata(template_name, **kwargs) -> str | None:
     
     if downloader.format == "zip":
         filenames = unzip_recursive(file_path)
-        
         dest = os.path.join(os.getcwd(), ".brasa-cache", template_name, "downloads")
         os.makedirs(dest, exist_ok=True)
         file_path = []
@@ -119,6 +119,15 @@ def download_marketdata(template_name, **kwargs) -> str | None:
             _file_path = os.path.join(dest, fname)
             os.rename(filename, _file_path)
             file_path.append(_file_path)
+    elif downloader.format == "base64":
+        dest = os.path.join(os.getcwd(), ".brasa-cache", template_name, "downloads")
+        os.makedirs(dest, exist_ok=True)
+        with open(file_path, "rb") as fp:
+            checksum = get_checksum(fp)
+            fname = f"{timestamp_str}_{checksum}.{downloader.decoded_format}"
+            with open(os.path.join(dest, fname), "wb") as fp_dest:
+                base64.decode(fp, fp_dest)
+
 
     if (isinstance(file_path, str) and os.path.exists(file_path)) or (isinstance(file_path, list) and all([os.path.exists(f) for f in file_path])):
         return file_path
