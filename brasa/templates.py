@@ -53,8 +53,8 @@ def retrieve_template(template_name) -> MarketDataTemplate | None:
 
 class MarketDataDownloader:
     def __init__(self, downloader: dict):
-        self.url_template = downloader["url"]
-        self.extension = downloader["format"]
+        for n in downloader.keys():
+            self.__dict__[n] = downloader[n]
         self.args = downloader.get("args", {})
         self.encoding = downloader.get("encoding", "UTF8")
         self.verify_ssl = downloader.get("verify_ssl", True)
@@ -69,7 +69,7 @@ class MarketDataDownloader:
                 args[key] = val
             else:
                 raise ValueError(f"Missing argument {key}")
-        return self.download_function(self.url_template, self.verify_ssl, **args)
+        return self.download_function(self.url, self.verify_ssl, **args)
 
 
 def get_checksum(fp: IO) -> str:
@@ -86,7 +86,7 @@ def download_marketdata(template_name, **kwargs) -> str | None:
     fp, response = downloader.download(**kwargs)
     if fp is None:
         return None
-    if downloader.extension == "zip":
+    if downloader.format == "zip":
         dest = os.path.join(os.getcwd(), ".brasa-cache", template_name, "zips")
     else:
         dest = os.path.join(os.getcwd(), ".brasa-cache", template_name, "downloads")
@@ -94,7 +94,7 @@ def download_marketdata(template_name, **kwargs) -> str | None:
     
     timestamp_str = datetime.now().strftime("%Y%m%d%H%M%S")
     checksum = get_checksum(fp)
-    fname = f"{timestamp_str}_{checksum}.{downloader.extension}"
+    fname = f"{timestamp_str}_{checksum}.{downloader.format}"
     file_path = os.path.join(dest, fname)
     fp_dest = open(file_path, "wb")
     shutil.copyfileobj(fp, fp_dest)
@@ -106,7 +106,7 @@ def download_marketdata(template_name, **kwargs) -> str | None:
     with open(os.path.join(dest, f"{timestamp_str}_response.json"), "w") as fp:
         json.dump(dict(response.headers), fp, indent=4)
     
-    if downloader.extension == "zip":
+    if downloader.format == "zip":
         filenames = unzip_recursive(file_path)
         
         dest = os.path.join(os.getcwd(), ".brasa-cache", template_name, "downloads")
