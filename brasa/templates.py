@@ -4,10 +4,12 @@ from datetime import datetime
 import hashlib
 import json
 import os
+import re
 import shutil
 from typing import IO, Callable
 import pandas as pd
 import yaml
+import regexparser
 
 from brasa.parsers.util import unzip_recursive
 
@@ -23,10 +25,96 @@ class TemplatePart:
     pass
 
 
+class NumericParser(regexparser.NumberParser):
+    def parseText(self, text: str) -> str:
+        return None
+
+
+class PtBRNumericParser(regexparser.TextParser):
+    def parseInteger(self, text: str, match: re.Match) -> int:
+        r'^-?\s*\d+$'
+        return eval(text)
+
+    def parse_number_with_thousands_ptBR(self, text: str, match: re.Match) -> float:
+        r'^-?\s*(\d+\.)+\d+,\d+?$'
+        text = text.replace('.', '')
+        text = text.replace(',', '.')
+        return eval(text)
+
+    def parse_number_decimal_ptBR(self, text: str, match: re.Match) -> float:
+        r'^-?\s*\d+,\d+?$'
+        text = text.replace(',', '.')
+        return eval(text)
+
+    def parseText(self, text: str) -> str:
+        return None
+
+
 class FieldHandler:
     def __init__(self, handler: dict | None) -> None:
         if handler is not None:
             self.__dict__.update(handler)
+        self.is_empty = handler is None
+        self.parser = regexparser.GenericParser()
+
+    def parse(self, value: str | pd.Series) -> str | int | float | datetime | pd.Series:
+        if isinstance(value, str):
+            return self.parser.parse(value)
+        else:
+            return value.apply(self.parser.parse)
+
+
+class CharacterFieldHandler(FieldHandler):
+    def __init__(self, handler: dict | None) -> None:
+        super().__init__(handler)
+
+    def parse(self, value: str | pd.Series) -> str | pd.Series:
+        if isinstance(value, str):
+            return value
+        else:
+            return value.astype(str)
+
+
+class NumericFieldHandler(FieldHandler):
+    def __init__(self, handler: dict | None) -> None:
+        super().__init__(handler)
+        if self.__dict__.get("format") is None:
+            self.parser = NumericParser()
+        elif self.format == "pt-br":
+            self.parser = PtBRNumericParser()
+        else:
+            self.parser = NumericParser()
+
+
+class DateFieldHandler(FieldHandler):
+    def __init__(self, handler: dict | None) -> None:
+        super().__init__(handler)
+
+    def parse(self, value: str | pd.Series) -> datetime | pd.Series:
+        def func(value):
+            try:
+                return datetime.strptime(value, self.format)
+            except ValueError:
+                return None
+        if isinstance(value, str):
+            return func(value)
+        else:
+            return value.apply(func)
+
+
+class FieldHandlerFactory:
+    @classmethod
+    def create(cls, handler: dict | None) -> FieldHandler:
+        if handler is None or handler.get("type") is None:
+            return FieldHandler(handler)
+        elif handler["type"] == "numeric":
+            return NumericFieldHandler(handler)
+        elif handler["type"].lower() == "date":
+            return DateFieldHandler(handler)
+        elif handler["type"] == "character":
+            return CharacterFieldHandler(handler)
+        else:
+            return FieldHandler(handler)
 
 
 class TemplateField:
@@ -34,12 +122,16 @@ class TemplateField:
         self.name = kwargs["name"]
         self.description = kwargs.get("description")
         self.width = kwargs.get("width", -1)
-        self.handler = FieldHandler(kwargs.get("handler"))
+        self.handler = FieldHandlerFactory.create(kwargs.get("handler"))
+
+    def parse(self, value: str | pd.Series) -> str | float | datetime | pd.Series:
+        return self.handler.parse(value)
 
 
 class TemplateFields:
     def __init__(self, fields: list) -> None:
         self.__fields = {f["name"]:TemplateField(**f) for f in fields}
+        self.names = list(self.__fields.keys())
 
     def __len__(self) -> int:
         return len(self.__fields)
@@ -88,6 +180,7 @@ class MarketDataTemplate:
         self.template_path = template_path
         self.has_reader = False
         self.has_downloader = False
+        self.has_parts = False
         self.template = self.load_template()
 
     def load_template(self) -> dict:
@@ -104,7 +197,7 @@ class MarketDataTemplate:
             elif n == "fields":
                 self.fields = TemplateFields(template[n])
             elif n == "parts":
-                pass
+                self.has_parts = True
         return template
 
 
@@ -186,4 +279,11 @@ def read_marketdata(template_name: str, fname: IO | str, parse_fields: bool=True
     if template is None:
         return None
     df = template.reader.read(fname)
+    if parse_fields:
+        if template.has_parts:
+            pass
+        else:
+            df.columns = template.fields.names
+            for field in template.fields:
+                df[field.name] = field.parse(df[field.name])
     return df

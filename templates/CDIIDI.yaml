@@ -13,7 +13,8 @@ fields:
   - name: taxa
     description: Valor da taxa DI
     handler:
-      type: character
+      type: numeric
+      format: pt-br
   - name: dataTaxa
     description: Data de divulgação da taxa DI
     handler:
@@ -22,7 +23,8 @@ fields:
   - name: indice
     description: Valor do índice IDI
     handler:
-      type: character
+      type: numeric
+      format: pt-br
   - name: dataIndice
     description: Data de referência do índice IDI
     handler:

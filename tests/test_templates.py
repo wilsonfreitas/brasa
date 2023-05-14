@@ -137,3 +137,4 @@ def test_read_marketdata():
     assert df is not None
     assert isinstance(df, pd.DataFrame)
     assert len(df) > 0
+    assert df["dataTaxa"].dtype == "datetime64[ns]"
