@@ -7,6 +7,8 @@ downloader:
   function: brasa.downloaders.simple_download
   url: https://www2.cetip.com.br/ConsultarTaxaDi/ConsultarTaxaDICetip.aspx
   format: json
+reader:
+  function: brasa.readers.read_json
 fields:
   - name: taxa
     description: Valor da taxa DI

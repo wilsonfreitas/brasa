@@ -3,7 +3,7 @@ from datetime import datetime
 import os
 
 import pytest
-from brasa.templates import MarketDataTemplate, MarketDataDownloader, download_marketdata, retrieve_template
+from brasa.templates import MarketDataTemplate, TemplateFields, download_marketdata, retrieve_template
 
 
 def test_load_template():
@@ -13,15 +13,24 @@ def test_load_template():
     assert ~ tpl.has_reader
 
 
-def test_download():
+def test_download_and_read():
     tpl = MarketDataTemplate("templates/CDIIDI.yaml")
 
     assert tpl.has_downloader
-    assert ~ tpl.has_reader
+    assert tpl.has_reader
+    assert isinstance(tpl.fields, TemplateFields)
+    assert len(tpl.fields) == 4
+    assert tpl.fields["dataTaxa"].name == "dataTaxa"
+    assert tpl.fields["dataTaxa"].description == "Data de divulgação da taxa DI"
+    assert tpl.fields["dataTaxa"].handler.type == "Date"
+    assert tpl.fields["dataTaxa"].handler.format == "%d/%m/%Y"
 
     fp, _ = tpl.downloader.download()
     assert fp is not None
     assert fp.readable()
+
+    df = tpl.reader.read(fp)
+    assert df is not None
 
 
 def test_retrieve_temlate():

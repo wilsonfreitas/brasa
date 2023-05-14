@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 from typing import IO, Callable
+import pandas as pd
 import yaml
 
 from brasa.parsers.util import unzip_recursive
@@ -18,39 +19,47 @@ def load_function_by_name(func_name: str) -> Callable:
     return func
 
 
-class MarketDataTemplate:
-    def __init__(self, template_path):
-        self.template_path = template_path
-        self.has_reader = False
-        self.has_downloader = False
-        self.template = self.load_template()
-
-    def load_template(self) -> dict:
-        with open(self.template_path, 'r', encoding="UTF8") as f:
-            template = yaml.safe_load(f)
-        for n in template.keys():
-            self.__dict__[n] = template[n]
-            if n == "downloader":
-                self.has_downloader = True
-                self.downloader = MarketDataDownloader(template[n])
-            elif n == "reader":
-                self.has_reader = True
-                # self.reader = load_function_by_name(template[n]["function"])
-            elif n == "fields":
-                pass
-            elif n == "parts":
-                pass
-        return template
+class TemplatePart:
+    pass
 
 
-def retrieve_template(template_name) -> MarketDataTemplate | None:
-    dir = os.path.join(os.path.dirname(__file__), "../templates")
-    sel = [f for f in os.listdir(dir) if template_name in f]
-    if len(sel) == 0:
-        return None
-    else:
-        template_path = os.path.join(dir, sel[0])
-        return MarketDataTemplate(template_path)
+class FieldHandler:
+    def __init__(self, handler: dict | None) -> None:
+        if handler is not None:
+            self.__dict__.update(handler)
+
+
+class TemplateField:
+    def __init__(self, **kwargs) -> None:
+        self.name = kwargs["name"]
+        self.description = kwargs.get("description")
+        self.width = kwargs.get("width", -1)
+        self.handler = FieldHandler(kwargs.get("handler"))
+
+
+class TemplateFields:
+    def __init__(self, fields: list) -> None:
+        self.__fields = {f["name"]:TemplateField(**f) for f in fields}
+
+    def __len__(self) -> int:
+        return len(self.__fields)
+
+    def __getitem__(self, key: str) -> TemplateField:
+        return self.__fields[key]
+
+    def __iter__(self):
+        return iter(self.__fields.values())
+
+
+class MarketDataReader:
+    def __init__(self, reader: dict):
+        for n in reader.keys():
+            self.__dict__[n] = reader[n]
+        self.encoding = reader.get("encoding", "utf-8")
+        self.read_function = load_function_by_name(reader["function"])
+
+    def read(self, fname: IO | str) -> pd.DataFrame:
+        return self.read_function(fname, self.encoding)
 
 
 class MarketDataDownloader:
@@ -58,7 +67,7 @@ class MarketDataDownloader:
         for n in downloader.keys():
             self.__dict__[n] = downloader[n]
         self.args = downloader.get("args", {})
-        self.encoding = downloader.get("encoding", "UTF8")
+        self.encoding = downloader.get("encoding", "utf-8")
         self.verify_ssl = downloader.get("verify_ssl", True)
         self.download_function = load_function_by_name(downloader["function"])
 
@@ -72,6 +81,41 @@ class MarketDataDownloader:
             else:
                 raise ValueError(f"Missing argument {key}")
         return self.download_function(self.url, self.verify_ssl, **args)
+
+
+class MarketDataTemplate:
+    def __init__(self, template_path):
+        self.template_path = template_path
+        self.has_reader = False
+        self.has_downloader = False
+        self.template = self.load_template()
+
+    def load_template(self) -> dict:
+        with open(self.template_path, 'r', encoding="utf-8") as f:
+            template = yaml.safe_load(f)
+        for n in template.keys():
+            self.__dict__[n] = template[n]
+            if n == "downloader":
+                self.has_downloader = True
+                self.downloader = MarketDataDownloader(template[n])
+            elif n == "reader":
+                self.has_reader = True
+                self.reader = MarketDataReader(template[n])
+            elif n == "fields":
+                self.fields = TemplateFields(template[n])
+            elif n == "parts":
+                pass
+        return template
+
+
+def retrieve_template(template_name) -> MarketDataTemplate | None:
+    dir = os.path.join(os.path.dirname(__file__), "../templates")
+    sel = [f for f in os.listdir(dir) if template_name in f]
+    if len(sel) == 0:
+        return None
+    else:
+        template_path = os.path.join(dir, sel[0])
+        return MarketDataTemplate(template_path)
 
 
 def get_checksum(fp: IO) -> str:
