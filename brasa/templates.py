@@ -126,7 +126,7 @@ def get_checksum(fp: IO) -> str:
     return file_hash.hexdigest()
 
 
-def download_marketdata(template_name, **kwargs) -> str | None:
+def download_marketdata(template_name: str, **kwargs) -> str | None:
     template = retrieve_template(template_name)
     if template is None:
         return None
