@@ -1,6 +1,6 @@
 
 from typing import IO
-from brasa.downloaders.downloaders import B3URLEncodedDownloader, DatetimeDownloader, SimpleDownloader
+from brasa.downloaders.downloaders import B3URLEncodedDownloader, DatetimeDownloader, SettlementPricesDownloader, SimpleDownloader
 
 
 def simple_download(url, verify_ssl, **kwargs) -> IO | None:
@@ -18,3 +18,6 @@ def b3_url_encoded_download(url, verify_ssl, **kwargs) -> IO | None:
     return downloader.download(), downloader.response
 
 
+def settlement_prices_download(url, verify_ssl, **kwargs) -> IO | None:
+    downloader = SettlementPricesDownloader(url, verify_ssl, **kwargs)
+    return downloader.download(), downloader.response

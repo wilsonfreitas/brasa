@@ -64,6 +64,32 @@ class B3URLEncodedDownloader(SimpleDownloader):
         return f"{self._url}/{params_enc}"
 
 
+class SettlementPricesDownloader(DatetimeDownloader):
+    def __init__(self, url, verify_ssl, **kwargs):
+        super().__init__(url, verify_ssl, **kwargs)
+
+    @property
+    def url(self) -> str:
+        return self._url
+
+    def download(self) -> IO | None:
+        body = {"dData1": self.refdate.strftime("%d/%m/%Y"),}
+        res = requests.post(self.url, params=body, verify=self.verify_ssl)
+        self.response = res
+
+        msg = "status_code = {} url = {}".format(res.status_code, self.url)
+        logg = logging.warn if res.status_code != 200 else logging.info
+        logg(msg)
+        
+        if res.status_code != 200:
+            return None
+
+        temp = tempfile.TemporaryFile()
+        temp.write(res.content)
+        temp.seek(0)
+        return temp
+
+
 class PreparedURLDownloader(SimpleDownloader):
     def download(self, refdate=None):
         url = self.attrs["url"]

@@ -158,3 +158,11 @@ def test_read_marketdata_with_parsers():
     assert df is not None
     assert isinstance(df, pd.DataFrame)
     assert df.shape == (8, 11)
+
+
+def test_download_settlement_prices():
+    dest = download_marketdata("AjustesDiarios", refdate=datetime(2023, 5, 10))
+    assert dest is not None
+    assert isinstance(dest, str)
+    assert os.path.exists(dest)
+
