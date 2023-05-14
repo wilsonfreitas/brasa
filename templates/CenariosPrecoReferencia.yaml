@@ -1,8 +1,6 @@
 id: CenariosPrecoReferencia
 filename: ~
 filetype: MCSV
-separator: ;
-locale: pt
 description: Arquivos de cenários do tipo preço de referência
 downloader:
   function: brasa.downloaders.datetime_download
@@ -10,6 +8,12 @@ downloader:
   format: zip
   args:
     refdate: ~
+reader:
+  function: brasa.readers.read_csv
+  locale: pt
+  separator: ";"
+  skip: 1
+  comment: ""
 parts:
   Header:
     pattern: ^01

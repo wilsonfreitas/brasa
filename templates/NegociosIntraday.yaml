@@ -2,15 +2,18 @@ id: NegociosIntraday
 filename: ~
 filetype: CSV
 description: Negócios Intraday
-separator: ";"
-skip: 1
-locale: en
 downloader:
   function: brasa.downloaders.datetime_download
   url: https://arquivos.b3.com.br/apinegocios/tickercsv/%Y-%m-%d
   format: zip
   args:
     refdate: ~
+reader:
+  function: brasa.readers.read_csv
+  locale: en
+  separator: ";"
+  skip: 1
+  comment: ""
 fields:
   - name: RptDt
     description: Data de referência da informação
@@ -31,14 +34,23 @@ fields:
         - delete
   - name: GrssTradAmt
     description: Preço do negócio
+    handler:
+      type: numeric
+      format: pt-br
   - name: TradQty
     description: Quantidade de negócios no dia
+    handler:
+      type: numeric
+      format: pt-br
   - name: NtryTm
     description: Hora (o instante) do negócio fechado
     handler:
-      type: strtime
+      type: POSIXct
+      format: "%H%M%S%f"
   - name: TradId
     description: Número do negócio
+    handler:
+      type: numeric
   - name: TradgSsnId
     description: |
       Este campo informa se o negócio foi feito no horário regular do pregão
@@ -57,3 +69,11 @@ fields:
     handler:
       type: Date
       format: "%Y-%m-%d"
+  - name: CodigoParticipanteComprador
+    description: Código do Participante Comprador
+    handler:
+      type: numeric
+  - name: CodigoParticipanteVendedor
+    description: Código do Participante Vendedor
+    handler:
+      type: numeric

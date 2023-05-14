@@ -133,8 +133,28 @@ def test_download_marketdata_b3_url_encoded_with_null_argument():
 
 def test_read_marketdata():
     dest = "data/CDIIDI_2019-09-22.json"
-    df = read_marketdata("CDIIDI", dest)
+    df = read_marketdata("CDIIDI", dest, parse_fields=False)
     assert df is not None
     assert isinstance(df, pd.DataFrame)
-    assert len(df) > 0
+    assert df.shape == (1, 4)
+
+    dest = "data/NegociosBalcao.csv"
+    df = read_marketdata("NegociosBalcao", dest, parse_fields=False)
+    assert df is not None
+    assert isinstance(df, pd.DataFrame)
+    assert df.shape == (8, 11)
+
+
+def test_read_marketdata_with_parsers():
+    dest = "data/CDIIDI_2019-09-22.json"
+    df = read_marketdata("CDIIDI", dest, parse_fields=True)
+    assert df is not None
+    assert isinstance(df, pd.DataFrame)
+    assert df.shape == (1, 4)
     assert df["dataTaxa"].dtype == "datetime64[ns]"
+
+    dest = "data/NegociosBalcao.csv"
+    df = read_marketdata("NegociosBalcao", dest, parse_fields=True)
+    assert df is not None
+    assert isinstance(df, pd.DataFrame)
+    assert df.shape == (8, 11)

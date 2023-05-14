@@ -109,7 +109,7 @@ class FieldHandlerFactory:
             return FieldHandler(handler)
         elif handler["type"] == "numeric":
             return NumericFieldHandler(handler)
-        elif handler["type"].lower() == "date":
+        elif handler["type"].lower() == "date" or handler["type"].lower() == "posixct":
             return DateFieldHandler(handler)
         elif handler["type"] == "character":
             return CharacterFieldHandler(handler)
@@ -149,9 +149,24 @@ class MarketDataReader:
             self.__dict__[n] = reader[n]
         self.encoding = reader.get("encoding", "utf-8")
         self.read_function = load_function_by_name(reader["function"])
+        self.parts = None
+        self.fields = None
 
-    def read(self, fname: IO | str) -> pd.DataFrame:
-        return self.read_function(fname, self.encoding)
+    def set_parts(self, parts: list) -> None:
+        self.parts = parts
+
+    def set_fields(self, fields: TemplateFields) -> None:
+        self.fields = fields
+
+    def read(self, fname: IO | str, parse_fields: bool=True, **kwargs) -> pd.DataFrame:
+        df = self.read_function(self, fname)
+        if parse_fields:
+            if self.parts is not None:
+                pass
+            else:
+                for field in self.fields:
+                    df[field.name] = field.parse(df[field.name])
+        return df
 
 
 class MarketDataDownloader:
@@ -198,6 +213,11 @@ class MarketDataTemplate:
                 self.fields = TemplateFields(template[n])
             elif n == "parts":
                 self.has_parts = True
+                self.parts = template[n]
+        if self.has_parts:
+            self.reader.set_parts(self.parts)
+        else:
+            self.reader.set_fields(self.fields)
         return template
 
 
@@ -278,12 +298,5 @@ def read_marketdata(template_name: str, fname: IO | str, parse_fields: bool=True
     template = retrieve_template(template_name)
     if template is None:
         return None
-    df = template.reader.read(fname)
-    if parse_fields:
-        if template.has_parts:
-            pass
-        else:
-            df.columns = template.fields.names
-            for field in template.fields:
-                df[field.name] = field.parse(df[field.name])
+    df = template.reader.read(fname, parse_fields=parse_fields, **kwargs)
     return df

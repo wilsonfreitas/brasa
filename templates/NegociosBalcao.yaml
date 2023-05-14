@@ -2,10 +2,6 @@ id: NegociosBalcao
 filename: ~
 filetype: CSV
 description: Negócios Balcão
-separator: ";"
-skip: 2
-comment: ""
-locale: pt
 downloader:
   function: brasa.downloaders.datetime_download
   url: https://bvmf.bmfbovespa.com.br/NegociosRealizados/Registro/DownloadArquivoDiretorio?data=%d-%m-%Y
@@ -13,21 +9,45 @@ downloader:
   decoded_format: csv
   args:
     refdate: ~
+reader:
+  function: brasa.readers.read_csv
+  locale: pt
+  separator: ";"
+  skip: 2
+  comment: ""
 fields:
   - name: InstrumentoFinanceiro
     description: Instrumento Financeiro
+    handler:
+      type: character
   - name: Emissor
     description: Emissor
+    handler:
+      type: character
   - name: CodigoIF
     description: Código IF
+    handler:
+      type: character
   - name: QuantidadeNegociada
     description: Quantidade Negociada
+    handler:
+      type: numeric
+      format: pt-br
   - name: PrecoNegocio
     description: Preco Negócio
+    handler:
+      type: numeric
+      format: pt-br
   - name: Volume
     description: Volume Financeiro R$
+    handler:
+      type: numeric
+      format: pt-br
   - name: TaxaNegocio
     description: Taxa Negócio
+    handler:
+      type: numeric
+      format: pt-br
   - name: OrigemNegocio
     description: Origem Negócio
   - name: HorarioNegocio
@@ -42,3 +62,5 @@ fields:
       format: "%d/%m/%Y"
   - name: CodNegocio
     description: Código Identificador do Negócio
+    handler:
+      type: character

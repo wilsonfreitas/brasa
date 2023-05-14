@@ -2,16 +2,18 @@ id: NegociosBTB
 filename: ~
 filetype: CSV
 description: Negócios BTB Aluguel de Ações
-separator: ";"
-comment: ""
-skip: 1
-locale: pt
 downloader:
   function: brasa.downloaders.datetime_download
   url: https://arquivos.b3.com.br/apinegocios/tickercsvbtb/%Y-%m-%d
   format: zip
   args:
     refdate: ~
+reader:
+  function: brasa.readers.read_csv
+  locale: pt
+  separator: ";"
+  skip: 1
+  comment: ""
 fields:
   - name: RptDt
     description: Data de referência
@@ -24,12 +26,19 @@ fields:
     description: Informa a ação de atualização que está ocorrendo
   - name: IntrstRateTermTrad
     description: Taxa de aluguel
+    handler:
+      type: numeric
+      format: pt-br
   - name: TradQty
     description: Quantidade negociada
+    handler:
+      type: numeric
+      format: pt-br
   - name: NtryTm
     description: Horário de negociação
     handler:
-      type: strtime
+      type: POSIXct
+      format: "%H%M%S%f"
   - name: TradId
     description: Número do negócio
   - name: TradgSsnId
@@ -54,3 +63,11 @@ fields:
         - balcão
         - eletrônico d0
         - eletrônico d+1
+  - name: CodigoParticipanteDoador
+    description: Código do Participante Doador
+    handler:
+      type: numeric
+  - name: CodigoParticipanteTomador
+    description: Código do Participante Tomador
+    handler:
+      type: numeric
