@@ -128,6 +128,8 @@ def get_checksum(fp: IO) -> str:
 
 def download_marketdata(template_name, **kwargs) -> str | None:
     template = retrieve_template(template_name)
+    if template is None:
+        return None
     fp, response = template.downloader.download(**kwargs)
     if fp is None:
         return None
@@ -177,3 +179,11 @@ def download_marketdata(template_name, **kwargs) -> str | None:
         return file_path
     else:
         return None
+
+
+def read_marketdata(template_name: str, fname: IO | str, parse_fields: bool=True, **kwargs) -> pd.DataFrame | None:
+    template = retrieve_template(template_name)
+    if template is None:
+        return None
+    df = template.reader.read(fname)
+    return df

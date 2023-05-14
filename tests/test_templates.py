@@ -1,9 +1,10 @@
 
 from datetime import datetime
 import os
+import pandas as pd
 
 import pytest
-from brasa.templates import MarketDataTemplate, TemplateFields, download_marketdata, retrieve_template
+from brasa.templates import MarketDataTemplate, TemplateFields, download_marketdata, read_marketdata, retrieve_template
 
 
 def test_load_template():
@@ -31,6 +32,7 @@ def test_download_and_read():
 
     df = tpl.reader.read(fp)
     assert df is not None
+    assert len(df) > 0
 
 
 def test_retrieve_temlate():
@@ -127,3 +129,11 @@ def test_download_marketdata_b3_url_encoded_with_null_argument():
     assert dest is not None
     assert isinstance(dest, str)
     assert os.path.exists(dest)
+
+
+def test_read_marketdata():
+    dest = "data/CDIIDI_2019-09-22.json"
+    df = read_marketdata("CDIIDI", dest)
+    assert df is not None
+    assert isinstance(df, pd.DataFrame)
+    assert len(df) > 0
