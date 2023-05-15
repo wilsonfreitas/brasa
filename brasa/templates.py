@@ -160,12 +160,12 @@ class MarketDataReader:
 
     def read(self, fname: IO | str, parse_fields: bool=True, **kwargs) -> pd.DataFrame:
         df = self.read_function(self, fname)
-        if parse_fields:
-            if self.parts is not None:
-                pass
-            else:
-                for field in self.fields:
-                    df[field.name] = field.parse(df[field.name])
+        # if parse_fields:
+        #     if self.parts is not None:
+        #         pass
+        #     else:
+        #         for field in self.fields:
+        #             df[field.name] = field.parse(df[field.name])
         return df
 
 
@@ -241,16 +241,17 @@ def get_checksum(fp: IO) -> str:
     return file_hash.hexdigest()
 
 
-def download_marketdata(template_name: str, **kwargs) -> dict | None:
-    template = retrieve_template(template_name)
-    if template is None:
-        return None
+def download_marketdata(template: str | MarketDataTemplate, **kwargs) -> dict | None:
+    if isinstance(template, str):
+        template = retrieve_template(template)
+        if template is None:
+            raise ValueError(f"Invalid template {template}")
     fp, response = template.downloader.download(**kwargs)
     if fp is None:
         return None
 
     checksum = get_checksum(fp)
-    dest = os.path.join(os.getcwd(), ".brasa-cache", template_name, "raw", checksum)
+    dest = os.path.join(os.getcwd(), ".brasa-cache", template.id, "raw", checksum)
     os.makedirs(dest, exist_ok=True)
 
     fname = f"downloaded.{template.downloader.format}"
@@ -295,9 +296,10 @@ def download_marketdata(template_name: str, **kwargs) -> dict | None:
     
     return meta
 
-def read_marketdata(template_name: str, fname: IO | str, parse_fields: bool=True, **kwargs) -> pd.DataFrame | None:
-    template = retrieve_template(template_name)
-    if template is None:
-        return None
+def read_marketdata(template: str, fname: IO | str, parse_fields: bool=True, **kwargs) -> pd.DataFrame | None:
+    if isinstance(template, str):
+        template = retrieve_template(template)
+        if template is None:
+            raise ValueError(f"Invalid template {template}")
     df = template.reader.read(fname, parse_fields=parse_fields, **kwargs)
     return df

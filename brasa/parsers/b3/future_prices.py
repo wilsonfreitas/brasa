@@ -1,9 +1,13 @@
 
+from datetime import datetime
+import os
 from typing import IO
 import numpy as np
 
 import pandas as pd
 from lxml import etree
+
+from brasa.templates import download_marketdata, read_marketdata, retrieve_template
 
 
 def code2month(code: str) -> int:
@@ -42,7 +46,7 @@ def future_prices(fname: IO | str) -> pd.DataFrame:
     df = pd.read_html(fname,
                       attrs=dict(id="tblDadosAjustes"),
                       decimal=",",
-                      thousands=".",)
+                      thousands=".",)[0]
     df.columns = ["commodity", "maturity_code", "previous_settlement_price", "settlement_price", "price_variation", "settlement_value"]
     tree = etree.parse(fname, etree.HTMLParser())
     refdate_str = tree.xpath(f"//input[@id='dData1']")[0].attrib["value"]
@@ -54,3 +58,12 @@ def future_prices(fname: IO | str) -> pd.DataFrame:
     df.loc[:, "commodity"] = df.loc[:, "commodity"].str.extract(r"^(\w+)")[0]
     df["symbol"] = df["commodity"] + df["maturity_code"]
     return df
+
+
+def futures_get(refdate: datetime):
+    tpl = retrieve_template("AjustesDiarios")
+    args = dict(refdate=refdate)
+    # how do I know that the refdate has already been downloaded?
+    meta = download_marketdata(tpl, **args)
+    fname = os.path.join(meta["folder"], meta["downloaded_files"][0])
+    return read_marketdata(tpl, fname, True)
