@@ -170,7 +170,7 @@ class MarketDataReader:
 
 
 class MarketDataDownloader:
-    def __init__(self, downloader: dict):
+    def __init__(self, downloader: dict) -> None:
         for n in downloader.keys():
             self.__dict__[n] = downloader[n]
         self.args = downloader.get("args", {})
@@ -178,7 +178,7 @@ class MarketDataDownloader:
         self.verify_ssl = downloader.get("verify_ssl", True)
         self.download_function = load_function_by_name(downloader["function"])
 
-    def download(self, **kwargs) -> IO | None:
+    def download(self, **kwargs) -> tuple[IO | None, dict[str, str]]:
         args = {}
         for key, val in self.args.items():
             if key in kwargs.keys():
@@ -187,11 +187,12 @@ class MarketDataDownloader:
                 args[key] = val
             else:
                 raise ValueError(f"Missing argument {key}")
-        return self.download_function(self.url, self.verify_ssl, **args)
+        fp, response = self.download_function(self, **args)
+        return fp, response
 
 
 class MarketDataTemplate:
-    def __init__(self, template_path):
+    def __init__(self, template_path) -> None:
         self.template_path = template_path
         self.has_reader = False
         self.has_downloader = False
@@ -214,10 +215,11 @@ class MarketDataTemplate:
             elif n == "parts":
                 self.has_parts = True
                 self.parts = template[n]
-        if self.has_parts:
-            self.reader.set_parts(self.parts)
-        else:
-            self.reader.set_fields(self.fields)
+        if self.has_reader:
+            if self.has_parts:
+                self.reader.set_parts(self.parts)
+            else:
+                self.reader.set_fields(self.fields)
         return template
 
 
@@ -239,60 +241,59 @@ def get_checksum(fp: IO) -> str:
     return file_hash.hexdigest()
 
 
-def download_marketdata(template_name: str, **kwargs) -> str | None:
+def download_marketdata(template_name: str, **kwargs) -> dict | None:
     template = retrieve_template(template_name)
     if template is None:
         return None
     fp, response = template.downloader.download(**kwargs)
     if fp is None:
         return None
-    if template.downloader.format in ("zip", "base64"):
-        dest = os.path.join(os.getcwd(), ".brasa-cache", template_name, "raw")
-    else:
-        dest = os.path.join(os.getcwd(), ".brasa-cache", template_name, "downloads")
-    os.makedirs(dest, exist_ok=True)
-    
-    timestamp_str = datetime.now().strftime("%Y%m%d%H%M%S%f")
+
     checksum = get_checksum(fp)
-    fname = f"{timestamp_str}_{checksum}.{template.downloader.format}"
+    dest = os.path.join(os.getcwd(), ".brasa-cache", template_name, "raw", checksum)
+    os.makedirs(dest, exist_ok=True)
+
+    fname = f"downloaded.{template.downloader.format}"
     file_path = os.path.join(dest, fname)
     fp_dest = open(file_path, "wb")
     shutil.copyfileobj(fp, fp_dest)
     fp.close()
     fp_dest.close()
 
-    dest = os.path.join(os.getcwd(), ".brasa-cache", template_name, "downloads")
-    os.makedirs(dest, exist_ok=True)
-    with open(os.path.join(dest, f"{timestamp_str}_response.json"), "w") as fp:
-        json.dump(dict(response.headers), fp, indent=4)
-    
+    meta = {
+        "checksum": checksum,
+        "timestamp": datetime.now().isoformat(),
+        "response": response,
+        "args": kwargs,
+        "folder": dest,
+    }
+
     if template.downloader.format == "zip":
         filenames = unzip_recursive(file_path)
-        dest = os.path.join(os.getcwd(), ".brasa-cache", template_name, "downloads")
-        os.makedirs(dest, exist_ok=True)
-        file_path = []
+        fnames = []
         for filename in filenames:
-            with open(filename, "rb") as fp:
-                checksum = get_checksum(fp)
-            fname = f"{timestamp_str}_{checksum}{os.path.splitext(filename)[1].lower()}"
+            fname = os.path.basename(filename)
             _file_path = os.path.join(dest, fname)
-            os.rename(filename, _file_path)
-            file_path.append(_file_path)
+            shutil.move(filename, _file_path)
+            # os.rename(filename, _file_path)
+            fnames.append(fname)
+        meta["downloaded_files"] = fnames
+        os.remove(file_path)
     elif template.downloader.format == "base64":
-        dest = os.path.join(os.getcwd(), ".brasa-cache", template_name, "downloads")
-        os.makedirs(dest, exist_ok=True)
         with open(file_path, "rb") as fp:
-            checksum = get_checksum(fp)
-            fname = f"{timestamp_str}_{checksum}.{template.downloader.decoded_format}"
-            with open(os.path.join(dest, fname), "wb") as fp_dest:
+            fname = f"decoded.{template.downloader.decoded_format}"
+            _file_path = os.path.join(dest, fname)
+            with open(_file_path, "wb") as fp_dest:
                 base64.decode(fp, fp_dest)
-
-
-    if (isinstance(file_path, str) and os.path.exists(file_path)) or (isinstance(file_path, list) and all([os.path.exists(f) for f in file_path])):
-        return file_path
+            meta["downloaded_files"] = [fname]
+        os.remove(file_path)
     else:
-        return None
+        meta["downloaded_files"] = [fname]
 
+    with open(os.path.join(dest, "meta.yaml"), "w") as fp:
+        yaml.dump(meta, fp, indent=4)
+    
+    return meta
 
 def read_marketdata(template_name: str, fname: IO | str, parse_fields: bool=True, **kwargs) -> pd.DataFrame | None:
     template = retrieve_template(template_name)

@@ -12,17 +12,19 @@ downloader:
   args:
     refdate: ~
 reader:
-  function: brasa.readers.read_csv
+  function: brasa.readers.read_settlement_prices
+  decimal: ","
+  thousands: "."
 fields:
-  - name: mercadoria
+  - name: commodity
     description: Nome e código da mercadoria
-  - name: vencimento
+  - name: maturity_code
     description: Código de vencimento do contrato futuro com 3 caractéres
-  - name: pu_anterior
+  - name: previous_settlement_price
     description: Preço de ajuste do dia anterior
-  - name: pu_atual
+  - name: settlement_price
     description: Preço de ajuste atual
-  - name: variacao
+  - name: price_variation
     description: Variação do preço de ajuste
-  - name: ajuste
+  - name: settlement_value
     description: Valor do ajuste por contrato (R$)

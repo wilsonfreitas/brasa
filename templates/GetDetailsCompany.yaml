@@ -11,7 +11,7 @@ downloader:
     codeCVM: ~
     language: pt-br
 reader:
-  function: company_details_reader
+  function: brasa.readers.null_reader
 parts:
   Info:
     name: info

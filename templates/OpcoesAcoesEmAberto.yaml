@@ -9,7 +9,7 @@ downloader:
   args:
     refdate: ~
 reader:
-  function: options_open_interest_read
+  function: brasa.readers.null_reader
 fields:
   - name: symbol
     description: Código da opção

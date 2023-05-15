@@ -15,7 +15,7 @@ downloader:
     segment: 2
     index: ~
 reader:
-  function: stock_indexes_json_reader
+  function: brasa.readers.null_reader
 parts:
   Header:
     name: header

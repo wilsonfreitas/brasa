@@ -11,7 +11,7 @@ downloader:
   args:
     refdate: ~
 reader:
-  function: pricereport_reader
+  function: brasa.readers.null_reader
 fields:
   - name: refdate
     description: Data de referência

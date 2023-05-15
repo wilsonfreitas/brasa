@@ -13,7 +13,7 @@ downloader:
     pageNumber: 1
     pageSize: 9999
 reader:
-  function: company_cash_dividends_reader
+  function: brasa.readers.null_reader
 fields:
   - name: typeStock
     description: Tipo da ação (ON, PN)

@@ -1,9 +1,12 @@
 import json
 from typing import IO
+import numpy as np
 
 import pandas as pd
+from lxml import etree
 
 from brasa.templates import MarketDataReader
+from brasa.parsers.b3.future_prices import future_prices
 
 
 def read_json(reader: MarketDataReader, fname: IO | str) -> pd.DataFrame:
@@ -24,3 +27,8 @@ def read_csv(reader: MarketDataReader, fname: IO | str) -> pd.DataFrame:
                        sep=reader.separator,
                        converters=converters,
                        names=reader.fields.names,)
+
+
+def read_settlement_prices(reader: MarketDataReader, fname: IO | str) -> pd.DataFrame:
+    df = future_prices(fname)
+    return df
