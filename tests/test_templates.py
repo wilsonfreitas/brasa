@@ -164,6 +164,6 @@ def test_read_marketdata_with_parsers():
 def test_download_settlement_prices():
     dest = download_marketdata("AjustesDiarios", refdate=datetime(2023, 5, 10))
     assert dest is not None
-    assert isinstance(dest, str)
-    assert os.path.exists(dest)
+    assert isinstance(dest, dict)
+    assert os.path.exists(os.path.join(dest["folder"], dest["downloaded_files"][0]))
 

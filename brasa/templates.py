@@ -262,7 +262,7 @@ def download_marketdata(template_name: str, **kwargs) -> dict | None:
 
     meta = {
         "checksum": checksum,
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now(),
         "response": response,
         "args": kwargs,
         "folder": dest,
