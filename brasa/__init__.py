@@ -1,2 +1,2 @@
 
-from brasa.parsers.b3.future_prices import futures_get
+from brasa.parsers.b3.futures_settlement_prices import futures_settlement_prices_get

@@ -6,7 +6,7 @@ import pandas as pd
 from lxml import etree
 
 from brasa.templates import MarketDataReader
-from brasa.parsers.b3.future_prices import future_prices
+from brasa.parsers.b3.futures_settlement_prices import future_settlement_prices_parser
 
 
 def read_json(reader: MarketDataReader, fname: IO | str) -> pd.DataFrame:
@@ -30,5 +30,5 @@ def read_csv(reader: MarketDataReader, fname: IO | str) -> pd.DataFrame:
 
 
 def read_settlement_prices(reader: MarketDataReader, fname: IO | str) -> pd.DataFrame:
-    df = future_prices(fname)
+    df = future_settlement_prices_parser(fname)
     return df

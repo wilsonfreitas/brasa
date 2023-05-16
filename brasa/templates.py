@@ -291,12 +291,12 @@ def download_marketdata(template: str | MarketDataTemplate, **kwargs) -> dict | 
     else:
         meta["downloaded_files"] = [fname]
 
-    with open(os.path.join(dest, "meta.yaml"), "w") as fp:
-        yaml.dump(meta, fp, indent=4)
+    # with open(os.path.join(dest, "meta.yaml"), "w") as fp:
+    #     yaml.dump(meta, fp, indent=4)
     
     return meta
 
-def read_marketdata(template: str, fname: IO | str, parse_fields: bool=True, **kwargs) -> pd.DataFrame | None:
+def read_marketdata(template: str | MarketDataReader, fname: IO | str, parse_fields: bool=True, **kwargs) -> pd.DataFrame | None:
     if isinstance(template, str):
         template = retrieve_template(template)
         if template is None:
