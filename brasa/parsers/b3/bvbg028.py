@@ -1,6 +1,11 @@
 
+from datetime import datetime
 import io
 from lxml import etree
+import pandas as pd
+from brasa.cache import CacheManager
+
+from brasa.templates import retrieve_template
 from ..util import Parser
 
 
@@ -137,3 +142,10 @@ class BVBG028Parser(Parser):
     @property
     def data(self):
         return self.instruments
+
+
+def bvbg028_get(refdate: datetime, instrument_type: str = None) -> pd.DataFrame:
+    tpl = retrieve_template("b3-bvbg028")
+    args = dict(refdate=refdate, instrument_type=instrument_type)
+    cache = CacheManager(tpl, args)
+    return cache.process_with_checks(refdate)

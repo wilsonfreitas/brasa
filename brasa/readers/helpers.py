@@ -5,6 +5,8 @@ import numpy as np
 
 import pandas as pd
 from lxml import etree
+from brasa.meta import CacheMetadata
+from brasa.parsers.b3.bvbg028 import BVBG028Parser
 
 from brasa.templates import MarketDataReader
 from brasa.parsers.b3.futures_settlement_prices import future_settlement_prices_parser
@@ -30,7 +32,16 @@ def read_csv(reader: MarketDataReader, fname: IO | str) -> pd.DataFrame:
                        names=reader.fields.names,)
 
 
-def read_settlement_prices(reader: MarketDataReader, meta: dict, **kwargs) -> pd.DataFrame:
-    fname = os.path.join(meta["folder"], meta["downloaded_files"][0])
+def read_b3_futures_settlement_prices(reader: MarketDataReader, meta: CacheMetadata, **kwargs) -> pd.DataFrame:
+    fname = meta.downloaded_file_paths[0]
     df = future_settlement_prices_parser(fname)
     return df
+
+
+def read_b3_bvbg028(reader: MarketDataReader, meta: CacheMetadata, **kwargs) -> pd.DataFrame:
+    paths = meta.downloaded_file_paths
+    paths.sort()
+    fname = paths[-1]
+    parser = BVBG028Parser(fname)
+    instrs = [x for x in parser.instruments if x["instrument_type"] == kwargs["instrument_type"]]
+    return pd.DataFrame(instrs)

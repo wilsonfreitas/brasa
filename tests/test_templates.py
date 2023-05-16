@@ -4,7 +4,9 @@ import os
 import pandas as pd
 
 import pytest
-from brasa.templates import MarketDataTemplate, TemplateFields, download_marketdata, read_marketdata, retrieve_template
+from brasa.api import download_marketdata, read_marketdata
+from brasa.meta import CacheMetadata
+from brasa.templates import MarketDataTemplate, TemplateFields, retrieve_template
 
 
 def test_load_template():
@@ -45,7 +47,7 @@ def test_retrieve_temlate():
 def test_download_marketdata():
     dest = download_marketdata("CDIIDI")
     assert dest is not None
-    assert os.path.exists(os.path.join(dest["folder"], dest["downloaded_files"][0]))
+    assert os.path.exists(dest.downloaded_file_paths[0])
 
 
 def test_download_marketdata_missing_args_error():
@@ -57,79 +59,79 @@ def test_download_marketdata_missing_args_error():
 def test_download_marketdata_with_refdate():
     dest = download_marketdata("OpcoesAcoesEmAberto", refdate=datetime(2023, 5, 10))
     assert dest is not None
-    assert isinstance(dest, dict)
-    assert os.path.exists(os.path.join(dest["folder"], dest["downloaded_files"][0]))
+    assert isinstance(dest, CacheMetadata)
+    assert os.path.exists(dest.downloaded_file_paths[0])
     dest = download_marketdata("OpcoesAcoesEmAberto", refdate=datetime(2023, 5, 2))
     assert dest is not None
-    assert isinstance(dest, dict)
-    assert os.path.exists(os.path.join(dest["folder"], dest["downloaded_files"][0]))
+    assert isinstance(dest, CacheMetadata)
+    assert os.path.exists(dest.downloaded_file_paths[0])
 
     dest = download_marketdata("NegociosBalcao", refdate=datetime(2023, 5, 10))
     assert dest is not None
-    assert isinstance(dest, dict)
-    assert os.path.exists(os.path.join(dest["folder"], dest["downloaded_files"][0]))
+    assert isinstance(dest, CacheMetadata)
+    assert os.path.exists(dest.downloaded_file_paths[0])
 
 
 def test_download_marketdata_with_refdate_and_unzip():
     dest = download_marketdata("COTAHIST_DAILY", refdate=datetime(2023, 5, 10))
     assert dest is not None
-    assert isinstance(dest, dict)
-    assert os.path.exists(os.path.join(dest["folder"], dest["downloaded_files"][0]))
+    assert isinstance(dest, CacheMetadata)
+    assert os.path.exists(dest.downloaded_file_paths[0])
 
 
 def test_download_marketdata_with_refdate_and_unzip_recursive_with_1_file():
     dest = download_marketdata("IndexReport", refdate=datetime(2023, 5, 10))
     assert dest is not None
-    assert isinstance(dest, dict)
-    assert len(dest["downloaded_files"]) == 1
-    assert os.path.exists(os.path.join(dest["folder"], dest["downloaded_files"][0]))
+    assert isinstance(dest, CacheMetadata)
+    assert len(dest.downloaded_files) == 1
+    assert os.path.exists(dest.downloaded_file_paths[0])
 
 
 def test_download_marketdata_with_refdate_and_unzip_recursive_with_many_files():
     dest = download_marketdata("PriceReport", refdate=datetime(2023, 5, 10))
     assert dest is not None
-    assert isinstance(dest, dict)
-    assert len(dest["downloaded_files"]) == 3
-    assert os.path.exists(os.path.join(dest["folder"], dest["downloaded_files"][0]))
+    assert isinstance(dest, CacheMetadata)
+    assert len(dest.downloaded_files) == 3
+    assert os.path.exists(dest.downloaded_file_paths[0])
 
 
 def test_download_marketdata_b3_url_encoded():
     dest = download_marketdata("GetStockIndex")
     assert dest is not None
-    assert isinstance(dest, dict)
-    assert os.path.exists(os.path.join(dest["folder"], dest["downloaded_files"][0]))
+    assert isinstance(dest, CacheMetadata)
+    assert os.path.exists(dest.downloaded_file_paths[0])
 
 
 def test_download_marketdata_b3_url_encoded_with_null_argument():
     dest = download_marketdata("GetPortfolioDay_IndexStatistics", index="IBOV", year=2022)
     assert dest is not None
-    assert isinstance(dest, dict)
-    assert os.path.exists(os.path.join(dest["folder"], dest["downloaded_files"][0]))
+    assert isinstance(dest, CacheMetadata)
+    assert os.path.exists(dest.downloaded_file_paths[0])
 
     dest = download_marketdata("GetListedSupplementCompany", issuingCompany="ABEV")
     assert dest is not None
-    assert isinstance(dest, dict)
-    assert os.path.exists(os.path.join(dest["folder"], dest["downloaded_files"][0]))
+    assert isinstance(dest, CacheMetadata)
+    assert os.path.exists(dest.downloaded_file_paths[0])
 
     dest = download_marketdata("GetDetailsCompany", codeCVM="24910")
     assert dest is not None
-    assert isinstance(dest, dict)
-    assert os.path.exists(os.path.join(dest["folder"], dest["downloaded_files"][0]))
+    assert isinstance(dest, CacheMetadata)
+    assert os.path.exists(dest.downloaded_file_paths[0])
 
     dest = download_marketdata("GetListedCashDividends", tradingName="ABEV")
     assert dest is not None
-    assert isinstance(dest, dict)
-    assert os.path.exists(os.path.join(dest["folder"], dest["downloaded_files"][0]))
+    assert isinstance(dest, CacheMetadata)
+    assert os.path.exists(dest.downloaded_file_paths[0])
 
     dest = download_marketdata("GetTheoricalPortfolio", index="IBOV")
     assert dest is not None
-    assert isinstance(dest, dict)
-    assert os.path.exists(os.path.join(dest["folder"], dest["downloaded_files"][0]))
+    assert isinstance(dest, CacheMetadata)
+    assert os.path.exists(dest.downloaded_file_paths[0])
 
     dest = download_marketdata("GetPortfolioDay", index="IBOV")
     assert dest is not None
-    assert isinstance(dest, dict)
-    assert os.path.exists(os.path.join(dest["folder"], dest["downloaded_files"][0]))
+    assert isinstance(dest, CacheMetadata)
+    assert os.path.exists(dest.downloaded_file_paths[0])
 
 
 def test_read_marketdata():
@@ -162,8 +164,8 @@ def test_read_marketdata_with_parsers():
 
 
 def test_download_settlement_prices():
-    dest = download_marketdata("AjustesDiarios", refdate=datetime(2023, 5, 10))
+    dest = download_marketdata("b3-futures-settlement-prices", refdate=datetime(2023, 5, 10))
     assert dest is not None
-    assert isinstance(dest, dict)
-    assert os.path.exists(os.path.join(dest["folder"], dest["downloaded_files"][0]))
+    assert isinstance(dest, CacheMetadata)
+    assert os.path.exists(dest.downloaded_file_paths[0])
 

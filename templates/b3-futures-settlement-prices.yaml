@@ -12,7 +12,7 @@ downloader:
   args:
     refdate: ~
 reader:
-  function: brasa.readers.read_settlement_prices
+  function: brasa.readers.read_b3_futures_settlement_prices
   decimal: ","
   thousands: "."
 fields:

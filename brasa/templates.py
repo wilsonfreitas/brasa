@@ -1,17 +1,14 @@
 
-import base64
 from datetime import datetime
-import hashlib
-import json
 import os
 import re
-import shutil
 from typing import IO, Callable
+
 import pandas as pd
 import yaml
 import regexparser
 
-from brasa.parsers.util import unzip_recursive
+from brasa.meta import CacheMetadata
 
 
 def load_function_by_name(func_name: str) -> Callable:
@@ -158,7 +155,7 @@ class MarketDataReader:
     def set_fields(self, fields: TemplateFields) -> None:
         self.fields = fields
 
-    def read(self, meta: dict, **kwargs) -> pd.DataFrame:
+    def read(self, meta: CacheMetadata, **kwargs) -> pd.DataFrame:
         df = self.read_function(self, meta, **kwargs)
         return df
 
@@ -225,73 +222,3 @@ def retrieve_template(template_name) -> MarketDataTemplate | None:
     else:
         template_path = os.path.join(dir, sel[0])
         return MarketDataTemplate(template_path)
-
-
-def get_checksum(fp: IO) -> str:
-    file_hash = hashlib.md5()
-    while chunk := fp.read(8192):
-        file_hash.update(chunk)
-    fp.seek(0)
-    return file_hash.hexdigest()
-
-
-def download_marketdata(template: str | MarketDataTemplate, **kwargs) -> dict | None:
-    if isinstance(template, str):
-        template = retrieve_template(template)
-        if template is None:
-            raise ValueError(f"Invalid template {template}")
-    fp, response = template.downloader.download(**kwargs)
-    if fp is None:
-        return None
-
-    checksum = get_checksum(fp)
-    dest = os.path.join(os.getcwd(), ".brasa-cache", template.id, "raw", checksum)
-    os.makedirs(dest, exist_ok=True)
-
-    fname = f"downloaded.{template.downloader.format}"
-    file_path = os.path.join(dest, fname)
-    fp_dest = open(file_path, "wb")
-    shutil.copyfileobj(fp, fp_dest)
-    fp.close()
-    fp_dest.close()
-
-    meta = {
-        "checksum": checksum,
-        "timestamp": datetime.now(),
-        "response": response,
-        "args": kwargs,
-        "folder": dest,
-        "template": template.id,
-    }
-
-    if template.downloader.format == "zip":
-        filenames = unzip_recursive(file_path)
-        fnames = []
-        for filename in filenames:
-            fname = os.path.basename(filename)
-            _file_path = os.path.join(dest, fname)
-            shutil.move(filename, _file_path)
-            # os.rename(filename, _file_path)
-            fnames.append(fname)
-        meta["downloaded_files"] = fnames
-        os.remove(file_path)
-    elif template.downloader.format == "base64":
-        with open(file_path, "rb") as fp:
-            fname = f"decoded.{template.downloader.decoded_format}"
-            _file_path = os.path.join(dest, fname)
-            with open(_file_path, "wb") as fp_dest:
-                base64.decode(fp, fp_dest)
-            meta["downloaded_files"] = [fname]
-        os.remove(file_path)
-    else:
-        meta["downloaded_files"] = [fname]
-
-    return meta
-
-def read_marketdata(template: str | MarketDataReader, meta: dict, **kwargs) -> pd.DataFrame | None:
-    if isinstance(template, str):
-        template = retrieve_template(template)
-        if template is None:
-            raise ValueError(f"Invalid template {template}")
-    df = template.reader.read(meta, **kwargs)
-    return df
