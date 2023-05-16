@@ -1,4 +1,5 @@
 import json
+import os
 from typing import IO
 import numpy as np
 
@@ -29,6 +30,7 @@ def read_csv(reader: MarketDataReader, fname: IO | str) -> pd.DataFrame:
                        names=reader.fields.names,)
 
 
-def read_settlement_prices(reader: MarketDataReader, fname: IO | str) -> pd.DataFrame:
+def read_settlement_prices(reader: MarketDataReader, meta: dict, **kwargs) -> pd.DataFrame:
+    fname = os.path.join(meta["folder"], meta["downloaded_files"][0])
     df = future_settlement_prices_parser(fname)
     return df

@@ -158,14 +158,8 @@ class MarketDataReader:
     def set_fields(self, fields: TemplateFields) -> None:
         self.fields = fields
 
-    def read(self, fname: IO | str, parse_fields: bool=True, **kwargs) -> pd.DataFrame:
-        df = self.read_function(self, fname)
-        # if parse_fields:
-        #     if self.parts is not None:
-        #         pass
-        #     else:
-        #         for field in self.fields:
-        #             df[field.name] = field.parse(df[field.name])
+    def read(self, meta: dict, **kwargs) -> pd.DataFrame:
+        df = self.read_function(self, meta, **kwargs)
         return df
 
 
@@ -267,6 +261,7 @@ def download_marketdata(template: str | MarketDataTemplate, **kwargs) -> dict | 
         "response": response,
         "args": kwargs,
         "folder": dest,
+        "template": template.id,
     }
 
     if template.downloader.format == "zip":
@@ -291,15 +286,12 @@ def download_marketdata(template: str | MarketDataTemplate, **kwargs) -> dict | 
     else:
         meta["downloaded_files"] = [fname]
 
-    # with open(os.path.join(dest, "meta.yaml"), "w") as fp:
-    #     yaml.dump(meta, fp, indent=4)
-    
     return meta
 
-def read_marketdata(template: str | MarketDataReader, fname: IO | str, parse_fields: bool=True, **kwargs) -> pd.DataFrame | None:
+def read_marketdata(template: str | MarketDataReader, meta: dict, **kwargs) -> pd.DataFrame | None:
     if isinstance(template, str):
         template = retrieve_template(template)
         if template is None:
             raise ValueError(f"Invalid template {template}")
-    df = template.reader.read(fname, parse_fields=parse_fields, **kwargs)
+    df = template.reader.read(meta, **kwargs)
     return df
