@@ -12,7 +12,7 @@ downloader:
 reader:
   locale: en
   function: brasa.readers.read_b3_bvbg028
-  fancy_names:
+  multi:
     EqtyInf: equities
     OptnOnEqtsInf: option_on_equities
     FutrCtrctsInf: future_contracts

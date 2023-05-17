@@ -150,6 +150,7 @@ class CacheMetadata:
         self.args = None
         self.template = None
         self.downloaded_files = []
+        self.processed_files = []
 
     def to_dict(self) -> dict:
         return {
@@ -159,6 +160,7 @@ class CacheMetadata:
             "args": self.args,
             "template": self.template,
             "downloaded_files": self.downloaded_files,
+            "processed_files": self.processed_files,
         }
 
     @property
@@ -250,6 +252,80 @@ class MarketDataTemplate:
         return template
 
 
+class CacheManager:
+    def __init__(self, template: MarketDataTemplate, args: dict) -> None:
+        self.template = template
+        self.args = args
+        self.cache_folder = os.path.join(os.getcwd(), ".brasa-cache")
+        os.makedirs(self.cache_folder, exist_ok=True)
+        self.meta_folder = os.path.join(self.cache_folder, "meta")
+        os.makedirs(self.meta_folder, exist_ok=True)
+        if template.reader.get("multi") is None:
+            self.db_folder = os.path.join(self.cache_folder, "db", template.id)
+            os.makedirs(self.db_folder, exist_ok=True)
+        else:
+            self.db_folders = []
+            for name in template.reader.multi:
+                db_folder = os.path.join(self.cache_folder, "db", f"{template.id}-{name}")
+                os.makedirs(db_folder, exist_ok=True)
+                self.db_folders.append(db_folder)
+
+        hash = generate_checksum_for_template(template.id, args)
+        self.meta_file_path = os.path.join(self.meta_folder, f"{hash}.yaml")
+
+    def parquet_file_path(self, refdate: datetime) -> str:
+        return os.path.join(self.db_folder, f"{refdate.isoformat()[:10]}.parquet")
+
+    def exists(self, refdate: datetime) -> bool:
+        return self.has_meta and os.path.isfile(self.parquet_file_path(refdate))
+
+    @property
+    def has_meta(self) -> bool:
+        return os.path.isfile(self.meta_file_path)
+
+    def save_meta(self, meta: CacheMetadata) -> None:
+        with open(self.meta_file_path, "w") as fp:
+            yaml.dump(meta.to_dict(), fp, indent=4)
+
+    def load_meta(self) -> CacheMetadata:
+        with open(self.meta_file_path, "r") as fp:
+            meta = yaml.load(fp, Loader=yaml.Loader)
+        _meta = CacheMetadata()
+        _meta.from_dict(meta)
+        return _meta
+
+    def save_parquet(self, df: pd.DataFrame, refdate: datetime) -> None:
+        df.to_parquet(self.parquet_file_path(refdate))
+
+    def load_parquet(self, refdate: datetime) -> pd.DataFrame:
+        df = pd.read_parquet(self.parquet_file_path(refdate))
+        return df
+
+    def process_with_checks(self) -> pd.DataFrame | None | dict[str, pd.DataFrame]:
+        refdate = self.args["refdate"]
+
+        if self.exists(refdate):
+            df = self.load_parquet(refdate)
+        else:
+            if self.has_meta:
+                meta = self.load_meta()
+            else:
+                meta = download_marketdata(self.template, **self.args)
+            df = read_marketdata(self.template, meta, **self.args)
+            self.save_parquet(df, refdate)
+            if not self.has_meta:
+                self.save_meta(meta)
+        return df
+
+    def process_without_checks(self) -> pd.DataFrame | None | dict[str, pd.DataFrame]:
+        refdate = self.args["refdate"]
+        meta = download_marketdata(self.template, **self.args)
+        df = read_marketdata(self.template, meta)
+        self.save_parquet(df, refdate)
+        self.save_meta(meta)
+        return df
+
+
 def retrieve_template(template_name) -> MarketDataTemplate | None:
     dir = os.path.join(os.path.dirname(__file__), "../templates")
     sel = [f for f in os.listdir(dir) if template_name in f]
@@ -312,73 +388,6 @@ def read_marketdata(template: str | MarketDataTemplate, meta: CacheMetadata, **k
             raise ValueError(f"Invalid template {template}")
     df = template.reader.read(meta, **kwargs)
     return df
-
-
-class CacheManager:
-    def __init__(self, template: MarketDataTemplate, args: dict) -> None:
-        self.template = template
-        self.args = args
-        self.cache_folder = os.path.join(os.getcwd(), ".brasa-cache")
-        os.makedirs(self.cache_folder, exist_ok=True)
-        self.meta_folder = os.path.join(self.cache_folder, "meta")
-        os.makedirs(self.meta_folder, exist_ok=True)
-        self.db_folder = os.path.join(self.cache_folder, "db", template.id)
-        os.makedirs(self.db_folder, exist_ok=True)
-
-        hash = generate_checksum_for_template(template.id, args)
-        self.meta_file_path = os.path.join(self.meta_folder, f"{hash}.yaml")
-
-    def parquet_file_path(self, refdate: datetime) -> str:
-        return os.path.join(self.db_folder, f"{refdate.isoformat()[:10]}.parquet")
-
-    def exists(self, refdate: datetime) -> bool:
-        return self.has_meta and os.path.isfile(self.parquet_file_path(refdate))
-
-    @property
-    def has_meta(self) -> bool:
-        return os.path.isfile(self.meta_file_path)
-
-    def save_meta(self, meta: CacheMetadata) -> None:
-        with open(self.meta_file_path, "w") as fp:
-            yaml.dump(meta.to_dict(), fp, indent=4)
-
-    def load_meta(self) -> CacheMetadata:
-        with open(self.meta_file_path, "r") as fp:
-            meta = yaml.load(fp, Loader=yaml.Loader)
-        _meta = CacheMetadata()
-        _meta.from_dict(meta)
-        return _meta
-
-    def save_parquet(self, df: pd.DataFrame, refdate: datetime) -> None:
-        df.to_parquet(self.parquet_file_path(refdate))
-
-    def load_parquet(self, refdate: datetime) -> pd.DataFrame:
-        df = pd.read_parquet(self.parquet_file_path(refdate))
-        return df
-
-    def process_with_checks(self) -> pd.DataFrame | None | dict[str, pd.DataFrame]:
-        refdate = self.args["refdate"]
-
-        if self.exists(refdate):
-            df = self.load_parquet(refdate)
-        else:
-            if self.has_meta:
-                meta = self.load_meta()
-            else:
-                meta = download_marketdata(self.template, **self.args)
-            df = read_marketdata(self.template, meta, **self.args)
-            self.save_parquet(df, refdate)
-            if not self.has_meta:
-                self.save_meta(meta)
-        return df
-
-    def process_without_checks(self) -> pd.DataFrame | None | dict[str, pd.DataFrame]:
-        refdate = self.args["refdate"]
-        meta = download_marketdata(self.template, **self.args)
-        df = read_marketdata(self.template, meta)
-        self.save_parquet(df, refdate)
-        self.save_meta(meta)
-        return df
 
 
 def download_and_read_marketdata(template: str | MarketDataTemplate, **kwargs) -> pd.DataFrame | None:

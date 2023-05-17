@@ -158,4 +158,4 @@ def read_b3_bvbg028(reader: MarketDataReader, meta: CacheMetadata, **kwargs) -> 
     paths.sort()
     fname = paths[-1]
     parser = BVBG028Parser(fname)
-    return {reader.fancy_names[k]:v for k,v in parser.data.items()}
+    return {reader.multi[k]:v for k,v in parser.data.items()}
