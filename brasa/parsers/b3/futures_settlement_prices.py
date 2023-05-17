@@ -6,9 +6,10 @@ import numpy as np
 import pandas as pd
 from lxml import etree
 from bizdays import Calendar
-from brasa.cache import CacheManager
+from brasa.engine import CacheManager
+from brasa.engine import CacheMetadata
 
-from brasa.templates import retrieve_template
+from brasa.engine import MarketDataReader, retrieve_template
 
 
 def maturity2date_newcode(x: str, cal: Calendar, expr: str) -> datetime:
@@ -91,8 +92,7 @@ def future_settlement_prices_parser(fname: IO | str) -> pd.DataFrame:
     return df
 
 
-def futures_settlement_prices_get(refdate: datetime):
-    tpl = retrieve_template("b3-futures-settlement-prices")
-    args = dict(refdate=refdate)
-    cache = CacheManager(tpl, args)
-    return cache.process_with_checks(refdate)
+def read_b3_futures_settlement_prices(reader: MarketDataReader, meta: CacheMetadata, **kwargs) -> pd.DataFrame:
+    fname = meta.downloaded_file_paths[0]
+    df = future_settlement_prices_parser(fname)
+    return df

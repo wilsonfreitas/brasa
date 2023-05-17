@@ -2,7 +2,7 @@
 from datetime import datetime
 
 import pandas as pd
-from brasa.templates import FieldHandlerFactory
+from brasa.engine import FieldHandlerFactory
 
 
 def test_field_handler_factory():

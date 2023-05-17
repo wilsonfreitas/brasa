@@ -4,9 +4,9 @@ import os
 import pandas as pd
 
 import pytest
-from brasa.api import download_marketdata, read_marketdata
-from brasa.meta import CacheMetadata
-from brasa.templates import MarketDataTemplate, TemplateFields, retrieve_template
+from brasa.engine import read_marketdata
+from brasa.engine import CacheMetadata
+from brasa.engine import MarketDataTemplate, TemplateFields, download_marketdata, retrieve_template
 
 
 def test_load_template():

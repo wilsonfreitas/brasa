@@ -3,9 +3,10 @@ from datetime import datetime
 import io
 from lxml import etree
 import pandas as pd
-from brasa.cache import CacheManager
+from brasa.engine import CacheManager
+from brasa.engine import CacheMetadata
 
-from brasa.templates import retrieve_template
+from brasa.engine import MarketDataReader, retrieve_template
 from ..util import Parser
 
 
@@ -93,12 +94,18 @@ class BVBG028Parser(Parser):
             "calendar_days": "InstrmInf/FutrCtrctsInf/ClnrDays",
         },
     }
+    fancy_names = {
+        "EqtyInf": "Equities",
+        "OptnOnEqtsInf": "OptionOnEquities",
+        "FutrCtrctsInf": "FutureContracts",
+    }
 
     mode = "rb"
 
     def __init__(self, fname):
         self.fname = fname
-        self.instruments = []
+        self.__all_instrs = []
+        self.__instrs_dict = {}
         self.missing = set()
         self.parse()
 
@@ -118,6 +125,13 @@ class BVBG028Parser(Parser):
         )
         for node in xs:
             self.parse_instrument_node(node)
+        for instr in self.__all_instrs:
+            typo = instr['instrument_type']
+            try:
+                self.__instrs_dict[typo].append(instr)
+            except:
+                self.__instrs_dict[typo] = [instr]
+        self.__instrs_dict = {k: pd.DataFrame(self.__instrs_dict[k]) for k in self.__instrs_dict.keys()}
 
     def parse_instrument_node(self, node):
         data = {"creation_date": self.creation_date}
@@ -137,15 +151,16 @@ class BVBG028Parser(Parser):
             if len(els):
                 data[attr] = els[0].text.strip()
         data["instrument_type"] = tag
-        self.instruments.append(data)
+        self.__all_instrs.append(data)
 
     @property
     def data(self):
-        return self.instruments
+        return self.__instrs_dict
 
 
-def bvbg028_get(refdate: datetime, instrument_type: str = None) -> pd.DataFrame:
-    tpl = retrieve_template("b3-bvbg028")
-    args = dict(refdate=refdate, instrument_type=instrument_type)
-    cache = CacheManager(tpl, args)
-    return cache.process_with_checks(refdate)
+def read_b3_bvbg028(reader: MarketDataReader, meta: CacheMetadata, **kwargs) -> pd.DataFrame:
+    paths = meta.downloaded_file_paths
+    paths.sort()
+    fname = paths[-1]
+    parser = BVBG028Parser(fname)
+    return parser.data

@@ -1,7 +1,7 @@
 
 from typing import IO
 from brasa.downloaders.downloaders import B3URLEncodedDownloader, DatetimeDownloader, SettlementPricesDownloader, SimpleDownloader
-from brasa.templates import MarketDataDownloader
+from brasa.engine import MarketDataDownloader
 
 
 def simple_download(md_downloader: MarketDataDownloader, **kwargs) -> tuple[IO | None, dict[str, str]]:
