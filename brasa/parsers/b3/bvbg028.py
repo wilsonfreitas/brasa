@@ -1,6 +1,7 @@
 
 from datetime import datetime
 import io
+import os
 from lxml import etree
 import pandas as pd
 from brasa.engine import CacheManager
@@ -157,5 +158,6 @@ def read_b3_bvbg028(reader: MarketDataReader, meta: CacheMetadata, **kwargs) -> 
     paths = meta.downloaded_file_paths
     paths.sort()
     fname = paths[-1]
-    parser = BVBG028Parser(fname)
+    man = CacheManager()
+    parser = BVBG028Parser(os.path.join(man.cache_folder, fname))
     return {reader.multi[k]:v for k,v in parser.data.items()}

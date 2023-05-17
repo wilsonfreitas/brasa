@@ -20,6 +20,17 @@ def load_function_by_name(func_name: str) -> Callable:
     return func
 
 
+class Singleton(object):
+    def __new__(cls, *args, **kwds):
+        it = cls.__dict__.get("__it__")
+        if it is not None:
+            return it
+        it = object.__new__(cls)
+        cls.__it__ = it
+        it.init(*args, **kwds)
+        return it
+
+
 class TemplatePart:
     pass
 
@@ -163,16 +174,6 @@ class CacheMetadata:
             "processed_files": self.processed_files,
         }
 
-    @property
-    def download_folder(self) -> str:
-        folder = os.path.join(os.getcwd(), ".brasa-cache", self.template, "raw", self.checksum)
-        os.makedirs(folder, exist_ok=True)
-        return folder
-
-    @property
-    def downloaded_file_paths(self) -> list[str]:
-        return [os.path.join(self.download_folder, f) for f in self.downloaded_files]
-
     def from_dict(self, kwargs) -> None:
         for k in kwargs.keys():
             self.__dict__[k] = kwargs[k]
@@ -252,36 +253,59 @@ class MarketDataTemplate:
         return template
 
 
-class CacheManager:
-    def __init__(self, template: MarketDataTemplate, args: dict) -> None:
-        self.template = template
-        self.args = args
-        self.cache_folder = os.path.join(os.getcwd(), ".brasa-cache")
-        os.makedirs(self.cache_folder, exist_ok=True)
-        self.meta_folder = os.path.join(self.cache_folder, "meta")
-        os.makedirs(self.meta_folder, exist_ok=True)
-        if template.reader.get("multi") is None:
-            self.db_folder = os.path.join(self.cache_folder, "db", template.id)
-            os.makedirs(self.db_folder, exist_ok=True)
-        else:
-            self.db_folders = []
-            for name in template.reader.multi:
-                db_folder = os.path.join(self.cache_folder, "db", f"{template.id}-{name}")
-                os.makedirs(db_folder, exist_ok=True)
-                self.db_folders.append(db_folder)
-
-        hash = generate_checksum_for_template(template.id, args)
-        self.meta_file_path = os.path.join(self.meta_folder, f"{hash}.yaml")
-
-    def parquet_file_path(self, refdate: datetime) -> str:
-        return os.path.join(self.db_folder, f"{refdate.isoformat()[:10]}.parquet")
-
-    def exists(self, refdate: datetime) -> bool:
-        return self.has_meta and os.path.isfile(self.parquet_file_path(refdate))
+class CacheManager(Singleton):
+    def init(self) -> None:
+        pass
 
     @property
-    def has_meta(self) -> bool:
-        return os.path.isfile(self.meta_file_path)
+    def cache_folder(self) -> str:
+        folder = os.path.join(os.getcwd(), ".brasa-cache")
+        os.makedirs(folder, exist_ok=True)
+        return folder
+
+    @property
+    def meta_folder(self) -> str:
+        folder = "meta"
+        os.makedirs(os.path.join(self.cache_folder, "meta"), exist_ok=True)
+        return folder
+
+    def meta_file_path(self, template: MarketDataTemplate, args: dict) -> str:
+        hash = generate_checksum_for_template(template.id, args)
+        return os.path.join(self.meta_folder, f"{hash}.yaml")
+
+    def db_folder(self, template: MarketDataTemplate) -> str | dict[str, str]:
+        if template.reader.get("multi") is None:
+            folder = os.path.join("db", template.id)
+            os.makedirs(os.path.join(self.cache_folder, folder), exist_ok=True)
+            return folder
+        else:
+            db_folders = {}
+            for name in template.reader.multi:
+                folder = os.path.join("db", f"{template.id}-{name}")
+                os.makedirs(os.path.join(self.cache_folder, folder), exist_ok=True)
+                db_folders[name] = folder
+            return db_folders
+
+    def parquet_file_path(self, refdate: datetime) -> str:
+        if isinstance(self.db_folder, str):
+            return os.path.join(self.db_folder, f"{refdate.isoformat()[:10]}.parquet")
+        else:
+            return {n:os.path.join(f, f"{refdate.isoformat()[:10]}.parquet") for n,f in self.db_folder.items()}
+
+    def exists(self, template: MarketDataTemplate, args: dict, refdate: datetime) -> bool:
+        return self.has_meta(template, args) and os.path.isfile(self.parquet_file_path(refdate))
+
+    def has_meta(self, template: MarketDataTemplate, args: dict) -> bool:
+        return os.path.isfile(self.meta_file_path(template, args))
+
+    def download_folder(self, template: MarketDataTemplate, checksum: str) -> str:
+        folder = os.path.join(template.id, "raw", checksum)
+        os.makedirs(os.path.join(self.cache_folder, folder), exist_ok=True)
+        return folder
+
+    def downloaded_file_paths(self, template: MarketDataTemplate, checksum: str, files: list) -> list[str]:
+        folder = self.download_folder(template, checksum)
+        return [os.path.join(folder, f) for f in files]
 
     def save_meta(self, meta: CacheMetadata) -> None:
         with open(self.meta_file_path, "w") as fp:
@@ -336,7 +360,7 @@ def retrieve_template(template_name) -> MarketDataTemplate | None:
         return MarketDataTemplate(template_path)
 
 
-def download_marketdata(template: str | MarketDataTemplate, **kwargs) -> CacheMetadata | None:
+def download_marketdata(template: str | MarketDataTemplate, meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
     if isinstance(template, str):
         template = retrieve_template(template)
         if template is None:
@@ -352,9 +376,12 @@ def download_marketdata(template: str | MarketDataTemplate, **kwargs) -> CacheMe
     meta.args = kwargs
     meta.template = template.id
 
+    man = CacheManager()
+    download_folder = man.download_folder(template, checksum)
+
     fname = f"downloaded.{template.downloader.format}"
-    file_path = os.path.join(meta.download_folder, fname)
-    fp_dest = open(file_path, "wb")
+    file_path = os.path.join(download_folder, fname)
+    fp_dest = open(os.path.join(man.cache_folder, file_path), "wb")
     shutil.copyfileobj(fp, fp_dest)
     fp.close()
     fp_dest.close()
@@ -363,20 +390,20 @@ def download_marketdata(template: str | MarketDataTemplate, **kwargs) -> CacheMe
         filenames = unzip_recursive(file_path)
         for filename in filenames:
             fname = os.path.basename(filename)
-            _file_path = os.path.join(meta.download_folder, fname)
-            shutil.move(filename, _file_path)
-            meta.downloaded_files.append(fname)
+            _file_path = os.path.join(download_folder, fname)
+            shutil.move(filename, os.path.join(man.cache_folder, _file_path))
+            meta.downloaded_files.append(_file_path)
         os.remove(file_path)
     elif template.downloader.format == "base64":
         with open(file_path, "rb") as fp:
             fname = f"decoded.{template.downloader.decoded_format}"
-            _file_path = os.path.join(meta.download_folder, fname)
-            with open(_file_path, "wb") as fp_dest:
+            _file_path = os.path.join(download_folder, fname)
+            with open(os.path.join(man.cache_folder, _file_path), "wb") as fp_dest:
                 base64.decode(fp, fp_dest)
-            meta.downloaded_files.append(fname)
+            meta.downloaded_files.append(_file_path)
         os.remove(file_path)
     else:
-        meta.downloaded_files.append(fname)
+        meta.downloaded_files.append(file_path)
 
     return meta
 
