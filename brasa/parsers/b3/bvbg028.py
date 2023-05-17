@@ -94,11 +94,6 @@ class BVBG028Parser(Parser):
             "calendar_days": "InstrmInf/FutrCtrctsInf/ClnrDays",
         },
     }
-    fancy_names = {
-        "EqtyInf": "Equities",
-        "OptnOnEqtsInf": "OptionOnEquities",
-        "FutrCtrctsInf": "FutureContracts",
-    }
 
     mode = "rb"
 
@@ -163,4 +158,4 @@ def read_b3_bvbg028(reader: MarketDataReader, meta: CacheMetadata, **kwargs) -> 
     paths.sort()
     fname = paths[-1]
     parser = BVBG028Parser(fname)
-    return parser.data
+    return {reader.fancy_names[k]:v for k,v in parser.data.items()}

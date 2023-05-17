@@ -171,6 +171,10 @@ class CacheMetadata:
     def downloaded_file_paths(self) -> list[str]:
         return [os.path.join(self.download_folder, f) for f in self.downloaded_files]
 
+    def from_dict(self, kwargs) -> None:
+        for k in kwargs.keys():
+            self.__dict__[k] = kwargs[k]
+
 
 class MarketDataReader:
     def __init__(self, reader: dict):
@@ -334,14 +338,16 @@ class CacheManager:
     def has_meta(self) -> bool:
         return os.path.isfile(self.meta_file_path)
 
-    def save_meta(self, meta: dict) -> None:
+    def save_meta(self, meta: CacheMetadata) -> None:
         with open(self.meta_file_path, "w") as fp:
-            yaml.dump(meta, fp, indent=4)
+            yaml.dump(meta.to_dict(), fp, indent=4)
 
-    def load_meta(self) -> dict:
+    def load_meta(self) -> CacheMetadata:
         with open(self.meta_file_path, "r") as fp:
             meta = yaml.load(fp, Loader=yaml.Loader)
-        return meta
+        _meta = CacheMetadata()
+        _meta.from_dict(meta)
+        return _meta
 
     def save_parquet(self, df: pd.DataFrame, refdate: datetime) -> None:
         df.to_parquet(self.parquet_file_path(refdate))
