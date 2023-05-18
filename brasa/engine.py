@@ -262,6 +262,9 @@ class CacheManager(Singleton):
         folder = os.path.join(os.getcwd(), ".brasa-cache")
         os.makedirs(folder, exist_ok=True)
         return folder
+    
+    def cache_path(self, fname: str) -> str:
+        return os.path.join(self.cache_folder, fname)
 
     @property
     def meta_folder(self) -> str:
@@ -381,7 +384,7 @@ def download_marketdata(template: str | MarketDataTemplate, meta: CacheMetadata,
 
     fname = f"downloaded.{template.downloader.format}"
     file_path = os.path.join(download_folder, fname)
-    fp_dest = open(os.path.join(man.cache_folder, file_path), "wb")
+    fp_dest = open(man.cache_path(file_path), "wb")
     shutil.copyfileobj(fp, fp_dest)
     fp.close()
     fp_dest.close()
@@ -391,14 +394,14 @@ def download_marketdata(template: str | MarketDataTemplate, meta: CacheMetadata,
         for filename in filenames:
             fname = os.path.basename(filename)
             _file_path = os.path.join(download_folder, fname)
-            shutil.move(filename, os.path.join(man.cache_folder, _file_path))
+            shutil.move(filename, man.cache_path(_file_path))
             meta.downloaded_files.append(_file_path)
         os.remove(file_path)
     elif template.downloader.format == "base64":
         with open(file_path, "rb") as fp:
             fname = f"decoded.{template.downloader.decoded_format}"
             _file_path = os.path.join(download_folder, fname)
-            with open(os.path.join(man.cache_folder, _file_path), "wb") as fp_dest:
+            with open(man.cache_path(_file_path), "wb") as fp_dest:
                 base64.decode(fp, fp_dest)
             meta.downloaded_files.append(_file_path)
         os.remove(file_path)
