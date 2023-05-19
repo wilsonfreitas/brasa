@@ -154,21 +154,21 @@ class TemplateFields:
 
 
 class CacheMetadata:
-    def __init__(self) -> None:
-        self.checksum = None
+    def __init__(self, template: str) -> None:
+        self.template = template
         self.timestamp = datetime.now()
+        self.download_checksum = None
         self.response = None
-        self.args = None
-        self.template = None
+        self.download_args = None
         self.downloaded_files = []
         self.processed_files = []
 
     def to_dict(self) -> dict:
         return {
-            "checksum": self.checksum,
+            "download_checksum": self.download_checksum,
             "timestamp": self.timestamp,
             "response": self.response,
-            "args": self.args,
+            "download_args": self.download_args,
             "template": self.template,
             "downloaded_files": self.downloaded_files,
             "processed_files": self.processed_files,
@@ -177,6 +177,10 @@ class CacheMetadata:
     def from_dict(self, kwargs) -> None:
         for k in kwargs.keys():
             self.__dict__[k] = kwargs[k]
+
+    @property
+    def id(self) -> str:
+        return generate_checksum_for_template(self.template, self.download_args)
 
 
 class MarketDataReader:
@@ -208,7 +212,7 @@ class MarketDataDownloader:
         self.verify_ssl = downloader.get("verify_ssl", True)
         self.download_function = load_function_by_name(downloader["function"])
 
-    def download(self, **kwargs) -> tuple[IO | None, dict[str, str]]:
+    def download_args(self, **kwargs) -> dict:
         args = {}
         for key, val in self.args.items():
             if key in kwargs.keys():
@@ -217,6 +221,10 @@ class MarketDataDownloader:
                 args[key] = val
             else:
                 raise ValueError(f"Missing argument {key}")
+        return args
+
+    def download(self, **kwargs) -> tuple[IO | None, dict[str, str]]:
+        args = self.download_args(**kwargs)
         fp, response = self.download_function(self, **args)
         return fp, response
 
@@ -255,37 +263,27 @@ class MarketDataTemplate:
 
 class CacheManager(Singleton):
     def init(self) -> None:
-        pass
+        self._cache_folder = os.path.join(os.getcwd(), ".brasa-cache")
+        os.makedirs(self._cache_folder, exist_ok=True)
+        os.makedirs(self.cache_path(self.meta_folder), exist_ok=True)
 
     @property
     def cache_folder(self) -> str:
-        folder = os.path.join(os.getcwd(), ".brasa-cache")
-        os.makedirs(folder, exist_ok=True)
-        return folder
+        return self._cache_folder
     
     def cache_path(self, fname: str) -> str:
         return os.path.join(self.cache_folder, fname)
 
-    @property
-    def meta_folder(self) -> str:
-        folder = "meta"
-        os.makedirs(os.path.join(self.cache_folder, "meta"), exist_ok=True)
-        return folder
-
-    def meta_file_path(self, template: MarketDataTemplate, args: dict) -> str:
-        hash = generate_checksum_for_template(template.id, args)
-        return os.path.join(self.meta_folder, f"{hash}.yaml")
-
     def db_folder(self, template: MarketDataTemplate) -> str | dict[str, str]:
         if template.reader.get("multi") is None:
             folder = os.path.join("db", template.id)
-            os.makedirs(os.path.join(self.cache_folder, folder), exist_ok=True)
+            os.makedirs(self.cache_path(folder), exist_ok=True)
             return folder
         else:
             db_folders = {}
             for name in template.reader.multi:
                 folder = os.path.join("db", f"{template.id}-{name}")
-                os.makedirs(os.path.join(self.cache_folder, folder), exist_ok=True)
+                os.makedirs(self.cache_path(folder), exist_ok=True)
                 db_folders[name] = folder
             return db_folders
 
@@ -295,31 +293,40 @@ class CacheManager(Singleton):
         else:
             return {n:os.path.join(f, f"{refdate.isoformat()[:10]}.parquet") for n,f in self.db_folder.items()}
 
-    def exists(self, template: MarketDataTemplate, args: dict, refdate: datetime) -> bool:
-        return self.has_meta(template, args) and os.path.isfile(self.parquet_file_path(refdate))
+    def exists(self, template_id: str, args: dict, refdate: datetime) -> bool:
+        return self.has_meta(template_id, args) and os.path.isfile(self.parquet_file_path(refdate))
 
-    def has_meta(self, template: MarketDataTemplate, args: dict) -> bool:
-        return os.path.isfile(self.meta_file_path(template, args))
-
-    def download_folder(self, template: MarketDataTemplate, checksum: str) -> str:
-        folder = os.path.join(template.id, "raw", checksum)
-        os.makedirs(os.path.join(self.cache_folder, folder), exist_ok=True)
+    def download_folder(self, template_id: str, checksum: str) -> str:
+        folder = os.path.join(template_id, "raw", checksum)
+        os.makedirs(self.cache_path(folder), exist_ok=True)
         return folder
 
-    def downloaded_file_paths(self, template: MarketDataTemplate, checksum: str, files: list) -> list[str]:
-        folder = self.download_folder(template, checksum)
+    def downloaded_file_paths(self, template_id: str, checksum: str, files: list) -> list[str]:
+        folder = self.download_folder(template_id, checksum)
         return [os.path.join(folder, f) for f in files]
 
-    def save_meta(self, meta: CacheMetadata) -> None:
-        with open(self.meta_file_path, "w") as fp:
-            yaml.dump(meta.to_dict(), fp, indent=4)
+    @property
+    def meta_folder(self) -> str:
+        return "meta"
 
-    def load_meta(self) -> CacheMetadata:
-        with open(self.meta_file_path, "r") as fp:
+    def has_meta(self, template_id: str, args: dict={}) -> bool:
+        meta_id = generate_checksum_for_template(template_id, args)
+        meta_file_path = self.cache_path(os.path.join(self.meta_folder, f"{meta_id}.yaml"))
+        return os.path.isfile(meta_file_path)
+
+    def load_meta(self, template_id: str, args: dict={}) -> CacheMetadata:
+        meta_id = generate_checksum_for_template(template_id, args)
+        meta_file_path = self.cache_path(os.path.join(self.meta_folder, f"{meta_id}.yaml"))
+        with open(meta_file_path, "r") as fp:
             meta = yaml.load(fp, Loader=yaml.Loader)
-        _meta = CacheMetadata()
+        _meta = CacheMetadata(meta["template"])
         _meta.from_dict(meta)
         return _meta
+
+    def save_meta(self, meta: CacheMetadata) -> None:
+        meta_file_path = self.cache_path(os.path.join(self.meta_folder, f"{meta.id}.yaml"))
+        with open(meta_file_path, "w") as fp:
+            yaml.dump(meta.to_dict(), fp, indent=4)
 
     def save_parquet(self, df: pd.DataFrame, refdate: datetime) -> None:
         df.to_parquet(self.parquet_file_path(refdate))
@@ -357,58 +364,51 @@ def retrieve_template(template_name) -> MarketDataTemplate | None:
     dir = os.path.join(os.path.dirname(__file__), "../templates")
     sel = [f for f in os.listdir(dir) if template_name in f]
     if len(sel) == 0:
-        return None
+        raise ValueError(f"Invalid template {template_name}")
     else:
         template_path = os.path.join(dir, sel[0])
         return MarketDataTemplate(template_path)
 
 
-def download_marketdata(template: str | MarketDataTemplate, meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
-    if isinstance(template, str):
-        template = retrieve_template(template)
-        if template is None:
-            raise ValueError(f"Invalid template {template}")
+def download_marketdata(meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
+    template = retrieve_template(meta.template)
     fp, response = template.downloader.download(**kwargs)
+    meta.response = response
+    meta.download_args = kwargs
     if fp is None:
         return None
 
     checksum = generate_checksum_from_file(fp)
-    meta = CacheMetadata()
-    meta.checksum = checksum
-    meta.response = response
-    meta.args = kwargs
-    meta.template = template.id
+    meta.download_checksum = checksum
 
     man = CacheManager()
-    download_folder = man.download_folder(template, checksum)
+    download_folder = man.download_folder(template.id, checksum)
 
     fname = f"downloaded.{template.downloader.format}"
-    file_path = os.path.join(download_folder, fname)
-    fp_dest = open(man.cache_path(file_path), "wb")
+    file_rel_path = os.path.join(download_folder, fname)
+    fp_dest = open(man.cache_path(file_rel_path), "wb")
     shutil.copyfileobj(fp, fp_dest)
     fp.close()
     fp_dest.close()
 
     if template.downloader.format == "zip":
-        filenames = unzip_recursive(file_path)
+        filenames = unzip_recursive(man.cache_path(file_rel_path))
         for filename in filenames:
             fname = os.path.basename(filename)
-            _file_path = os.path.join(download_folder, fname)
-            shutil.move(filename, man.cache_path(_file_path))
-            meta.downloaded_files.append(_file_path)
-        os.remove(file_path)
+            _file_rel_path = os.path.join(download_folder, fname)
+            shutil.move(filename, man.cache_path(_file_rel_path))
+            meta.downloaded_files.append(_file_rel_path)
+        os.remove(man.cache_path(file_rel_path))
     elif template.downloader.format == "base64":
-        with open(file_path, "rb") as fp:
+        with open(man.cache_path(file_rel_path), "rb") as fp:
             fname = f"decoded.{template.downloader.decoded_format}"
-            _file_path = os.path.join(download_folder, fname)
-            with open(man.cache_path(_file_path), "wb") as fp_dest:
+            _file_rel_path = os.path.join(download_folder, fname)
+            with open(man.cache_path(_file_rel_path), "wb") as fp_dest:
                 base64.decode(fp, fp_dest)
-            meta.downloaded_files.append(_file_path)
-        os.remove(file_path)
+            meta.downloaded_files.append(_file_rel_path)
+        os.remove(man.cache_path(file_rel_path))
     else:
-        meta.downloaded_files.append(file_path)
-
-    return meta
+        meta.downloaded_files.append(file_rel_path)
 
 
 def read_marketdata(template: str | MarketDataTemplate, meta: CacheMetadata, **kwargs) -> pd.DataFrame | None:
