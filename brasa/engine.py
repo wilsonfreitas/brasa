@@ -157,11 +157,12 @@ class CacheMetadata:
     def __init__(self, template: str) -> None:
         self.template = template
         self.timestamp = datetime.now()
-        self.download_checksum = None
         self.response = None
+        self.download_checksum = None
         self.download_args = None
         self.downloaded_files = []
         self.processed_files = []
+        self.extra_key = None
 
     def to_dict(self) -> dict:
         return {
@@ -172,6 +173,7 @@ class CacheMetadata:
             "template": self.template,
             "downloaded_files": self.downloaded_files,
             "processed_files": self.processed_files,
+            "extra_key": self.extra_key
         }
 
     def from_dict(self, kwargs) -> None:
@@ -180,7 +182,7 @@ class CacheMetadata:
 
     @property
     def id(self) -> str:
-        return generate_checksum_for_template(self.template, self.download_args)
+        return generate_checksum_for_template(self.template, self.download_args, self.extra_key)
 
 
 class MarketDataReader:
@@ -211,6 +213,16 @@ class MarketDataDownloader:
         self.encoding = downloader.get("encoding", "utf-8")
         self.verify_ssl = downloader.get("verify_ssl", True)
         self.download_function = load_function_by_name(downloader["function"])
+        self._extra_key = downloader.get("extra_key", None)
+
+    @property
+    def extra_key(self) -> str | None:
+        if self._extra_key == "date":
+            return datetime.now().isoformat()[:10]
+        elif self._extra_key == "datetime":
+            return datetime.now().isoformat()
+        else:
+            return None
 
     def download_args(self, **kwargs) -> dict:
         args = {}
@@ -287,12 +299,6 @@ class CacheManager(Singleton):
                 db_folders[name] = folder
             return db_folders
 
-    def parquet_file_path(self, refdate: datetime) -> str:
-        if isinstance(self.db_folder, str):
-            return os.path.join(self.db_folder, f"{refdate.isoformat()[:10]}.parquet")
-        else:
-            return {n:os.path.join(f, f"{refdate.isoformat()[:10]}.parquet") for n,f in self.db_folder.items()}
-
     def exists(self, template_id: str, args: dict, refdate: datetime) -> bool:
         return self.has_meta(template_id, args) and os.path.isfile(self.parquet_file_path(refdate))
 
@@ -328,11 +334,21 @@ class CacheManager(Singleton):
         with open(meta_file_path, "w") as fp:
             yaml.dump(meta.to_dict(), fp, indent=4)
 
-    def save_parquet(self, df: pd.DataFrame, refdate: datetime) -> None:
-        df.to_parquet(self.parquet_file_path(refdate))
+    def parquet_file_path(self, fname_part: str) -> str:
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", fname_part):
+            fname = f"{fname_part}.parquet"
+        else:
+            fname = f"part-{fname_part}.parquet"
+        if isinstance(self.db_folder, str):
+            return os.path.join(self.db_folder, fname)
+        else:
+            return {n:os.path.join(f, fname) for n,f in self.db_folder.items()}
 
-    def load_parquet(self, refdate: datetime) -> pd.DataFrame:
-        df = pd.read_parquet(self.parquet_file_path(refdate))
+    def save_parquet(self, df: pd.DataFrame, fname_part: str) -> None:
+        df.to_parquet(self.cache_path(self.parquet_file_path(fname_part)))
+
+    def load_parquet(self, fname_part: str) -> pd.DataFrame:
+        df = pd.read_parquet(self.cache_path(self.parquet_file_path(fname_part)))
         return df
 
     def process_with_checks(self) -> pd.DataFrame | None | dict[str, pd.DataFrame]:
@@ -375,6 +391,7 @@ def download_marketdata(meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
     fp, response = template.downloader.download(**kwargs)
     meta.response = response
     meta.download_args = kwargs
+    meta.extra_key = template.downloader.extra_key
     if fp is None:
         return None
 
@@ -411,12 +428,20 @@ def download_marketdata(meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
         meta.downloaded_files.append(file_rel_path)
 
 
-def read_marketdata(template: str | MarketDataTemplate, meta: CacheMetadata, **kwargs) -> pd.DataFrame | None:
-    if isinstance(template, str):
-        template = retrieve_template(template)
-        if template is None:
-            raise ValueError(f"Invalid template {template}")
-    df = template.reader.read(meta, **kwargs)
+def read_marketdata(meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
+    template = retrieve_template(template)
+    df = template.reader.read(meta)
+    man = CacheManager()
+    if isinstance(df, dict):
+        pass
+    else:
+        if "refdate" in df:
+            fname_part = df["refdate"].iloc[0].isoformat()[:10]
+        elif "refdate" in meta.download_args:
+            fname_part = meta.download_args["refdate"].isoformat()[:10]
+        else:
+            fname_part = meta.download_checksum
+        man.save_parquet(df, fname_part)
     return df
 
 

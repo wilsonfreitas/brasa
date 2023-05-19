@@ -7,6 +7,7 @@ downloader:
   function: brasa.downloaders.simple_download
   url: https://www2.cetip.com.br/ConsultarTaxaDi/ConsultarTaxaDICetip.aspx
   format: json
+  extra-key: date
 reader:
   function: brasa.readers.read_json
 fields:

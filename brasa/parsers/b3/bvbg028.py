@@ -155,7 +155,7 @@ class BVBG028Parser(Parser):
 
 
 def read_b3_bvbg028(reader: MarketDataReader, meta: CacheMetadata, **kwargs) -> pd.DataFrame:
-    paths = meta.downloaded_file_paths
+    paths = meta.downloaded_files
     paths.sort()
     fname = paths[-1]
     man = CacheManager()

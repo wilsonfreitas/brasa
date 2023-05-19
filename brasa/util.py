@@ -7,13 +7,15 @@ from typing import IO
 import zipfile
 
 
-def generate_checksum_for_template(template: str, args: dict) -> str:
+def generate_checksum_for_template(template: str, args: dict, extra_key: str=None) -> str:
     """Generates a hash for a template and its arguments.
 
     The hash is used to identify a template and its arguments.
     """
     t = tuple(sorted(args.items(), key=lambda x: x[0]))
     obj = (template, t)
+    if extra_key:
+        obj = (template, t, extra_key)
     return hashlib.md5(pickle.dumps(obj)).hexdigest()
 
 
