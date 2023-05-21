@@ -159,7 +159,7 @@ class CacheMetadata:
         self.timestamp = datetime.now()
         self.response = None
         self.download_checksum = None
-        self.download_args = None
+        self.download_args = {}
         self.downloaded_files = []
         self.processed_files = {}
         self.extra_key = None
@@ -312,25 +312,32 @@ class CacheManager(Singleton):
     @property
     def meta_folder(self) -> str:
         return "meta"
+    
+    def meta_file_path(self, meta: CacheMetadata) -> str:
+        return os.path.join(self.cache_folder, os.path.join(self.meta_folder, f"{meta.id}.yaml"))
 
-    def has_meta(self, template: MarketDataTemplate, args: dict={}) -> bool:
-        meta_id = generate_checksum_for_template(template.id, args, template.downloader.extra_key)
-        meta_file_path = self.cache_path(os.path.join(self.meta_folder, f"{meta_id}.yaml"))
-        return os.path.isfile(meta_file_path)
+    def has_meta(self, meta: CacheMetadata) -> bool:
+        return os.path.isfile(self.meta_file_path(meta))
 
-    def load_meta(self, template: MarketDataTemplate, args: dict={}) -> CacheMetadata:
-        meta_id = generate_checksum_for_template(template.id, args, template.downloader.extra_key)
-        meta_file_path = self.cache_path(os.path.join(self.meta_folder, f"{meta_id}.yaml"))
-        with open(meta_file_path, "r") as fp:
-            meta = yaml.load(fp, Loader=yaml.Loader)
-        _meta = CacheMetadata(meta["template"])
-        _meta.from_dict(meta)
-        return _meta
+    def load_meta(self, meta: CacheMetadata) -> None:
+        with open(self.meta_file_path(meta), "r") as fp:
+            _meta = yaml.load(fp, Loader=yaml.Loader)
+        meta.from_dict(_meta)
 
     def save_meta(self, meta: CacheMetadata) -> None:
-        meta_file_path = self.cache_path(os.path.join(self.meta_folder, f"{meta.id}.yaml"))
-        with open(meta_file_path, "w") as fp:
+        with open(self.meta_file_path(meta), "w") as fp:
             yaml.dump(meta.to_dict(), fp, indent=4)
+
+    def remove_meta(self, meta: CacheMetadata) -> None:
+        for fname in meta.downloaded_files:
+            if os.path.isfile(self.cache_path(fname)):
+                os.remove(self.cache_path(fname))
+        for fname in meta.processed_files.values():
+            if os.path.isfile(self.cache_path(fname)):
+                os.remove(self.cache_path(fname))
+        meta_file_path = self.meta_file_path(meta)
+        if os.path.isfile(meta_file_path):
+            os.remove(meta_file_path)
 
     def parquet_file_name(self, fname_part: str) -> str:
         if re.match(r"^\d{4}-\d{2}-\d{2}$", fname_part):
@@ -343,9 +350,9 @@ class CacheManager(Singleton):
         df = pd.read_parquet(self.cache_path(self.parquet_file_path(template, fname_part)))
         return df
 
-    def process_with_checks(self, template: MarketDataTemplate, args: dict) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
-        if self.has_meta(template, args):
-            meta = self.load_meta(template, args)
+    def process_with_checks(self, meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
+        if self.has_meta(meta):
+            meta = self.load_meta(meta)
             if len(meta.processed_files) > 0:
                 dfs = {key:pd.read_parquet(self.cache_path(fname)) for key,fname in meta.processed_files.items()}
                 if len(dfs) == 1:
@@ -357,16 +364,14 @@ class CacheManager(Singleton):
                 self.save_meta(meta)
                 return df
         else:
-            meta = CacheMetadata(template.id)
-            download_marketdata(meta, **args)
+            download_marketdata(meta, **meta.download_args)
             self.save_meta(meta)
             dfs = read_marketdata(meta)
             self.save_meta(meta)
             return dfs
 
-    def process_without_checks(self, template: MarketDataTemplate, args: dict) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
-        meta = CacheMetadata(template.id)
-        download_marketdata(meta, **args)
+    def process_without_checks(self, meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
+        download_marketdata(meta, **meta.download_args)
         self.save_meta(meta)
         dfs = read_marketdata(meta)
         self.save_meta(meta)
@@ -385,10 +390,10 @@ def retrieve_template(template_name) -> MarketDataTemplate | None:
 
 def download_marketdata(meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
     template = retrieve_template(meta.template)
-    fp, response = template.downloader.download(**kwargs)
-    meta.response = response
     meta.download_args = kwargs
     meta.extra_key = template.downloader.extra_key
+    fp, response = template.downloader.download(**kwargs)
+    meta.response = response
     if fp is None:
         return None
 
@@ -458,8 +463,11 @@ def read_marketdata(meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFram
 
 def get_marketdata(template: str, **kwargs) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
     template = retrieve_template(template)
+    meta = CacheMetadata(template.id)
+    meta.download_args = kwargs
+    meta.extra_key = template.downloader.extra_key
     cache = CacheManager()
-    return cache.process_with_checks(template, kwargs)
+    return cache.process_with_checks(meta)
 
 
 

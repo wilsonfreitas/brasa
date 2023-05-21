@@ -16,7 +16,7 @@ def test_load_template():
     assert ~ tpl.has_reader
 
 
-def test_download_and_read():
+def test_template_load_fields():
     tpl = MarketDataTemplate("templates/b3-cdi.yaml")
 
     assert tpl.has_downloader
@@ -28,14 +28,6 @@ def test_download_and_read():
     assert tpl.fields["dataTaxa"].handler.type == "Date"
     assert tpl.fields["dataTaxa"].handler.format == "%d/%m/%Y"
 
-    fp, _ = tpl.downloader.download()
-    assert fp is not None
-    assert fp.readable()
-
-    df = tpl.reader.read(fp)
-    assert df is not None
-    assert len(df) > 0
-
 
 def test_retrieve_temlate():
     tpl = retrieve_template("b3-cdi")
@@ -44,45 +36,65 @@ def test_retrieve_temlate():
     assert tpl.id == "b3-cdi"
 
 
-def test_download_and_read_marketdata():
+def test_get_marketdata():
     df = get_marketdata("b3-futures-settlement-prices", refdate=datetime(2023, 5, 19))
     assert isinstance(df, pd.DataFrame)
     df = get_marketdata("b3-cdi")
     assert isinstance(df, dict)
 
 
-def test_download_marketdata():
+def test_save_empty_metadata():
     meta = CacheMetadata("b3-cdi")
+    assert meta.id == "63142dbef63c0537fb3c2f37dac2fbb6"
+    
+    man = CacheManager()
+    assert not man.has_meta(meta)
+    man.save_meta(meta)
+    assert man.has_meta(meta)
+
+    man.remove_meta(meta)
+
+
+def test_metadata_fulfilment():
+    meta = CacheMetadata("b3-cdi")
+    assert len(meta.downloaded_files) == 0
+
     download_marketdata(meta)
+    assert len(meta.downloaded_files) == 1
+
     man = CacheManager()
     man.save_meta(meta)
-    assert len(meta.downloaded_files) == 1
 
     df = read_marketdata(meta)
     assert df is not None
     man.save_meta(meta)
 
     tpl = retrieve_template("b3-cdi")
-    meta2 = man.load_meta(tpl)
+    meta2 = CacheMetadata("b3-cdi")
+    meta2.extra_key = tpl.downloader.extra_key
+
+    man.load_meta(meta2)
     assert meta2.timestamp == meta.timestamp
     assert meta2.template == meta.template
     assert meta2.downloaded_files == meta.downloaded_files
     assert meta2.processed_files == meta.processed_files
 
+    man.remove_meta(meta)
+
 
 def test_download_marketdata_missing_args_error():
     with pytest.raises(ValueError) as exc_info:
-        meta = CacheMetadata("OpcoesAcoesEmAberto")
+        meta = CacheMetadata("b3-companies-options")
         download_marketdata(meta)
     assert exc_info.value.args[0] == "Missing argument refdate"
 
 
 def test_download_marketdata_with_refdate():
-    meta = CacheMetadata("OpcoesAcoesEmAberto")
+    meta = CacheMetadata("b3-companies-options")
     download_marketdata(meta, refdate=datetime(2023, 5, 10))
     assert len(meta.downloaded_files) == 1
     
-    meta = CacheMetadata("OpcoesAcoesEmAberto")
+    meta = CacheMetadata("b3-companies-options")
     download_marketdata(meta, refdate=datetime(2023, 5, 2))
     assert len(meta.downloaded_files) == 1
 
