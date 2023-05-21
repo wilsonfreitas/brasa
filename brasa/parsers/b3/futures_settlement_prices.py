@@ -93,6 +93,7 @@ def future_settlement_prices_parser(fname: IO | str) -> pd.DataFrame:
 
 
 def read_b3_futures_settlement_prices(reader: MarketDataReader, meta: CacheMetadata, **kwargs) -> pd.DataFrame:
-    fname = meta.downloaded_file_paths[0]
-    df = future_settlement_prices_parser(fname)
+    fname = meta.downloaded_files[0]
+    man = CacheManager()
+    df = future_settlement_prices_parser(man.cache_path(fname))
     return df

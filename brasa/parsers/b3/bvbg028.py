@@ -160,4 +160,4 @@ def read_b3_bvbg028(reader: MarketDataReader, meta: CacheMetadata, **kwargs) -> 
     fname = paths[-1]
     man = CacheManager()
     parser = BVBG028Parser(man.cache_path(fname))
-    return {reader.multi[k]:v for k,v in parser.data.items()}
+    return parser.data

@@ -4,7 +4,7 @@ import os
 import pandas as pd
 
 import pytest
-from brasa.engine import CacheManager, read_marketdata
+from brasa.engine import CacheManager, get_marketdata, read_marketdata
 from brasa.engine import CacheMetadata
 from brasa.engine import MarketDataTemplate, TemplateFields, download_marketdata, retrieve_template
 
@@ -42,6 +42,13 @@ def test_retrieve_temlate():
     assert tpl is not None
     assert isinstance(tpl, MarketDataTemplate)
     assert tpl.id == "b3-cdi"
+
+
+def test_download_and_read_marketdata():
+    df = get_marketdata("b3-futures-settlement-prices", refdate=datetime(2023, 5, 19))
+    assert isinstance(df, pd.DataFrame)
+    df = get_marketdata("b3-cdi")
+    assert isinstance(df, dict)
 
 
 def test_download_marketdata():

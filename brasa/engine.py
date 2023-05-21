@@ -161,7 +161,7 @@ class CacheMetadata:
         self.download_checksum = None
         self.download_args = None
         self.downloaded_files = []
-        self.processed_files = []
+        self.processed_files = {}
         self.extra_key = None
 
     def to_dict(self) -> dict:
@@ -294,14 +294,11 @@ class CacheManager(Singleton):
             return folder
         else:
             db_folders = {}
-            for name in template.reader.multi:
-                folder = os.path.join("db", f"{template.id}-{name}")
+            for name,val in template.reader.multi.items():
+                folder = os.path.join("db", f"{template.id}-{val}")
                 os.makedirs(self.cache_path(folder), exist_ok=True)
                 db_folders[name] = folder
             return db_folders
-
-    def exists(self, template_id: str, args: dict, refdate: datetime) -> bool:
-        return self.has_meta(template_id, args) and os.path.isfile(self.parquet_file_path(refdate))
 
     def download_folder(self, template_id: str, checksum: str) -> str:
         folder = os.path.join(template_id, "raw", checksum)
@@ -346,29 +343,34 @@ class CacheManager(Singleton):
         df = pd.read_parquet(self.cache_path(self.parquet_file_path(template, fname_part)))
         return df
 
-    def process_with_checks(self) -> pd.DataFrame | None | dict[str, pd.DataFrame]:
-        refdate = self.args["refdate"]
-
-        if self.exists(refdate):
-            df = self.load_parquet(refdate)
-        else:
-            if self.has_meta:
-                meta = self.load_meta()
+    def process_with_checks(self, template: MarketDataTemplate, args: dict) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
+        if self.has_meta(template, args):
+            meta = self.load_meta(template, args)
+            if len(meta.processed_files) > 0:
+                dfs = {key:pd.read_parquet(self.cache_path(fname)) for key,fname in meta.processed_files.items()}
+                if len(dfs) == 1:
+                    return dfs["data"]
+                else:
+                    return dfs
             else:
-                meta = download_marketdata(self.template, **self.args)
-            df = read_marketdata(self.template, meta, **self.args)
-            self.save_parquet(df, refdate)
-            if not self.has_meta:
+                df = read_marketdata(meta)
                 self.save_meta(meta)
-        return df
+                return df
+        else:
+            meta = CacheMetadata(template.id)
+            download_marketdata(meta, **args)
+            self.save_meta(meta)
+            dfs = read_marketdata(meta)
+            self.save_meta(meta)
+            return dfs
 
-    def process_without_checks(self) -> pd.DataFrame | None | dict[str, pd.DataFrame]:
-        refdate = self.args["refdate"]
-        meta = download_marketdata(self.template, **self.args)
-        df = read_marketdata(self.template, meta)
-        self.save_parquet(df, refdate)
+    def process_without_checks(self, template: MarketDataTemplate, args: dict) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
+        meta = CacheMetadata(template.id)
+        download_marketdata(meta, **args)
         self.save_meta(meta)
-        return df
+        dfs = read_marketdata(meta)
+        self.save_meta(meta)
+        return dfs
 
 
 def retrieve_template(template_name) -> MarketDataTemplate | None:
@@ -439,27 +441,25 @@ def read_marketdata(meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFram
     man = CacheManager()
     if isinstance(df, dict):
         db_folder = man.db_folder(template)
-        for name in df:
-            fname_part = get_fname_part(meta, df[name])
+        for name,dx in df.items():
+            fname_part = get_fname_part(meta, dx)
             fname = os.path.join(db_folder[name], man.parquet_file_name(fname_part))
-            meta.processed_files.append(fname)
-            df[name].to_parquet(man.cache_path(fname))
+            meta.processed_files[template.reader.multi[name]] = fname
+            dx.to_parquet(man.cache_path(fname))
+        df = {template.reader.multi[k]:v for k,v in df.items()}
     else:
         db_folder = man.db_folder(template)
         fname_part = get_fname_part(meta, df)
         fname = os.path.join(db_folder, man.parquet_file_name(fname_part))
-        meta.processed_files.append(fname)
+        meta.processed_files["data"] = fname
         df.to_parquet(man.cache_path(fname))
     return df
 
 
-def download_and_read_marketdata(template: str | MarketDataTemplate, **kwargs) -> pd.DataFrame | None:
-    if isinstance(template, str):
-        template = retrieve_template(template)
-        if template is None:
-            raise ValueError(f"Invalid template {template}")
-    cache = CacheManager(template, kwargs)
-    return cache.process_with_checks()
+def get_marketdata(template: str, **kwargs) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
+    template = retrieve_template(template)
+    cache = CacheManager()
+    return cache.process_with_checks(template, kwargs)
 
 
 
