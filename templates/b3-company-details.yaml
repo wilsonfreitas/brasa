@@ -10,6 +10,7 @@ downloader:
   args:
     codeCVM: ~
     language: pt-br
+  extra-key: date
 reader:
   function: brasa.readers.null_reader
 parts:

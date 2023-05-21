@@ -14,6 +14,7 @@ downloader:
     language: pt-br
     segment: 2
     index: ~
+  extra-key: date
 reader:
   function: brasa.readers.null_reader
 parts:

@@ -12,6 +12,7 @@ downloader:
     language: pt-br
     pageNumber: 1
     pageSize: 9999
+  extra-key: date
 reader:
   function: brasa.readers.null_reader
 fields:
