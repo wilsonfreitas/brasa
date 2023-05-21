@@ -1,4 +1,4 @@
-id: GetStockIndex
+id: b3-indexes-composition
 filename: ~
 filetype: MCUSTOM
 description: Composição dos índices da B3
@@ -11,6 +11,7 @@ downloader:
   args:
     pageNumber: 1
     pageSize: 9999
+  extra-key: date
 reader:
   function: brasa.readers.null_reader
 parts:

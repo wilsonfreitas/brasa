@@ -1,4 +1,4 @@
-id: b3-theoretical-portfolio
+id: b3-indexes-theoretical-portfolio
 filename: ~
 filetype: MCUSTOM
 description: Carteira Teórica dos índices da B3 com pesos e posições
@@ -13,6 +13,7 @@ downloader:
     pageSize: 9999
     language: pt-br
     index: ~
+  extra-key: date
 reader:
   function: brasa.readers.null_reader
 parts:
