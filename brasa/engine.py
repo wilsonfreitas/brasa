@@ -191,6 +191,7 @@ class MarketDataReader:
             self.__dict__[n] = reader[n]
         self.encoding = reader.get("encoding", "utf-8")
         self.read_function = load_function_by_name(reader["function"])
+        self.multi = reader.get("multi")
         self.parts = None
         self.fields = None
 
@@ -213,7 +214,7 @@ class MarketDataDownloader:
         self.encoding = downloader.get("encoding", "utf-8")
         self.verify_ssl = downloader.get("verify_ssl", True)
         self.download_function = load_function_by_name(downloader["function"])
-        self._extra_key = downloader.get("extra_key", None)
+        self._extra_key = downloader.get("extra-key", None)
 
     @property
     def extra_key(self) -> str | None:
@@ -287,7 +288,7 @@ class CacheManager(Singleton):
         return os.path.join(self.cache_folder, fname)
 
     def db_folder(self, template: MarketDataTemplate) -> str | dict[str, str]:
-        if template.reader.get("multi") is None:
+        if template.reader.multi is None:
             folder = os.path.join("db", template.id)
             os.makedirs(self.cache_path(folder), exist_ok=True)
             return folder
@@ -315,13 +316,13 @@ class CacheManager(Singleton):
     def meta_folder(self) -> str:
         return "meta"
 
-    def has_meta(self, template_id: str, args: dict={}) -> bool:
-        meta_id = generate_checksum_for_template(template_id, args)
+    def has_meta(self, template: MarketDataTemplate, args: dict={}) -> bool:
+        meta_id = generate_checksum_for_template(template.id, args, template.downloader.extra_key)
         meta_file_path = self.cache_path(os.path.join(self.meta_folder, f"{meta_id}.yaml"))
         return os.path.isfile(meta_file_path)
 
-    def load_meta(self, template_id: str, args: dict={}) -> CacheMetadata:
-        meta_id = generate_checksum_for_template(template_id, args)
+    def load_meta(self, template: MarketDataTemplate, args: dict={}) -> CacheMetadata:
+        meta_id = generate_checksum_for_template(template.id, args, template.downloader.extra_key)
         meta_file_path = self.cache_path(os.path.join(self.meta_folder, f"{meta_id}.yaml"))
         with open(meta_file_path, "r") as fp:
             meta = yaml.load(fp, Loader=yaml.Loader)
@@ -334,21 +335,15 @@ class CacheManager(Singleton):
         with open(meta_file_path, "w") as fp:
             yaml.dump(meta.to_dict(), fp, indent=4)
 
-    def parquet_file_path(self, fname_part: str) -> str:
+    def parquet_file_name(self, fname_part: str) -> str:
         if re.match(r"^\d{4}-\d{2}-\d{2}$", fname_part):
             fname = f"{fname_part}.parquet"
         else:
             fname = f"part-{fname_part}.parquet"
-        if isinstance(self.db_folder, str):
-            return os.path.join(self.db_folder, fname)
-        else:
-            return {n:os.path.join(f, fname) for n,f in self.db_folder.items()}
-
-    def save_parquet(self, df: pd.DataFrame, fname_part: str) -> None:
-        df.to_parquet(self.cache_path(self.parquet_file_path(fname_part)))
-
-    def load_parquet(self, fname_part: str) -> pd.DataFrame:
-        df = pd.read_parquet(self.cache_path(self.parquet_file_path(fname_part)))
+        return fname
+    
+    def load_parquet(self, template: MarketDataTemplate, fname_part: str) -> pd.DataFrame:
+        df = pd.read_parquet(self.cache_path(self.parquet_file_path(template, fname_part)))
         return df
 
     def process_with_checks(self) -> pd.DataFrame | None | dict[str, pd.DataFrame]:
@@ -428,20 +423,33 @@ def download_marketdata(meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
         meta.downloaded_files.append(file_rel_path)
 
 
+def get_fname_part(meta: CacheMetadata, df: pd.DataFrame) -> str:
+    if "refdate" in df:
+        fname_part = df["refdate"].iloc[0].isoformat()[:10]
+    elif "refdate" in meta.download_args:
+        fname_part = meta.download_args["refdate"].isoformat()[:10]
+    else:
+        fname_part = meta.download_checksum
+    return fname_part
+
+
 def read_marketdata(meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
-    template = retrieve_template(template)
+    template = retrieve_template(meta.template)
     df = template.reader.read(meta)
     man = CacheManager()
     if isinstance(df, dict):
-        pass
+        db_folder = man.db_folder(template)
+        for name in df:
+            fname_part = get_fname_part(meta, df[name])
+            fname = os.path.join(db_folder[name], man.parquet_file_name(fname_part))
+            meta.processed_files.append(fname)
+            df[name].to_parquet(man.cache_path(fname))
     else:
-        if "refdate" in df:
-            fname_part = df["refdate"].iloc[0].isoformat()[:10]
-        elif "refdate" in meta.download_args:
-            fname_part = meta.download_args["refdate"].isoformat()[:10]
-        else:
-            fname_part = meta.download_checksum
-        man.save_parquet(df, fname_part)
+        db_folder = man.db_folder(template)
+        fname_part = get_fname_part(meta, df)
+        fname = os.path.join(db_folder, man.parquet_file_name(fname_part))
+        meta.processed_files.append(fname)
+        df.to_parquet(man.cache_path(fname))
     return df
 
 

@@ -1,4 +1,4 @@
-id: CDIIDI
+id: b3-cdi
 filename: ~
 filetype: JSON
 description: Taxa DI e Índice IDI divulgados na frontpage da B3
@@ -9,7 +9,10 @@ downloader:
   format: json
   extra-key: date
 reader:
-  function: brasa.readers.read_json
+  function: brasa.readers.read_b3_cdi
+  multi:
+    cdi: cdi
+    idi: idi
 fields:
   - name: taxa
     description: Valor da taxa DI

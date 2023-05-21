@@ -10,14 +10,14 @@ from brasa.engine import MarketDataTemplate, TemplateFields, download_marketdata
 
 
 def test_load_template():
-    tpl = MarketDataTemplate("templates/CDIIDI.yaml")
+    tpl = MarketDataTemplate("templates/b3-cdi.yaml")
 
     assert tpl.has_downloader
     assert ~ tpl.has_reader
 
 
 def test_download_and_read():
-    tpl = MarketDataTemplate("templates/CDIIDI.yaml")
+    tpl = MarketDataTemplate("templates/b3-cdi.yaml")
 
     assert tpl.has_downloader
     assert tpl.has_reader
@@ -38,22 +38,29 @@ def test_download_and_read():
 
 
 def test_retrieve_temlate():
-    tpl = retrieve_template("CDIIDI")
+    tpl = retrieve_template("b3-cdi")
     assert tpl is not None
     assert isinstance(tpl, MarketDataTemplate)
-    assert tpl.id == "CDIIDI"
+    assert tpl.id == "b3-cdi"
 
 
 def test_download_marketdata():
-    meta = CacheMetadata("CDIIDI")
+    meta = CacheMetadata("b3-cdi")
     download_marketdata(meta)
     man = CacheManager()
     man.save_meta(meta)
     assert len(meta.downloaded_files) == 1
 
-    meta2 = man.load_meta("CDIIDI")
+    df = read_marketdata(meta)
+    assert df is not None
+    man.save_meta(meta)
+
+    tpl = retrieve_template("b3-cdi")
+    meta2 = man.load_meta(tpl)
     assert meta2.timestamp == meta.timestamp
     assert meta2.template == meta.template
+    assert meta2.downloaded_files == meta.downloaded_files
+    assert meta2.processed_files == meta.processed_files
 
 
 def test_download_marketdata_missing_args_error():
@@ -123,7 +130,7 @@ def test_download_marketdata_b3_url_encoded_with_null_argument():
 
 def test_read_marketdata():
     dest = "data/CDIIDI_2019-09-22.json"
-    df = read_marketdata("CDIIDI", dest, parse_fields=False)
+    df = read_marketdata("b3-cdi", dest, parse_fields=False)
     assert df is not None
     assert isinstance(df, pd.DataFrame)
     assert df.shape == (1, 4)
@@ -137,7 +144,7 @@ def test_read_marketdata():
 
 def test_read_marketdata_with_parsers():
     dest = "data/CDIIDI_2019-09-22.json"
-    df = read_marketdata("CDIIDI", dest, parse_fields=True)
+    df = read_marketdata("b3-cdi", dest, parse_fields=True)
     assert df is not None
     assert isinstance(df, pd.DataFrame)
     assert df.shape == (1, 4)

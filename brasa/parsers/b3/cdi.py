@@ -1,9 +1,11 @@
 import json
 import pandas as pd
+
+from brasa.engine import CacheManager, CacheMetadata, MarketDataReader
 from ..util import PortugueseRulesParser2, Parser
 
 
-class CDIIDIParser(Parser):
+class CDIParser(Parser):
     def __init__(self, fname):
         self.fname = fname
         self.parse()
@@ -22,8 +24,17 @@ class CDIIDIParser(Parser):
             "symbol": "IDI",
         }
         self._info = [cdi_data, idi_data]
-        self._data = pd.DataFrame(self._info)
+        self._data = {
+            "cdi": pd.DataFrame(cdi_data, index=[0]),
+            "idi": pd.DataFrame(idi_data, index=[0]),
+        }
 
     @property
     def data(self):
-        return self._info
+        return self._data
+
+
+def read_b3_cdi(reader: MarketDataReader, meta: CacheMetadata) -> pd.DataFrame:
+    man = CacheManager()
+    parser = CDIParser(man.cache_path(meta.downloaded_files[0]))
+    return parser.data
