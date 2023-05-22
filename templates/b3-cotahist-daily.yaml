@@ -10,6 +10,8 @@ downloader:
   format: zip
   args:
     refdate: ~
+reader:
+  function: brasa.readers.read_b3_cotahist
 parts:
   Header:
     pattern: ^00

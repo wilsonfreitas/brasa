@@ -1,0 +1,16 @@
+id: b3-bvbg086
+filename: ~
+filetype: CUSTOM
+description: Arquivo de Preços de Mercado
+calendar: Brazil/B3
+downloader:
+  function: brasa.downloaders.datetime_download
+  url: https://www.b3.com.br/pesquisapregao/download?filelist=PR%y%m%d.zip
+  format: zip
+  args:
+    refdate: ~
+reader:
+  locale: en
+  function: brasa.readers.read_b3_bvbg086
+fields:
+  - name: ~

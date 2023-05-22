@@ -1,9 +1,7 @@
 
 from datetime import datetime
-import os
 import pandas as pd
 
-import pytest
 from brasa.engine import CacheManager, get_marketdata, read_marketdata
 from brasa.engine import CacheMetadata
 from brasa.engine import MarketDataTemplate, TemplateFields, download_marketdata, retrieve_template
