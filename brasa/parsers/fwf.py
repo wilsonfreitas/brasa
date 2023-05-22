@@ -2,6 +2,8 @@ import re
 from datetime import datetime
 from collections import OrderedDict
 
+import pandas as pd
+
 
 def read_fwf(con, widths, colnames=None, skip=0, parse_fun=lambda x: x):
     """read and parse fixed width field files"""
@@ -35,33 +37,37 @@ def read_fwf(con, widths, colnames=None, skip=0, parse_fun=lambda x: x):
 class Field:
     _counter = 0
 
-    def __init__(self, width):
+    def __init__(self, width) -> None:
         self.width = width
         self._counter_val = Field._counter
         Field._counter += 1
 
-    def parse(self, text):
+    def parse(self, text: pd.Series) -> pd.Series:
         return text
 
 
 class DateField(Field):
-    def __init__(self, width, format):
+    def __init__(self, width, format) -> None:
         super(DateField, self).__init__(width)
         self.format = format
 
-    def parse(self, text):
-        return datetime.strptime(text, self.format)
+    def parse(self, text: pd.Series) -> pd.Series:
+        return pd.to_datetime(text, format=self.format, errors="coerce")
 
 
 class NumericField(Field):
-    def __init__(self, width, dec=0, sign=""):
+    def __init__(self, width, dec=0, sign="") -> None:
         super(NumericField, self).__init__(width)
         self.dec = dec
         self.sign = sign
+        self.dtype = "int64" if dec == 0 else "float64"
 
-    def parse(self, text):
-        text = self.sign + text
-        return float(text) / (10 ** int(self.dec))
+    def parse(self, field: pd.Series) -> pd.Series:
+        m = -1 if self.sign == "-" else 1
+        if self.dec == 0:
+            return m * pd.to_numeric(field, errors="coerce")
+        else:
+            return m * pd.to_numeric(field, errors="coerce").astype(self.dtype) / (10 ** int(self.dec))
 
 
 class FWFRowMeta(type):
@@ -133,12 +139,20 @@ class FWFFile(metaclass=FWFFileMeta):
             #       lines with parsing errors
             # if len(line) < len(row_template):
             #     continue
+            # fields = [
+            #     dx[2](line[dx[0]: dx[1]].strip())
+            #     for dx in row_template.colpositions
+            # ]
             fields = [
-                dx[2](line[dx[0]: dx[1]].strip())
+                line[dx[0]: dx[1]].strip()
                 for dx in row_template.colpositions
             ]
             obj = dict((k, v) for k, v in zip(row_template.names, fields))
             self._buckets[row_name].append(obj)
+        self._tables = {n:pd.DataFrame(b) for n, b in self._buckets.items()}
+        for row_name, row_template in self._rows:
+            for fn, f in row_template._fields.items():
+                self._tables[row_name][fn] = f.parse(self._tables[row_name][fn])
         if isinstance(fname, str):
             fp.close()
 

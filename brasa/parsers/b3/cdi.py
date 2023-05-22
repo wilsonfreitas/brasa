@@ -32,9 +32,3 @@ class CDIParser(Parser):
     @property
     def data(self):
         return self._data
-
-
-def read_b3_cdi(reader: MarketDataReader, meta: CacheMetadata) -> pd.DataFrame:
-    man = CacheManager()
-    parser = CDIParser(man.cache_path(meta.downloaded_files[0]))
-    return parser.data

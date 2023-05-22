@@ -1,13 +1,6 @@
 
-from datetime import datetime
-import io
-import os
 from lxml import etree
 import pandas as pd
-from brasa.engine import CacheManager
-from brasa.engine import CacheMetadata
-
-from brasa.engine import MarketDataReader, retrieve_template
 from ..util import Parser
 
 
@@ -152,12 +145,3 @@ class BVBG028Parser(Parser):
     @property
     def data(self):
         return self.__instrs_dict
-
-
-def read_b3_bvbg028(reader: MarketDataReader, meta: CacheMetadata, **kwargs) -> pd.DataFrame:
-    paths = meta.downloaded_files
-    paths.sort()
-    fname = paths[-1]
-    man = CacheManager()
-    parser = BVBG028Parser(man.cache_path(fname))
-    return parser.data

@@ -1,8 +1,12 @@
 
-from ..parsers.b3.cdi import read_b3_cdi
-from ..parsers.b3.bvbg028 import read_b3_bvbg028
-from ..parsers.b3.futures_settlement_prices import read_b3_futures_settlement_prices
-from .helpers import read_json, read_csv
+from .helpers import (
+    read_json,
+    read_csv,
+    read_b3_cotahist,
+    read_b3_bvbg086,
+    read_b3_cdi,
+    read_b3_futures_settlement_prices,
+)
 
 def null_reader(*args, **kwargs):
     return None

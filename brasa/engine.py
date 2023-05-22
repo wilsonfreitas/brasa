@@ -201,8 +201,8 @@ class MarketDataReader:
     def set_fields(self, fields: TemplateFields) -> None:
         self.fields = fields
 
-    def read(self, meta: CacheMetadata, **kwargs) -> pd.DataFrame:
-        df = self.read_function(self, meta, **kwargs)
+    def read(self, meta: CacheMetadata) -> pd.DataFrame:
+        df = self.read_function(meta)
         return df
 
 
@@ -352,7 +352,7 @@ class CacheManager(Singleton):
 
     def process_with_checks(self, meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
         if self.has_meta(meta):
-            meta = self.load_meta(meta)
+            self.load_meta(meta)
             if len(meta.processed_files) > 0:
                 dfs = {key:pd.read_parquet(self.cache_path(fname)) for key,fname in meta.processed_files.items()}
                 if len(dfs) == 1:
@@ -431,10 +431,10 @@ def download_marketdata(meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
 
 
 def get_fname_part(meta: CacheMetadata, df: pd.DataFrame) -> str:
-    if "refdate" in df:
-        fname_part = df["refdate"].iloc[0].isoformat()[:10]
-    elif "refdate" in meta.download_args:
+    if "refdate" in meta.download_args:
         fname_part = meta.download_args["refdate"].isoformat()[:10]
+    elif "refdate" in df:
+        fname_part = df["refdate"].iloc[0].isoformat()[:10]
     else:
         fname_part = meta.download_checksum
     return fname_part
@@ -468,6 +468,3 @@ def get_marketdata(template: str, **kwargs) -> pd.DataFrame | dict[str, pd.DataF
     meta.extra_key = template.downloader.extra_key
     cache = CacheManager()
     return cache.process_with_checks(meta)
-
-
-

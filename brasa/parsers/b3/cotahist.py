@@ -1,4 +1,4 @@
-from ...readers.fwf import FWFFile, FWFRow, Field, DateField, NumericField
+from ..fwf import FWFFile, FWFRow, Field, DateField, NumericField
 
 
 class COTAHIST_header(FWFRow):
@@ -22,32 +22,32 @@ class COTAHIST_trailer(FWFRow):
 
 class COTAHIST_histdata(FWFRow):
     _pattern = "^01"
-    tipo_registro = Field(2)
-    data_referencia = DateField(8, "%Y%m%d")
-    cod_bdi = Field(2)
-    cod_negociacao = Field(12)
-    tipo_mercado = Field(3)
-    nome_empresa = Field(12)
-    especificacao = Field(10)
-    num_dias_mercado_termo = Field(3)
-    cod_moeda = Field(4)
-    preco_abertura = NumericField(13, dec=2)
-    preco_max = NumericField(13, dec=2)
-    preco_min = NumericField(13, dec=2)
-    preco_med = NumericField(13, dec=2)
-    preco_ult = NumericField(13, dec=2)
-    preco_melhor_oferta_compra = NumericField(13, dec=2)
-    preco_melhor_oferta_venda = NumericField(13, dec=2)
-    qtd_negocios = NumericField(5)
-    qtd_titulos_negociados = NumericField(18)
-    volume_titulos_negociados = NumericField(18, dec=2)
-    preco_exercicio = NumericField(13, dec=2)
-    indicador_correcao_preco_exercicio = Field(1)
-    data_vencimento = DateField(8, "%Y%m%d")
-    fator_cot = NumericField(7, dec=2)
-    preco_exercicio_pontos = NumericField(13, dec=6)
-    cod_isin = Field(12)
-    num_dist = Field(3)
+    regtype = Field(2)
+    refdate = DateField(8, "%Y%m%d")
+    bdi_code = NumericField(2)
+    symbol = Field(12)
+    instrument_market = NumericField(3)
+    corporation_name = Field(12)
+    specification_code = Field(10)
+    days_to_settlement = NumericField(3)
+    trading_currency = Field(4)
+    open = NumericField(13, dec=2)
+    high = NumericField(13, dec=2)
+    low = NumericField(13, dec=2)
+    average = NumericField(13, dec=2)
+    close = NumericField(13, dec=2)
+    best_bid = NumericField(13, dec=2)
+    best_ask = NumericField(13, dec=2)
+    trade_quantity = NumericField(5)
+    traded_contracts = NumericField(18)
+    volume = NumericField(18, dec=2)
+    strike_price = NumericField(13, dec=2)
+    strike_price_adjustment_indicator = Field(1)
+    maturity_date = DateField(8, "%Y%m%d")
+    allocation_lot_size = NumericField(7, dec=2)
+    strike_price_in_points = NumericField(13, dec=6)
+    isin = Field(12)
+    distribution_id = NumericField(3)
 
 
 class COTAHIST_file(FWFFile):

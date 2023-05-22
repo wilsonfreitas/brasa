@@ -1,3 +1,4 @@
+import pandas as pd
 from ..util import Parser
 from lxml import etree
 
@@ -10,6 +11,7 @@ class BVBG086Parser(Parser):
         self.instruments = []
         self.missing = set()
         self.parse()
+        self.__instrs_table = pd.DataFrame(self.instruments)
 
     def parse(self):
         tree = self._open(self.fname, etree.parse)
@@ -76,4 +78,4 @@ class BVBG086Parser(Parser):
 
     @property
     def data(self):
-        return self.instruments
+        return self.__instrs_table
