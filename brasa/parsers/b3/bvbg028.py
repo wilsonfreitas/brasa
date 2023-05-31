@@ -7,7 +7,7 @@ from ..util import Parser
 class BVBG028Parser(Parser):
     ATTRS = {
         "header": {
-            "trade_date": "RptParams/RptDtAndTm/Dt",
+            "refdate": "RptParams/RptDtAndTm/Dt",
             "security_id": "FinInstrmId/OthrId/Id",
             "security_proprietary": "FinInstrmId/OthrId/Tp/Prtry",
             "security_market": "FinInstrmId/OthrId/PlcOfListg/MktIdrCd",
