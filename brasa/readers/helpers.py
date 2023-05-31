@@ -46,7 +46,7 @@ def read_b3_bvbg028(meta: CacheMetadata) -> dict[str, pd.DataFrame]:
     fname = paths[-1]
     man = CacheManager()
     parser = BVBG028Parser(man.cache_path(fname))
-    # dict_keys(['OptnOnEqtsInf', 'EqtyInf', 'FutrCtrctsInf'])
+
     df_equities = parser.data["EqtyInf"]
     df_equities["creation_date"] = pd.to_datetime(df_equities["creation_date"])
     df_equities["refdate"] = pd.to_datetime(df_equities["refdate"])
@@ -59,10 +59,6 @@ def read_b3_bvbg028(meta: CacheMetadata) -> dict[str, pd.DataFrame]:
     df_equities["payment_type"] = pd.to_numeric(df_equities["payment_type"])
     df_equities["allocation_lot_size"] = pd.to_numeric(df_equities["allocation_lot_size"])
     df_equities["price_factor"] = pd.to_numeric(df_equities["price_factor"])
-    with SuppressUserWarnings():
-        df_equities["trading_start_date"] = pd.to_datetime(df_equities["trading_start_date"], errors="coerce")
-        df_equities["trading_end_date"] = pd.to_datetime(df_equities["trading_end_date"], errors="coerce")
-        df_equities["corporate_action_start_date"] = pd.to_datetime(df_equities["corporate_action_start_date"], errors="coerce")
     df_equities["ex_distribution_number"] = pd.to_numeric(df_equities["ex_distribution_number"])
     df_equities["custody_treatment_type"] = pd.to_numeric(df_equities["custody_treatment_type"])
     df_equities["market_capitalisation"] = pd.to_numeric(df_equities["market_capitalisation"])
@@ -70,6 +66,58 @@ def read_b3_bvbg028(meta: CacheMetadata) -> dict[str, pd.DataFrame]:
     df_equities["open"] = pd.to_numeric(df_equities["open"])
     df_equities["days_to_settlement"] = pd.to_numeric(df_equities["days_to_settlement"])
     df_equities["right_issue_price"] = pd.to_numeric(df_equities["right_issue_price"])
+    with SuppressUserWarnings():
+        df_equities["trading_start_date"] = pd.to_datetime(df_equities["trading_start_date"], errors="coerce")
+        df_equities["trading_end_date"] = pd.to_datetime(df_equities["trading_end_date"], errors="coerce")
+        df_equities["corporate_action_start_date"] = pd.to_datetime(df_equities["corporate_action_start_date"], errors="coerce")
+
+    df_futures = parser.data["FutrCtrctsInf"]
+    df_futures["creation_date"] = pd.to_datetime(df_futures["creation_date"])
+    df_futures["refdate"] = pd.to_datetime(df_futures["refdate"])
+    df_futures["security_id"] = pd.to_numeric(df_futures["security_id"])
+    df_futures["security_proprietary"] = pd.to_numeric(df_futures["security_proprietary"])
+    df_futures["instrument_market"] = pd.to_numeric(df_futures["instrument_market"])
+    df_futures["instrument_segment"] = pd.to_numeric(df_futures["instrument_segment"])
+    df_futures["security_category"] = pd.to_numeric(df_futures["security_category"])
+    df_futures["value_type_code"] = pd.to_numeric(df_futures["value_type_code"])
+    df_futures["delivery_type"] = pd.to_numeric(df_futures["delivery_type"])
+    df_futures["payment_type"] = pd.to_numeric(df_futures["payment_type"])
+    df_futures["contract_multiplier"] = pd.to_numeric(df_futures["contract_multiplier"])
+    df_futures["asset_settlement_indicator"] = pd.to_numeric(df_futures["asset_settlement_indicator"])
+    df_futures["allocation_lot_size"] = pd.to_numeric(df_futures["allocation_lot_size"])
+    df_futures["underlying_security_id"] = pd.to_numeric(df_futures["underlying_security_id"])
+    df_futures["underlying_security_proprietary"] = pd.to_numeric(df_futures["underlying_security_proprietary"])
+    df_futures["withdrawal_days"] = pd.to_numeric(df_futures["withdrawal_days"])
+    df_futures["working_days"] = pd.to_numeric(df_futures["working_days"])
+    df_futures["calendar_days"] = pd.to_numeric(df_futures["calendar_days"])
+    with SuppressUserWarnings():
+        df_futures["expiration_date"] = pd.to_datetime(df_futures["expiration_date"], errors="coerce")
+        df_futures["trading_start_date"] = pd.to_datetime(df_futures["trading_start_date"], errors="coerce")
+        df_futures["trading_end_date"] = pd.to_datetime(df_futures["trading_end_date"], errors="coerce")
+
+    df_eq_options = parser.data["OptnOnEqtsInf"]
+    df_eq_options["creation_date"] = pd.to_datetime(df_eq_options["creation_date"])
+    df_eq_options["refdate"] = pd.to_datetime(df_eq_options["refdate"])
+    df_eq_options["security_id"] = pd.to_numeric(df_eq_options["security_id"])
+    df_eq_options["security_proprietary"] = pd.to_numeric(df_eq_options["security_proprietary"])
+    df_eq_options["instrument_market"] = pd.to_numeric(df_eq_options["instrument_market"])
+    df_eq_options["instrument_segment"] = pd.to_numeric(df_eq_options["instrument_segment"])
+    df_eq_options["security_category"] = pd.to_numeric(df_eq_options["security_category"])
+    df_eq_options["exercise_price"] = pd.to_numeric(df_eq_options["exercise_price"])
+    df_eq_options["underlying_security_id"] = pd.to_numeric(df_eq_options["underlying_security_id"])
+    df_eq_options["underlying_security_proprietary"] = pd.to_numeric(df_eq_options["underlying_security_proprietary"])
+    df_eq_options["payment_type"] = pd.to_numeric(df_eq_options["payment_type"])
+    df_eq_options["allocation_lot_size"] = pd.to_numeric(df_eq_options["allocation_lot_size"])
+    df_eq_options["price_factor"] = pd.to_numeric(df_eq_options["price_factor"])
+    df_eq_options["days_to_settlement"] = pd.to_numeric(df_eq_options["days_to_settlement"])
+    df_eq_options["delivery_type"] = pd.to_numeric(df_eq_options["delivery_type"])
+    df_eq_options["automatic_exercise_indicator"] = df_eq_options["automatic_exercise_indicator"].str.lower() == "true"
+    df_eq_options["protection_flag"] = df_eq_options["protection_flag"].str.lower() == "true"
+    df_eq_options["premium_upfront_indicator"] = df_eq_options["premium_upfront_indicator"].str.lower() == "true"
+    with SuppressUserWarnings():
+        df_eq_options["expiration_date"] = pd.to_datetime(df_eq_options["expiration_date"], errors="coerce")
+        df_eq_options["trading_start_date"] = pd.to_datetime(df_eq_options["trading_start_date"], errors="coerce")
+        df_eq_options["trading_end_date"] = pd.to_datetime(df_eq_options["trading_end_date"], errors="coerce")
 
     return parser.data
 
