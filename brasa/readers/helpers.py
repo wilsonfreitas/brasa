@@ -3,7 +3,7 @@ from typing import IO
 
 import pandas as pd
 
-from brasa.engine import CacheManager, CacheMetadata, MarketDataReader
+from brasa.engine import CacheManager, CacheMetadata, MarketDataReader, retrieve_template
 from brasa.parsers.b3.bvbg028 import BVBG028Parser
 from brasa.parsers.b3.bvbg086 import BVBG086Parser
 from brasa.parsers.b3.cdi import CDIParser
@@ -22,15 +22,24 @@ def read_json(reader: MarketDataReader, fname: IO | str) -> pd.DataFrame:
     return pd.DataFrame(data, index=[0], columns=reader.fields.names)
 
 
-def read_csv(reader: MarketDataReader, fname: IO | str) -> pd.DataFrame:
-    converters = {n:str for n in reader.fields.names}
-    return pd.read_csv(fname,
-                       encoding=reader.encoding,
-                       header=None,
-                       skiprows=reader.skip,
-                       sep=reader.separator,
-                       converters=converters,
-                       names=reader.fields.names,)
+def read_b3_lending_trades(meta: CacheMetadata) -> pd.DataFrame:
+    fname = meta.downloaded_files[0]
+    man = CacheManager()
+    fname = man.cache_path(fname)
+    template = retrieve_template(meta.template)
+    reader = template.reader
+    # converters = {n:str for n in reader.fields.names}
+    df = pd.read_csv(fname,
+                     encoding=reader.encoding,
+                     header=None,
+                     skiprows=reader.skip,
+                     sep=reader.separator,
+                     #    converters=converters,
+                     names=reader.fields.names,)
+    df["interest_rate_term_trade"] = pd.to_numeric(df["interest_rate_term_trade"].str.replace(",", "."), errors="coerce")
+    df["trade_date"] = pd.to_datetime(df["trade_date"], errors="coerce")
+    df["refdate"] = pd.to_datetime(df["refdate"], errors="coerce")
+    return df
 
 
 def read_b3_cotahist(meta: CacheMetadata) -> pd.DataFrame:
