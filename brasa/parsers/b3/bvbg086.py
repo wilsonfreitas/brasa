@@ -32,7 +32,7 @@ class BVBG086Parser(Parser):
 
     def parse_price_report_node(self, node):
         attrs = {
-            "trade_date": "TradDt/Dt",
+            "refdate": "TradDt/Dt",
             "symbol": "SctyId/TckrSymb",
             "security_id": "FinInstrmId/OthrId/Id",  # SecurityId
             "security_proprietary": "FinInstrmId/OthrId/Tp/Prtry",
@@ -43,11 +43,11 @@ class BVBG086Parser(Parser):
             "traded_contracts": "FinInstrmAttrbts/FinInstrmQty",
             "best_ask_price": "FinInstrmAttrbts/BestAskPric",
             "best_bid_price": "FinInstrmAttrbts/BestBidPric",
-            "first_price": "FinInstrmAttrbts/FrstPric",
-            "min_price": "FinInstrmAttrbts/MinPric",
-            "max_price": "FinInstrmAttrbts/MaxPric",
-            "average_price": "FinInstrmAttrbts/TradAvrgPric",
-            "last_price": "FinInstrmAttrbts/LastPric",
+            "open": "FinInstrmAttrbts/FrstPric",
+            "low": "FinInstrmAttrbts/MinPric",
+            "high": "FinInstrmAttrbts/MaxPric",
+            "average": "FinInstrmAttrbts/TradAvrgPric",
+            "close": "FinInstrmAttrbts/LastPric",
             # Negócios na sessão regular
             "regular_transactions_quantity": "FinInstrmAttrbts/RglrTxsQty",
             # Contratos na sessão regular
