@@ -22,6 +22,23 @@ def read_json(reader: MarketDataReader, fname: IO | str) -> pd.DataFrame:
     return pd.DataFrame(data, index=[0], columns=reader.fields.names)
 
 
+def read_b3_otc_trade_information(meta: CacheMetadata) -> pd.DataFrame:
+    fname = meta.downloaded_files[0]
+    man = CacheManager()
+    fname = man.cache_path(fname)
+    template = retrieve_template(meta.template)
+    reader = template.reader
+    # converters = {n:str for n in reader.fields.names}
+    df = pd.read_csv(fname,
+                     encoding=reader.encoding,
+                     header=None,
+                     skiprows=reader.skip,
+                     sep=reader.separator,
+                     #    converters=converters,
+                     names=reader.fields.names,)
+    return df
+
+
 def read_b3_lending_trades(meta: CacheMetadata) -> pd.DataFrame:
     fname = meta.downloaded_files[0]
     man = CacheManager()

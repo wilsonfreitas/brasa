@@ -2,6 +2,7 @@
 from .helpers import (
     read_json,
     read_b3_lending_trades,
+    read_b3_otc_trade_information,
     read_b3_cotahist,
     read_b3_bvbg086,
     read_b3_bvbg028,

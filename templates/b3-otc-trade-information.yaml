@@ -10,57 +10,70 @@ downloader:
   args:
     refdate: ~
 reader:
-  function: brasa.readers.read_csv
+  function: brasa.readers.read_b3_otc_trade_information
+  encoding: latin1
   locale: pt
   separator: ";"
   skip: 2
   comment: ""
 fields:
-  - name: InstrumentoFinanceiro
+  - name: instrument_type
+    description: Tipo Instrumento Financeiro
+    handler:
+      type: character
+  - name: issuer
     description: Instrumento Financeiro
     handler:
       type: character
-  - name: Emissor
-    description: Emissor
-    handler:
-      type: character
-  - name: CodigoIF
+  - name: symbol
     description: Código IF
     handler:
       type: character
-  - name: QuantidadeNegociada
+  - name: traded_quantity
     description: Quantidade Negociada
     handler:
       type: numeric
       format: pt-br
-  - name: PrecoNegocio
+  - name: traded_price
     description: Preco Negócio
     handler:
       type: numeric
       format: pt-br
-  - name: Volume
+  - name: volume
     description: Volume Financeiro R$
     handler:
       type: numeric
       format: pt-br
-  - name: TaxaNegocio
+  - name: traded_interest_rate
     description: Taxa Negócio
     handler:
       type: numeric
       format: pt-br
-  - name: OrigemNegocio
+  - name: trade_source
     description: Origem Negócio
-  - name: HorarioNegocio
+  - name: trade_time
     description: Horario Negócio
     handler:
       type: POSIXct
       format: "%H:%M:%S"
-  - name: DataNegocio
+  - name: trade_date
     description: Data do negócio
     handler:
       type: Date
       format: "%d/%m/%Y"
-  - name: CodNegocio
+  - name: trade_id
     description: Código Identificador do Negócio
+    handler:
+      type: character
+  - name: isin
+    description: ISIN
+    handler:
+      type: character
+  - name: settlement_date
+    description: ISIN
+    handler:
+      type: character
+  - name: trade_status
+    description: ISIN
     handler:
       type: character
