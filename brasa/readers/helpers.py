@@ -8,7 +8,9 @@ from brasa.parsers.b3.bvbg028 import BVBG028Parser
 from brasa.parsers.b3.bvbg086 import BVBG086Parser
 from brasa.parsers.b3.cdi import CDIParser
 from brasa.parsers.b3.cotahist import COTAHISTParser
-from brasa.parsers.b3.futures_settlement_prices import future_settlement_prices_parser
+from brasa.parsers.b3.futures_settlement_prices import \
+    future_settlement_prices_parser
+from brasa.util import SuppressUserWarnings
 
 
 def read_json(reader: MarketDataReader, fname: IO | str) -> pd.DataFrame:
@@ -44,6 +46,31 @@ def read_b3_bvbg028(meta: CacheMetadata) -> dict[str, pd.DataFrame]:
     fname = paths[-1]
     man = CacheManager()
     parser = BVBG028Parser(man.cache_path(fname))
+    # dict_keys(['OptnOnEqtsInf', 'EqtyInf', 'FutrCtrctsInf'])
+    df_equities = parser.data["EqtyInf"]
+    df_equities["creation_date"] = pd.to_datetime(df_equities["creation_date"])
+    df_equities["refdate"] = pd.to_datetime(df_equities["refdate"])
+    df_equities["security_id"] = pd.to_numeric(df_equities["security_id"])
+    df_equities["security_proprietary"] = pd.to_numeric(df_equities["security_proprietary"])
+    df_equities["instrument_market"] = pd.to_numeric(df_equities["instrument_market"])
+    df_equities["instrument_segment"] = pd.to_numeric(df_equities["instrument_segment"])
+    df_equities["security_category"] = pd.to_numeric(df_equities["security_category"])
+    df_equities["distribution_id"] = pd.to_numeric(df_equities["distribution_id"])
+    df_equities["payment_type"] = pd.to_numeric(df_equities["payment_type"])
+    df_equities["allocation_lot_size"] = pd.to_numeric(df_equities["allocation_lot_size"])
+    df_equities["price_factor"] = pd.to_numeric(df_equities["price_factor"])
+    with SuppressUserWarnings():
+        df_equities["trading_start_date"] = pd.to_datetime(df_equities["trading_start_date"], errors="coerce")
+        df_equities["trading_end_date"] = pd.to_datetime(df_equities["trading_end_date"], errors="coerce")
+        df_equities["corporate_action_start_date"] = pd.to_datetime(df_equities["corporate_action_start_date"], errors="coerce")
+    df_equities["ex_distribution_number"] = pd.to_numeric(df_equities["ex_distribution_number"])
+    df_equities["custody_treatment_type"] = pd.to_numeric(df_equities["custody_treatment_type"])
+    df_equities["market_capitalisation"] = pd.to_numeric(df_equities["market_capitalisation"])
+    df_equities["close"] = pd.to_numeric(df_equities["close"])
+    df_equities["open"] = pd.to_numeric(df_equities["open"])
+    df_equities["days_to_settlement"] = pd.to_numeric(df_equities["days_to_settlement"])
+    df_equities["right_issue_price"] = pd.to_numeric(df_equities["right_issue_price"])
+
     return parser.data
 
 
