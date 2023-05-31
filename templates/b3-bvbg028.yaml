@@ -14,7 +14,7 @@ reader:
   function: brasa.readers.read_b3_bvbg028
   multi:
     EqtyInf: equities
-    OptnOnEqtsInf: option_on_equities
+    OptnOnEqtsInf: options_on_equities
     FutrCtrctsInf: future_contracts
 fields:
   - name: ~

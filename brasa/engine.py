@@ -325,6 +325,7 @@ class CacheManager(Singleton):
         meta.from_dict(_meta)
 
     def save_meta(self, meta: CacheMetadata) -> None:
+        os.makedirs(self.cache_path(self.meta_folder), exist_ok=True)
         with open(self.meta_file_path(meta), "w") as fp:
             yaml.dump(meta.to_dict(), fp, indent=4)
 

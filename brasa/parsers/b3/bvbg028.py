@@ -7,7 +7,7 @@ from ..util import Parser
 class BVBG028Parser(Parser):
     ATTRS = {
         "header": {
-            "trade_date": "RptParams/RptDtAndTm/Dt",
+            "refdate": "RptParams/RptDtAndTm/Dt",
             "security_id": "FinInstrmId/OthrId/Id",
             "security_proprietary": "FinInstrmId/OthrId/Tp/Prtry",
             "security_market": "FinInstrmId/OthrId/PlcOfListg/MktIdrCd",
@@ -35,8 +35,8 @@ class BVBG028Parser(Parser):
             "custody_treatment_type": "InstrmInf/EqtyInf/CtdyTrtmntTp",
             "trading_currency": "InstrmInf/EqtyInf/TradgCcy",
             "market_capitalisation": "InstrmInf/EqtyInf/MktCptlstn",
-            "last_price": "InstrmInf/EqtyInf/LastPric",
-            "first_price": "InstrmInf/EqtyInf/FrstPric",
+            "close": "InstrmInf/EqtyInf/LastPric",
+            "open": "InstrmInf/EqtyInf/FrstPric",
             "governance_indicator": "InstrmInf/EqtyInf/GovnInd",
             "days_to_settlement": "InstrmInf/EqtyInf/DaysToSttlm",
             "right_issue_price": "InstrmInf/EqtyInf/RghtsIssePric",
