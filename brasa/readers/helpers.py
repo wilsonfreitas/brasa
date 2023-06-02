@@ -36,6 +36,13 @@ def read_b3_otc_trade_information(meta: CacheMetadata) -> pd.DataFrame:
                      sep=reader.separator,
                      #    converters=converters,
                      names=reader.fields.names,)
+    df["traded_quantity"] = pd.to_numeric(df["traded_quantity"], errors="coerce")
+    df["traded_price"] = pd.to_numeric(df["traded_price"].str.replace(",", "."), errors="coerce")
+    df["volume"] = pd.to_numeric(df["volume"].str.replace(",", "."), errors="coerce")
+    df["traded_interest_rate"] = pd.to_numeric(df["traded_interest_rate"].str.replace(",", "."), errors="coerce")
+    df["trade_date"] = pd.to_datetime(df["trade_date"], errors="coerce", dayfirst=True)
+    df["settlement_date"] = pd.to_datetime(df["settlement_date"], errors="coerce", dayfirst=True)
+    
     return df
 
 
