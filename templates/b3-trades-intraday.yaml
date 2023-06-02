@@ -15,14 +15,14 @@ reader:
   skip: 1
   comment: ""
 fields:
-  - name: RptDt
+  - name: refdate
     description: Data de referência da informação
     handler:
       type: Date
       format: "%Y-%m-%d"
-  - name: TckrSymb
+  - name: symbol
     description: Código que identifica um instrumento
-  - name: UpdActn
+  - name: update_action
     description: Informa a ação de atualização que está ocorrendo
     handler:
       type: factor
@@ -32,26 +32,26 @@ fields:
       labels:
         - new
         - delete
-  - name: GrssTradAmt
+  - name: traded_price
     description: Preço do negócio
     handler:
       type: numeric
       format: pt-br
-  - name: TradQty
+  - name: traded_quantity
     description: Quantidade de negócios no dia
     handler:
       type: numeric
       format: pt-br
-  - name: NtryTm
+  - name: trade_time
     description: Hora (o instante) do negócio fechado
     handler:
       type: POSIXct
       format: "%H%M%S%f"
-  - name: TradId
+  - name: trade_id
     description: Número do negócio
     handler:
       type: numeric
-  - name: TradgSsnId
+  - name: trade_session_id
     description: |
       Este campo informa se o negócio foi feito no horário regular do pregão
       ou after market
@@ -64,16 +64,16 @@ fields:
       labels:
         - regular
         - after
-  - name: TradDt
+  - name: trade_date
     description: Data do pregão
     handler:
       type: Date
       format: "%Y-%m-%d"
-  - name: CodigoParticipanteComprador
+  - name: buyer_code
     description: Código do Participante Comprador
     handler:
       type: numeric
-  - name: CodigoParticipanteVendedor
+  - name: seller_code
     description: Código do Participante Vendedor
     handler:
       type: numeric
