@@ -9,14 +9,14 @@ downloader:
   args:
     refdate: ~
 reader:
-  function: brasa.readers.read_csv
+  function: brasa.readers.read_b3_trades_intraday
   locale: en
   separator: ";"
   skip: 1
   comment: ""
 fields:
   - name: refdate
-    description: Data de referência da informação
+    description: Data de referência
     handler:
       type: Date
       format: "%Y-%m-%d"
@@ -38,7 +38,7 @@ fields:
       type: numeric
       format: pt-br
   - name: traded_quantity
-    description: Quantidade de negócios no dia
+    description: Quantidade negociada
     handler:
       type: numeric
       format: pt-br

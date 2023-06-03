@@ -28,15 +28,20 @@ def read_b3_trades_intraday(meta: CacheMetadata) -> pd.DataFrame:
     fname = man.cache_path(fname)
     template = retrieve_template(meta.template)
     reader = template.reader
-    # converters = {n:str for n in reader.fields.names}
+    converters = {"trade_time": str,}
     df = pd.read_csv(fname,
                      encoding=reader.encoding,
                      header=None,
                      skiprows=reader.skip,
                      sep=reader.separator,
-                     #    converters=converters,
+                     converters=converters,
                      names=reader.fields.names,)
     
+    df["traded_quantity"] = pd.to_numeric(df["traded_quantity"], errors="coerce")
+    df["traded_price"] = pd.to_numeric(df["traded_price"].str.replace(",", "."), errors="coerce")
+    df["trade_date"] = pd.to_datetime(df["trade_date"])
+    df["refdate"] = pd.to_datetime(df["refdate"])
+
     return df
 
 
@@ -46,13 +51,11 @@ def read_b3_otc_trade_information(meta: CacheMetadata) -> pd.DataFrame:
     fname = man.cache_path(fname)
     template = retrieve_template(meta.template)
     reader = template.reader
-    # converters = {n:str for n in reader.fields.names}
     df = pd.read_csv(fname,
                      encoding=reader.encoding,
                      header=None,
                      skiprows=reader.skip,
                      sep=reader.separator,
-                     #    converters=converters,
                      names=reader.fields.names,)
     df["traded_quantity"] = pd.to_numeric(df["traded_quantity"], errors="coerce")
     df["traded_price"] = pd.to_numeric(df["traded_price"].str.replace(",", "."), errors="coerce")
@@ -60,6 +63,7 @@ def read_b3_otc_trade_information(meta: CacheMetadata) -> pd.DataFrame:
     df["traded_interest_rate"] = pd.to_numeric(df["traded_interest_rate"].str.replace(",", "."), errors="coerce")
     df["trade_date"] = pd.to_datetime(df["trade_date"], errors="coerce", dayfirst=True)
     df["settlement_date"] = pd.to_datetime(df["settlement_date"], errors="coerce", dayfirst=True)
+    df["refdate"] = df["trade_date"]
     
     return df
 
