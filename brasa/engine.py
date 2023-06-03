@@ -351,10 +351,10 @@ class CacheManager(Singleton):
         df = pd.read_parquet(self.cache_path(self.parquet_file_path(template, fname_part)))
         return df
 
-    def process_with_checks(self, meta: CacheMetadata, reprocess: bool=False) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
-        if self.has_meta(meta):
+    def process_with_checks(self, meta: CacheMetadata, reprocess: str | None=None) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
+        if self.has_meta(meta) and (reprocess is None or reprocess == "read"):
             self.load_meta(meta)
-            if len(meta.processed_files) > 0 and not reprocess:
+            if len(meta.processed_files) > 0 and reprocess != "read":
                 dfs = {key:pd.read_parquet(self.cache_path(fname)) for key,fname in meta.processed_files.items()}
                 if len(dfs) == 1:
                     return dfs["data"]
@@ -364,7 +364,7 @@ class CacheManager(Singleton):
                 df = read_marketdata(meta)
                 self.save_meta(meta)
                 return df
-        else:
+        else: # reprocess == "download" or reprocess == "all"
             download_marketdata(meta, **meta.download_args)
             self.save_meta(meta)
             dfs = read_marketdata(meta)
@@ -462,7 +462,7 @@ def read_marketdata(meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFram
     return df
 
 
-def get_marketdata(template: str, reprocess: bool=False, **kwargs) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
+def get_marketdata(template: str, reprocess: str | None=None, **kwargs) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
     template = retrieve_template(template)
     meta = CacheMetadata(template.id)
     meta.download_args = kwargs
