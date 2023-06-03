@@ -351,10 +351,10 @@ class CacheManager(Singleton):
         df = pd.read_parquet(self.cache_path(self.parquet_file_path(template, fname_part)))
         return df
 
-    def process_with_checks(self, meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
+    def process_with_checks(self, meta: CacheMetadata, reprocess: bool=False) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
         if self.has_meta(meta):
             self.load_meta(meta)
-            if len(meta.processed_files) > 0:
+            if len(meta.processed_files) > 0 and not reprocess:
                 dfs = {key:pd.read_parquet(self.cache_path(fname)) for key,fname in meta.processed_files.items()}
                 if len(dfs) == 1:
                     return dfs["data"]
@@ -462,10 +462,10 @@ def read_marketdata(meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFram
     return df
 
 
-def get_marketdata(template: str, **kwargs) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
+def get_marketdata(template: str, reprocess: bool=False, **kwargs) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
     template = retrieve_template(template)
     meta = CacheMetadata(template.id)
     meta.download_args = kwargs
     meta.extra_key = template.downloader.extra_key
     cache = CacheManager()
-    return cache.process_with_checks(meta)
+    return cache.process_with_checks(meta, reprocess)
