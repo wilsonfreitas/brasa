@@ -1,4 +1,5 @@
 
+import abc
 import base64
 from datetime import datetime
 import os
@@ -20,7 +21,7 @@ def load_function_by_name(func_name: str) -> Callable:
     return func
 
 
-class Singleton(object):
+class Singleton(abc.ABC):
     def __new__(cls, *args, **kwds):
         it = cls.__dict__.get("__it__")
         if it is not None:
@@ -30,13 +31,17 @@ class Singleton(object):
         it.init(*args, **kwds)
         return it
 
+    @abc.abstractmethod
+    def init(self, *args, **kwds):
+        ...
+
 
 class TemplatePart:
     pass
 
 
 class NumericParser(regexparser.NumberParser):
-    def parseText(self, text: str) -> str:
+    def parseText(self, text: str) -> str | None:
         return None
 
 
@@ -194,6 +199,7 @@ class MarketDataReader:
         self.multi = reader.get("multi")
         self.parts = None
         self.fields = None
+        self.output_filename_format = reader.get("output-filename-format", "%Y-%m-%d")
 
     def set_parts(self, parts: list) -> None:
         self.parts = parts
@@ -208,6 +214,7 @@ class MarketDataReader:
 
 class MarketDataDownloader:
     def __init__(self, downloader: dict) -> None:
+        self.url = None
         for n in downloader.keys():
             self.__dict__[n] = downloader[n]
         self.args = downloader.get("args", {})
@@ -248,6 +255,7 @@ class MarketDataTemplate:
         self.has_reader = False
         self.has_downloader = False
         self.has_parts = False
+        self.id = ""
         self.template = self.load_template()
 
     def load_template(self) -> dict:
@@ -276,7 +284,7 @@ class MarketDataTemplate:
 
 class CacheManager(Singleton):
     def init(self) -> None:
-        self._cache_folder = os.path.join(os.getcwd(), ".brasa-cache")
+        self._cache_folder = os.environ.get("BRASA_DATA_PATH", os.path.join(os.getcwd(), ".brasa-cache"))
         os.makedirs(self._cache_folder, exist_ok=True)
         os.makedirs(self.cache_path(self.meta_folder), exist_ok=True)
 
@@ -341,16 +349,12 @@ class CacheManager(Singleton):
             os.remove(meta_file_path)
 
     def parquet_file_name(self, fname_part: str) -> str:
-        if re.match(r"^\d{4}-\d{2}-\d{2}$", fname_part):
+        if re.fullmatch(r"\d{4}(-\d{2}(-\d{2})?)?", fname_part):
             fname = f"{fname_part}.parquet"
         else:
             fname = f"part-{fname_part}.parquet"
         return fname
     
-    def load_parquet(self, template: MarketDataTemplate, fname_part: str) -> pd.DataFrame:
-        df = pd.read_parquet(self.cache_path(self.parquet_file_path(template, fname_part)))
-        return df
-
     def process_with_checks(self, meta: CacheMetadata, reprocess: str | None=None) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
         if self.has_meta(meta) and (reprocess is None or reprocess == "read"):
             self.load_meta(meta)
@@ -432,10 +436,12 @@ def download_marketdata(meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
 
 
 def get_fname_part(meta: CacheMetadata, df: pd.DataFrame) -> str:
+    template = retrieve_template(meta.template)
+    fmt = template.reader.output_filename_format
     if "refdate" in meta.download_args:
-        fname_part = meta.download_args["refdate"].isoformat()[:10]
+        fname_part = meta.download_args["refdate"].strftime(fmt)
     elif "refdate" in df:
-        fname_part = df["refdate"].iloc[0].isoformat()[:10]
+        fname_part = df["refdate"].iloc[0].strftime(fmt)
     else:
         fname_part = meta.download_checksum
     return fname_part

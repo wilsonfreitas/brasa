@@ -12,6 +12,7 @@ downloader:
     refdate: ~
 reader:
   function: brasa.readers.read_b3_cotahist
+  output-filename-format: "%Y"
 parts:
   Header:
     pattern: ^00
