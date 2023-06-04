@@ -146,7 +146,7 @@ def read_b3_bvbg028(meta: CacheMetadata) -> dict[str, pd.DataFrame]:
     df_futures["working_days"] = pd.to_numeric(df_futures["working_days"])
     df_futures["calendar_days"] = pd.to_numeric(df_futures["calendar_days"])
     with SuppressUserWarnings():
-        df_futures["expiration_date"] = pd.to_datetime(df_futures["expiration_date"], errors="coerce")
+        df_futures["maturity_date"] = pd.to_datetime(df_futures["maturity_date"], errors="coerce")
         df_futures["trading_start_date"] = pd.to_datetime(df_futures["trading_start_date"], errors="coerce")
         df_futures["trading_end_date"] = pd.to_datetime(df_futures["trading_end_date"], errors="coerce")
 
@@ -170,7 +170,7 @@ def read_b3_bvbg028(meta: CacheMetadata) -> dict[str, pd.DataFrame]:
     df_eq_options["protection_flag"] = df_eq_options["protection_flag"].str.lower() == "true"
     df_eq_options["premium_upfront_indicator"] = df_eq_options["premium_upfront_indicator"].str.lower() == "true"
     with SuppressUserWarnings():
-        df_eq_options["expiration_date"] = pd.to_datetime(df_eq_options["expiration_date"], errors="coerce")
+        df_eq_options["maturity_date"] = pd.to_datetime(df_eq_options["maturity_date"], errors="coerce")
         df_eq_options["trading_start_date"] = pd.to_datetime(df_eq_options["trading_start_date"], errors="coerce")
         df_eq_options["trading_end_date"] = pd.to_datetime(df_eq_options["trading_end_date"], errors="coerce")
 

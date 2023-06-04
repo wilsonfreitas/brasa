@@ -47,7 +47,7 @@ class BVBG028Parser(Parser):
             "symbol": "InstrmInf/OptnOnEqtsInf/TckrSymb",
             "exercise_price": "InstrmInf/OptnOnEqtsInf/ExrcPric",
             "option_style": "InstrmInf/OptnOnEqtsInf/OptnStyle",
-            "expiration_date": "InstrmInf/OptnOnEqtsInf/XprtnDt",
+            "maturity_date": "InstrmInf/OptnOnEqtsInf/XprtnDt",
             "option_type": "InstrmInf/OptnOnEqtsInf/OptnTp",
             "underlying_security_id": "InstrmInf/OptnOnEqtsInf/UndrlygInstrmId/OthrId/Id",
             "underlying_security_proprietary": "InstrmInf/OptnOnEqtsInf/UndrlygInstrmId/OthrId/Tp/Prtry",
@@ -66,7 +66,7 @@ class BVBG028Parser(Parser):
         },
         "FutrCtrctsInf": {
             "security_category": "InstrmInf/FutrCtrctsInf/SctyCtgy",
-            "expiration_date": "InstrmInf/FutrCtrctsInf/XprtnDt",
+            "maturity_date": "InstrmInf/FutrCtrctsInf/XprtnDt",
             "symbol": "InstrmInf/FutrCtrctsInf/TckrSymb",
             "expiration_code": "InstrmInf/FutrCtrctsInf/XprtnCd",
             "trading_start_date": "InstrmInf/FutrCtrctsInf/TradgStartDt",
