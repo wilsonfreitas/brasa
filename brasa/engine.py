@@ -5,7 +5,7 @@ from datetime import datetime
 import os
 import re
 import shutil
-from typing import IO, Callable
+from typing import IO, Any, Callable
 
 import pandas as pd
 import yaml
@@ -105,8 +105,8 @@ class DateFieldHandler(FieldHandler):
     def __init__(self, handler: dict | None) -> None:
         super().__init__(handler)
 
-    def parse(self, value: str | pd.Series) -> datetime | pd.Series:
-        def func(value):
+    def parse(self, value: str | pd.Series) -> datetime | pd.Series | None:
+        def func(value) -> datetime | None:
             try:
                 return datetime.strptime(value, self.format)
             except ValueError:
@@ -163,7 +163,7 @@ class CacheMetadata:
         self.template = template
         self.timestamp = datetime.now()
         self.response = None
-        self.download_checksum = None
+        self.download_checksum = ""
         self.download_args = {}
         self.downloaded_files = []
         self.processed_files = {}
@@ -207,7 +207,7 @@ class MarketDataReader:
     def set_fields(self, fields: TemplateFields) -> None:
         self.fields = fields
 
-    def read(self, meta: CacheMetadata) -> pd.DataFrame:
+    def read(self, meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFrame]:
         df = self.read_function(meta)
         return df
 
@@ -215,6 +215,8 @@ class MarketDataReader:
 class MarketDataDownloader:
     def __init__(self, downloader: dict) -> None:
         self.url = None
+        self.format = ""
+        self.decoded_format = ""
         for n in downloader.keys():
             self.__dict__[n] = downloader[n]
         self.args = downloader.get("args", {})
@@ -224,13 +226,13 @@ class MarketDataDownloader:
         self._extra_key = downloader.get("extra-key", None)
 
     @property
-    def extra_key(self) -> str | None:
+    def extra_key(self) -> str:
         if self._extra_key == "date":
             return datetime.now().isoformat()[:10]
         elif self._extra_key == "datetime":
             return datetime.now().isoformat()
         else:
-            return None
+            return ""
 
     def download_args(self, **kwargs) -> dict:
         args = {}
@@ -243,7 +245,7 @@ class MarketDataDownloader:
                 raise ValueError(f"Missing argument {key}")
         return args
 
-    def download(self, **kwargs) -> tuple[IO | None, dict[str, str]]:
+    def download(self, **kwargs) -> tuple[IO | None, Any]:
         args = self.download_args(**kwargs)
         fp, response = self.download_function(self, **args)
         return fp, response
@@ -405,7 +407,7 @@ class CacheManager(Singleton):
         return dfs
 
 
-def retrieve_template(template_name) -> MarketDataTemplate | None:
+def retrieve_template(template_name) -> MarketDataTemplate:
     dir = os.path.join(os.path.dirname(__file__), "../templates")
     sel = [f for f in os.listdir(dir) if template_name in f]
     if len(sel) == 0:
