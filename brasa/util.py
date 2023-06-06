@@ -16,7 +16,7 @@ class SuppressUserWarnings:
         warnings.filterwarnings("default", category=UserWarning)
 
     
-def generate_checksum_for_template(template: str, args: dict, extra_key: str=None) -> str:
+def generate_checksum_for_template(template: str, args: dict, extra_key: str="") -> str:
     """Generates a hash for a template and its arguments.
 
     The hash is used to identify a template and its arguments.

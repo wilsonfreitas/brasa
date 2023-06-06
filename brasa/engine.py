@@ -10,6 +10,7 @@ from typing import IO, Callable
 import pandas as pd
 import yaml
 import regexparser
+import duckdb
 
 from brasa.util import generate_checksum_for_template, generate_checksum_from_file, unzip_recursive
 
@@ -61,12 +62,13 @@ class PtBRNumericParser(regexparser.TextParser):
         text = text.replace(',', '.')
         return eval(text)
 
-    def parseText(self, text: str) -> str:
+    def parseText(self, text: str) -> str | None:
         return None
 
 
 class FieldHandler:
     def __init__(self, handler: dict | None) -> None:
+        self.format = ""
         if handler is not None:
             self.__dict__.update(handler)
         self.is_empty = handler is None
@@ -93,9 +95,7 @@ class CharacterFieldHandler(FieldHandler):
 class NumericFieldHandler(FieldHandler):
     def __init__(self, handler: dict | None) -> None:
         super().__init__(handler)
-        if self.__dict__.get("format") is None:
-            self.parser = NumericParser()
-        elif self.format == "pt-br":
+        if self.format == "pt-br":
             self.parser = PtBRNumericParser()
         else:
             self.parser = NumericParser()
@@ -167,7 +167,7 @@ class CacheMetadata:
         self.download_args = {}
         self.downloaded_files = []
         self.processed_files = {}
-        self.extra_key = None
+        self.extra_key = ""
 
     def to_dict(self) -> dict:
         return {
@@ -283,10 +283,17 @@ class MarketDataTemplate:
 
 
 class CacheManager(Singleton):
+    _db_filename = "brasa.db"
+    _meta_folder = "meta"
+    _db_folder = "db"
+
     def init(self) -> None:
         self._cache_folder = os.environ.get("BRASA_DATA_PATH", os.path.join(os.getcwd(), ".brasa-cache"))
         os.makedirs(self._cache_folder, exist_ok=True)
-        os.makedirs(self.cache_path(self.meta_folder), exist_ok=True)
+        os.makedirs(self.cache_path(self._meta_folder), exist_ok=True)
+        os.makedirs(self.cache_path(self._db_folder), exist_ok=True)
+        if not os.path.exists(self.cache_path(self.db_filename)):
+            self.create_db()
 
     @property
     def cache_folder(self) -> str:
@@ -295,21 +302,36 @@ class CacheManager(Singleton):
     def cache_path(self, fname: str) -> str:
         return os.path.join(self.cache_folder, fname)
 
-    def db_folder(self, template: MarketDataTemplate) -> str | dict[str, str]:
-        if template.reader.multi is None:
-            folder = os.path.join("db", template.id)
+    def create_db(self) -> None:
+        db_conn = duckdb.connect(database=self.cache_path(self.db_filename), read_only=False)
+        db_conn.commit()
+        db_conn.close()
+
+    @property
+    def db_connection(self) -> duckdb.DuckDBPyConnection:
+        return duckdb.connect(database=self.cache_path(self.db_filename), read_only=False)
+
+    @property
+    def db_filename(self) -> str:
+        return os.path.join(self._db_folder, self._db_filename)
+
+    def db_folder(self, template: MarketDataTemplate | None=None) -> str | dict[str, str]:
+        if template is None:
+            folder = self._db_folder
+        elif template.reader.multi is None:
+            folder = os.path.join(self._db_folder, template.id)
             os.makedirs(self.cache_path(folder), exist_ok=True)
-            return folder
         else:
             db_folders = {}
             for name,val in template.reader.multi.items():
-                folder = os.path.join("db", f"{template.id}-{val}")
+                folder = os.path.join(self._db_folder, f"{template.id}-{val}")
                 os.makedirs(self.cache_path(folder), exist_ok=True)
                 db_folders[name] = folder
-            return db_folders
+            folder = db_folders
+        return folder
 
     def download_folder(self, template_id: str, checksum: str) -> str:
-        folder = os.path.join(template_id, "raw", checksum)
+        folder = os.path.join("raw", template_id, checksum)
         os.makedirs(self.cache_path(folder), exist_ok=True)
         return folder
 
@@ -319,7 +341,7 @@ class CacheManager(Singleton):
 
     @property
     def meta_folder(self) -> str:
-        return "meta"
+        return self._meta_folder
     
     def meta_file_path(self, meta: CacheMetadata) -> str:
         return os.path.join(self.cache_folder, os.path.join(self.meta_folder, f"{meta.id}.yaml"))
