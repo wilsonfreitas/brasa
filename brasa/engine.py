@@ -196,7 +196,7 @@ class MarketDataReader:
             self.__dict__[n] = reader[n]
         self.encoding = reader.get("encoding", "utf-8")
         self.read_function = load_function_by_name(reader["function"])
-        self.multi = reader.get("multi")
+        self.multi = reader.get("multi", {})
         self.parts = None
         self.fields = None
         self.output_filename_format = reader.get("output-filename-format", "%Y-%m-%d")
@@ -475,25 +475,26 @@ def read_marketdata(meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFram
     template = retrieve_template(meta.template)
     df = template.reader.read(meta)
     man = CacheManager()
-    if isinstance(df, dict):
-        db_folder = man.db_folder(template)
+    db_folder = man.db_folder(template)
+    if isinstance(df, dict) and isinstance(db_folder, dict):
         for name,dx in df.items():
             fname_part = get_fname_part(meta, dx)
             fname = os.path.join(db_folder[name], man.parquet_file_name(fname_part))
             meta.processed_files[template.reader.multi[name]] = fname
             dx.to_parquet(man.cache_path(fname))
         df = {template.reader.multi[k]:v for k,v in df.items()}
-    else:
-        db_folder = man.db_folder(template)
+    elif isinstance(df, pd.DataFrame) and isinstance(db_folder, str):
         fname_part = get_fname_part(meta, df)
         fname = os.path.join(db_folder, man.parquet_file_name(fname_part))
         meta.processed_files["data"] = fname
         df.to_parquet(man.cache_path(fname))
+    else:
+        df = None
     return df
 
 
-def get_marketdata(template: str, reprocess: str | None=None, **kwargs) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
-    template = retrieve_template(template)
+def get_marketdata(template_name: str, reprocess: str | None=None, **kwargs) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
+    template = retrieve_template(template_name)
     meta = CacheMetadata(template.id)
     meta.download_args = kwargs
     meta.extra_key = template.downloader.extra_key
