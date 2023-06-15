@@ -2,9 +2,11 @@
 import abc
 import base64
 from datetime import datetime
+import json
 import os
 import re
 import shutil
+import sqlite3
 from typing import IO, Any, Callable
 
 import pandas as pd
@@ -13,6 +15,20 @@ import regexparser
 import duckdb
 
 from brasa.util import generate_checksum_for_template, generate_checksum_from_file, unzip_recursive
+
+
+def json_convert_from_object(obj):
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError(f"Object of type '{type(obj).__name__}' is not JSON serializable")
+
+
+def json_convert_to_object(obj):
+    date_pattern = r"\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}Z)?"
+    for key, value in obj.items():
+        if isinstance(value, str) and re.match(date_pattern, value):
+            obj[key] = datetime.fromisoformat(value)
+    return obj
 
 
 def load_function_by_name(func_name: str) -> Callable:
@@ -286,6 +302,7 @@ class MarketDataTemplate:
 
 class CacheManager(Singleton):
     _db_filename = "brasa.db"
+    _meta_db_filename = "meta.db"
     _meta_folder = "meta"
     _db_folder = "db"
 
@@ -296,6 +313,8 @@ class CacheManager(Singleton):
         os.makedirs(self.cache_path(self._db_folder), exist_ok=True)
         if not os.path.exists(self.cache_path(self.db_filename)):
             self.create_db()
+        if not os.path.exists(self.cache_path(self.meta_db_filename)):
+            self.create_meta_db()
 
     @property
     def cache_folder(self) -> str:
@@ -309,9 +328,21 @@ class CacheManager(Singleton):
         db_conn.commit()
         db_conn.close()
 
+    def create_meta_db(self) -> None:
+        db_conn = sqlite3.connect(database=self.cache_path(self.meta_db_filename))
+        c = db_conn.cursor()
+        with open(os.path.join(os.path.dirname(__file__), "..", "sql", "create-meta-db.sql")) as f:
+            c.executescript(f.read())
+        db_conn.commit()
+        db_conn.close()
+
     @property
     def db_connection(self) -> duckdb.DuckDBPyConnection:
         return duckdb.connect(database=self.cache_path(self.db_filename), read_only=False)
+
+    @property
+    def meta_db_connection(self) -> sqlite3.Connection:
+        return sqlite3.connect(database=self.cache_path(self.meta_db_filename))
 
     @property
     def db_filename(self) -> str:
@@ -320,7 +351,7 @@ class CacheManager(Singleton):
     def db_folder(self, template: MarketDataTemplate | None=None) -> str | dict[str, str]:
         if template is None:
             folder = self._db_folder
-        elif template.reader.multi is None:
+        elif template.reader.multi == {}:
             folder = os.path.join(self._db_folder, template.id)
             os.makedirs(self.cache_path(folder), exist_ok=True)
         else:
@@ -342,11 +373,16 @@ class CacheManager(Singleton):
         return [os.path.join(folder, f) for f in files]
 
     @property
+    def meta_db_filename(self) -> str:
+        return os.path.join(self._meta_folder, self._meta_db_filename)
+
+    @property
     def meta_folder(self) -> str:
+        os.makedirs(self.cache_path(self._meta_folder), exist_ok=True)
         return self._meta_folder
     
     def meta_file_path(self, meta: CacheMetadata) -> str:
-        return os.path.join(self.cache_folder, os.path.join(self.meta_folder, f"{meta.id}.yaml"))
+        return os.path.join(self.cache_folder, self.meta_folder, f"{meta.id}.yaml")
 
     def has_meta(self, meta: CacheMetadata) -> bool:
         return os.path.isfile(self.meta_file_path(meta))
@@ -357,7 +393,35 @@ class CacheManager(Singleton):
         meta.from_dict(_meta)
 
     def save_meta(self, meta: CacheMetadata) -> None:
-        os.makedirs(self.cache_path(self.meta_folder), exist_ok=True)
+        with self.meta_db_connection as conn:
+            c = conn.cursor()
+            c.execute("select * from cache_metadata where download_checksum = ?", (meta.download_checksum,))
+            if c.fetchall():
+                params = (
+                    meta.timestamp,
+                    json.dumps(meta.response, default=json_convert_from_object),
+                    json.dumps(meta.download_args, default=json_convert_from_object),
+                    meta.template,
+                    json.dumps(meta.downloaded_files, default=json_convert_from_object),
+                    json.dumps(meta.processed_files, default=json_convert_from_object),
+                    meta.extra_key,
+                    meta.download_checksum,
+                )
+                c.execute("update cache_metadata set timestamp = ?, response = ?, download_args = ?, template = ?, downloaded_files = ?, processed_files = ?, extra_key = ? where download_checksum = ?", params)
+            else:
+                params = (
+                    meta.download_checksum,
+                    meta.timestamp,
+                    json.dumps(meta.response, default=json_convert_from_object),
+                    json.dumps(meta.download_args, default=json_convert_from_object),
+                    meta.template,
+                    json.dumps(meta.downloaded_files, default=json_convert_from_object),
+                    json.dumps(meta.processed_files, default=json_convert_from_object),
+                    meta.extra_key,
+                )
+                c.execute("insert into cache_metadata values (?, ?, ?, ?, ?, ?, ?, ?)", params)
+            conn.commit()
+
         with open(self.meta_file_path(meta), "w") as fp:
             yaml.dump(meta.to_dict(), fp, indent=4)
 
