@@ -10,11 +10,14 @@ import sqlite3
 from typing import IO, Any, Callable
 
 import pandas as pd
+from bizdays import Calendar, set_option
 import yaml
 import regexparser
 import duckdb
 
 from brasa.util import generate_checksum_for_template, generate_checksum_from_file, unzip_recursive
+
+set_option("mode.datetype", "datetime")
 
 
 def json_convert_from_object(obj):
@@ -240,15 +243,12 @@ class MarketDataDownloader:
         self.verify_ssl = downloader.get("verify_ssl", True)
         self.download_function = load_function_by_name(downloader["function"])
         self._extra_key = downloader.get("extra-key", None)
-
-    @property
-    def extra_key(self) -> str:
         if self._extra_key == "date":
-            return datetime.now().isoformat()[:10]
+            self.extra_key = datetime.now().isoformat()[:10]
         elif self._extra_key == "datetime":
-            return datetime.now().isoformat()
+            self.extra_key = datetime.now().isoformat()
         else:
-            return ""
+            self.extra_key = ""
 
     def download_args(self, **kwargs) -> dict:
         args = {}
@@ -579,3 +579,45 @@ def get_marketdata(template_name: str, reprocess: str | None=None, **kwargs) -> 
     meta.extra_key = template.downloader.extra_key
     cache = CacheManager()
     return cache.process_with_checks(meta, reprocess)
+
+class Period:
+    def __init__(self,
+                 start: datetime | None=None,
+                 end: datetime | None=None,
+                 year: int | None=None,
+                 calendar: str | None=None
+                 ) -> None:
+        if start is None and year is None:
+            raise ValueError("Either start or year must be specified")
+
+        self.calendar = Calendar() if calendar is None else Calendar.load(calendar)
+        if start is not None:
+            start = self.calendar.following(start)
+        if start is not None and end is None:
+                end = self.calendar.offset(datetime.today(), -1)
+        else:
+            end = self.calendar.preceding(end)
+        if year is not None:
+            start = self.calendar.getdate("first bizday", year)
+            end = self.calendar.getdate("last bizday", year)
+            if end > datetime.today():
+                end = self.calendar.offset(datetime.today(), -1)
+        self.year = year
+        self.start = start
+        self.end = end
+
+        self.dates = self.calendar.seq(self.start, self.end)
+
+
+def mget_marketdata(template_name: str, period: dict, reprocess: str | None=None, **kwargs) -> None:
+    template = retrieve_template(template_name)
+    meta = CacheMetadata(template.id)
+    meta.extra_key = template.downloader.extra_key
+    cache = CacheManager()
+    meta.download_args = kwargs.copy()
+    period = Period(**period)
+    for date in period.dates:
+        meta.download_args["refdate"] = date
+        meta.downloaded_files = []
+        meta.processed_files = {}
+        cache.process_with_checks(meta, reprocess)

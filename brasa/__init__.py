@@ -2,7 +2,7 @@
 from datetime import datetime
 
 import pandas as pd
-from brasa.engine import get_marketdata
+from brasa.engine import get_marketdata, mget_marketdata
 
 
 def futures_settlement_prices_get(refdate: datetime) -> pd.DataFrame:
