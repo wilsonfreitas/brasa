@@ -385,33 +385,51 @@ class CacheManager(Singleton):
         return os.path.join(self.cache_folder, self.meta_folder, f"{meta.id}.yaml")
 
     def has_meta(self, meta: CacheMetadata) -> bool:
-        return os.path.isfile(self.meta_file_path(meta))
+        with self.meta_db_connection as conn:
+            c = conn.cursor()
+            c.execute("select * from cache_metadata where id = ?", (meta.id,))
+            return len(c.fetchall()) == 1
 
     def load_meta(self, meta: CacheMetadata) -> None:
-        with open(self.meta_file_path(meta), "r") as fp:
-            _meta = yaml.load(fp, Loader=yaml.Loader)
-        meta.from_dict(_meta)
+        with self.meta_db_connection as conn:
+            c = conn.cursor()
+            c.execute("select * from cache_metadata where id = ?", (meta.id,))
+            if meta_row := c.fetchall():
+                meta_row = meta_row[0]
+                _meta = {
+                    "download_checksum": meta_row[1],
+                    "timestamp": datetime.fromisoformat(meta_row[2]),
+                    "response": json.loads(meta_row[3], object_hook=json_convert_to_object),
+                    "download_args": json.loads(meta_row[4], object_hook=json_convert_to_object),
+                    "template": meta_row[5],
+                    "downloaded_files": json.loads(meta_row[6], object_hook=json_convert_to_object),
+                    "processed_files": json.loads(meta_row[7], object_hook=json_convert_to_object),
+                    "extra_key": meta_row[8],
+                }
+            meta.from_dict(_meta)
 
     def save_meta(self, meta: CacheMetadata) -> None:
         with self.meta_db_connection as conn:
             c = conn.cursor()
-            c.execute("select * from cache_metadata where download_checksum = ?", (meta.download_checksum,))
+            c.execute("select * from cache_metadata where id = ?", (meta.id,))
             if c.fetchall():
                 params = (
-                    meta.timestamp,
+                    meta.download_checksum,
+                    meta.timestamp.isoformat(),
                     json.dumps(meta.response, default=json_convert_from_object),
                     json.dumps(meta.download_args, default=json_convert_from_object),
                     meta.template,
                     json.dumps(meta.downloaded_files, default=json_convert_from_object),
                     json.dumps(meta.processed_files, default=json_convert_from_object),
                     meta.extra_key,
-                    meta.download_checksum,
+                    meta.id,
                 )
-                c.execute("update cache_metadata set timestamp = ?, response = ?, download_args = ?, template = ?, downloaded_files = ?, processed_files = ?, extra_key = ? where download_checksum = ?", params)
+                c.execute("update cache_metadata set download_checksum = ?, timestamp = ?, response = ?, download_args = ?, template = ?, downloaded_files = ?, processed_files = ?, extra_key = ? where id = ?", params)
             else:
                 params = (
+                    meta.id,
                     meta.download_checksum,
-                    meta.timestamp,
+                    meta.timestamp.isoformat(),
                     json.dumps(meta.response, default=json_convert_from_object),
                     json.dumps(meta.download_args, default=json_convert_from_object),
                     meta.template,
@@ -419,11 +437,8 @@ class CacheManager(Singleton):
                     json.dumps(meta.processed_files, default=json_convert_from_object),
                     meta.extra_key,
                 )
-                c.execute("insert into cache_metadata values (?, ?, ?, ?, ?, ?, ?, ?)", params)
+                c.execute("insert into cache_metadata values (?, ?, ?, ?, ?, ?, ?, ?, ?)", params)
             conn.commit()
-
-        with open(self.meta_file_path(meta), "w") as fp:
-            yaml.dump(meta.to_dict(), fp, indent=4)
 
     def remove_meta(self, meta: CacheMetadata) -> None:
         for fname in meta.downloaded_files:

@@ -1,4 +1,5 @@
 create table if not exists cache_metadata (
+    id TEXT unique,
     download_checksum TEXT unique,
     timestamp TEXT,
     response TEXT,
