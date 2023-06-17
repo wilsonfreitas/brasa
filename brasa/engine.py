@@ -447,10 +447,11 @@ class CacheManager(Singleton):
         for fname in meta.processed_files.values():
             if os.path.isfile(self.cache_path(fname)):
                 os.remove(self.cache_path(fname))
-        meta_file_path = self.meta_file_path(meta)
-        if os.path.isfile(meta_file_path):
-            os.remove(meta_file_path)
-
+        with self.meta_db_connection as conn:
+            c = conn.cursor()
+            c.execute("delete from cache_metadata where id = ?", (meta.id,))
+            conn.commit()
+        
     def parquet_file_name(self, fname_part: str) -> str:
         if re.fullmatch(r"\d{4}(-\d{2}(-\d{2})?)?", fname_part):
             fname = f"{fname_part}.parquet"
@@ -472,11 +473,15 @@ class CacheManager(Singleton):
                 self.save_meta(meta)
                 return df
         else: # reprocess == "download" or reprocess == "all"
-            download_marketdata(meta, **meta.download_args)
-            self.save_meta(meta)
-            dfs = read_marketdata(meta)
-            self.save_meta(meta)
-            return dfs
+            try:
+                download_marketdata(meta, **meta.download_args)
+                self.save_meta(meta)
+                dfs = read_marketdata(meta)
+                self.save_meta(meta)
+                return dfs
+            except:
+                self.remove_meta(meta)
+                return None
 
     def process_without_checks(self, meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
         download_marketdata(meta, **meta.download_args)
