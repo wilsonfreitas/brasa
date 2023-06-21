@@ -388,9 +388,13 @@ class CacheManager(Singleton):
             return len(c.fetchall()) == 1
 
     def load_meta(self, meta: CacheMetadata) -> None:
+        _meta = self._load_meta_dict_by_id(meta.id)
+        meta.from_dict(_meta)
+
+    def _load_meta_dict_by_id(self, id: str) -> dict | None:
         with self.meta_db_connection as conn:
             c = conn.cursor()
-            c.execute("select * from cache_metadata where id = ?", (meta.id,))
+            c.execute("select * from cache_metadata where id = ?", (id,))
             if meta_row := c.fetchall():
                 meta_row = meta_row[0]
                 _meta = {
@@ -403,7 +407,7 @@ class CacheManager(Singleton):
                     "processed_files": json.loads(meta_row[7], object_hook=json_convert_to_object),
                     "extra_key": meta_row[8],
                 }
-            meta.from_dict(_meta)
+                return _meta
 
     def save_meta(self, meta: CacheMetadata) -> None:
         with self.meta_db_connection as conn:
@@ -591,20 +595,6 @@ def get_marketdata(template_name: str, reprocess: str | None=None, **kwargs) -> 
     return cache.process_with_checks(meta, reprocess)
 
 
-def mget_marketdata(template_name: str, period: dict, reprocess: str | None=None, **kwargs) -> None:
-    template = retrieve_template(template_name)
-    meta = CacheMetadata(template.id)
-    meta.extra_key = template.downloader.extra_key
-    cache = CacheManager()
-    meta.download_args = kwargs.copy()
-    period = DateRange(**period)
-    for date in period.dates:
-        meta.download_args["refdate"] = date
-        meta.downloaded_files = []
-        meta.processed_files = {}
-        cache.process_with_checks(meta, reprocess)
-
-
 def download_marketdata(template_name: str, **kwargs) -> None:
     template = retrieve_template(template_name)
     meta = CacheMetadata(template.id)
@@ -616,3 +606,15 @@ def download_marketdata(template_name: str, **kwargs) -> None:
         meta.processed_files = {}
         cache.download_marketdata(meta)
 
+
+def process_marketdata(template_name: str) -> None:
+    template = retrieve_template(template_name)
+    cache = CacheManager()
+    with cache.meta_db_connection as conn:
+        c = conn.cursor()
+        c.execute("select id from cache_metadata where template = ? and processed_files = '{}'", (template_name,))
+        for meta_row in c.fetchall():
+            _meta = cache._load_meta_dict_by_id(meta_row[0])
+            meta = CacheMetadata(template.id)
+            meta.from_dict(_meta)
+            cache.process_with_checks(meta, reprocess="read")
