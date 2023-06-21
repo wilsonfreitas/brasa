@@ -2,9 +2,9 @@
 from datetime import datetime
 import pandas as pd
 
-from brasa.engine import CacheManager, get_marketdata, read_marketdata
+from brasa.engine import CacheManager, get_marketdata, _read_marketdata
 from brasa.engine import CacheMetadata
-from brasa.engine import MarketDataTemplate, TemplateFields, download_marketdata, retrieve_template
+from brasa.engine import MarketDataTemplate, TemplateFields, _download_marketdata, retrieve_template
 
 
 def test_load_template():
@@ -57,13 +57,13 @@ def test_metadata_fulfilment():
     meta = CacheMetadata("b3-cdi")
     assert len(meta.downloaded_files) == 0
 
-    download_marketdata(meta)
+    _download_marketdata(meta)
     assert len(meta.downloaded_files) == 1
 
     man = CacheManager()
     man.save_meta(meta)
 
-    df = read_marketdata(meta)
+    df = _read_marketdata(meta)
     assert df is not None
     man.save_meta(meta)
 

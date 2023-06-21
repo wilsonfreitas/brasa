@@ -1,4 +1,6 @@
+from datetime import datetime
 import hashlib
+import itertools
 import logging
 import os
 import pickle
@@ -6,6 +8,12 @@ import warnings
 import zipfile
 from tempfile import gettempdir
 from typing import IO
+
+from bizdays import Calendar
+from bizdays import set_option
+
+
+set_option("mode.datetype", "datetime")
 
 
 class SuppressUserWarnings:
@@ -68,3 +76,53 @@ def unzip_and_get_content(fname, index=-1, encode=False, encoding="latin1"):
         return content.decode(encoding)
     else:
         return content
+
+
+def is_iterable(i):
+    try:
+        iter(i)
+        return not isinstance(i, str)
+    except TypeError:
+        return False
+
+
+class DateRange:
+    def __init__(self,
+                 start: datetime | None=None,
+                 end: datetime | None=None,
+                 year: int | None=None,
+                 calendar: str | None=None
+                 ) -> None:
+        if start is None and year is None:
+            raise ValueError("Either start or year must be specified")
+
+        self.calendar = Calendar() if calendar is None else Calendar.load(calendar)
+        if start is not None:
+            start = self.calendar.following(start)
+        if start is not None and end is None:
+                end = self.calendar.offset(datetime.today(), -1)
+        else:
+            end = self.calendar.preceding(end)
+        if year is not None:
+            start = self.calendar.getdate("first bizday", year)
+            end = self.calendar.getdate("last bizday", year)
+            if end > datetime.today():
+                end = self.calendar.offset(datetime.today(), -1)
+        self.year = year
+        self.start = start
+        self.end = end
+
+        self.dates = self.calendar.seq(self.start, self.end)
+
+    def __len__(self) -> int:
+        return len(self.dates)
+
+    def __iter__(self):
+        return iter(self.dates)
+
+
+def iterate_kwargs(**kwargs):
+    elements = [list(x) if is_iterable(x) else [x] for x in kwargs.values()]
+    names = kwargs.keys()
+    for kw in itertools.product(*elements):
+        yield dict(tuple(zip(names, kw)))

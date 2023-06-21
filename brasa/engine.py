@@ -10,14 +10,11 @@ import sqlite3
 from typing import IO, Any, Callable
 
 import pandas as pd
-from bizdays import Calendar, set_option
 import yaml
 import regexparser
 import duckdb
 
-from brasa.util import generate_checksum_for_template, generate_checksum_from_file, unzip_recursive
-
-set_option("mode.datetype", "datetime")
+from brasa.util import DateRange, generate_checksum_for_template, generate_checksum_from_file, iterate_kwargs, unzip_recursive
 
 
 def json_convert_from_object(obj):
@@ -469,24 +466,32 @@ class CacheManager(Singleton):
                 else:
                     return dfs
             else:
-                df = read_marketdata(meta)
+                df = _read_marketdata(meta)
                 self.save_meta(meta)
                 return df
         else: # reprocess == "download" or reprocess == "all"
             try:
-                download_marketdata(meta, **meta.download_args)
+                _download_marketdata(meta, **meta.download_args)
                 self.save_meta(meta)
-                dfs = read_marketdata(meta)
+                dfs = _read_marketdata(meta)
                 self.save_meta(meta)
                 return dfs
             except:
                 self.remove_meta(meta)
                 return None
 
+    def download_marketdata(self, meta: CacheMetadata) -> None:
+        try:
+            _download_marketdata(meta, **meta.download_args)
+            self.save_meta(meta)
+        except:
+            self.remove_meta(meta)
+            return None
+
     def process_without_checks(self, meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
-        download_marketdata(meta, **meta.download_args)
+        _download_marketdata(meta, **meta.download_args)
         self.save_meta(meta)
-        dfs = read_marketdata(meta)
+        dfs = _read_marketdata(meta)
         self.save_meta(meta)
         return dfs
 
@@ -501,7 +506,7 @@ def retrieve_template(template_name) -> MarketDataTemplate:
         return MarketDataTemplate(template_path)
 
 
-def download_marketdata(meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
+def _download_marketdata(meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
     template = retrieve_template(meta.template)
     meta.download_args = kwargs
     meta.extra_key = template.downloader.extra_key
@@ -555,7 +560,7 @@ def get_fname_part(meta: CacheMetadata, df: pd.DataFrame) -> str:
     return fname_part
 
 
-def read_marketdata(meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
+def _read_marketdata(meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
     template = retrieve_template(meta.template)
     df = template.reader.read(meta)
     man = CacheManager()
@@ -585,34 +590,6 @@ def get_marketdata(template_name: str, reprocess: str | None=None, **kwargs) -> 
     cache = CacheManager()
     return cache.process_with_checks(meta, reprocess)
 
-class Period:
-    def __init__(self,
-                 start: datetime | None=None,
-                 end: datetime | None=None,
-                 year: int | None=None,
-                 calendar: str | None=None
-                 ) -> None:
-        if start is None and year is None:
-            raise ValueError("Either start or year must be specified")
-
-        self.calendar = Calendar() if calendar is None else Calendar.load(calendar)
-        if start is not None:
-            start = self.calendar.following(start)
-        if start is not None and end is None:
-                end = self.calendar.offset(datetime.today(), -1)
-        else:
-            end = self.calendar.preceding(end)
-        if year is not None:
-            start = self.calendar.getdate("first bizday", year)
-            end = self.calendar.getdate("last bizday", year)
-            if end > datetime.today():
-                end = self.calendar.offset(datetime.today(), -1)
-        self.year = year
-        self.start = start
-        self.end = end
-
-        self.dates = self.calendar.seq(self.start, self.end)
-
 
 def mget_marketdata(template_name: str, period: dict, reprocess: str | None=None, **kwargs) -> None:
     template = retrieve_template(template_name)
@@ -620,9 +597,22 @@ def mget_marketdata(template_name: str, period: dict, reprocess: str | None=None
     meta.extra_key = template.downloader.extra_key
     cache = CacheManager()
     meta.download_args = kwargs.copy()
-    period = Period(**period)
+    period = DateRange(**period)
     for date in period.dates:
         meta.download_args["refdate"] = date
         meta.downloaded_files = []
         meta.processed_files = {}
         cache.process_with_checks(meta, reprocess)
+
+
+def download_marketdata(template_name: str, **kwargs) -> None:
+    template = retrieve_template(template_name)
+    meta = CacheMetadata(template.id)
+    meta.extra_key = template.downloader.extra_key
+    cache = CacheManager()
+    for args in iterate_kwargs(**kwargs):
+        meta.download_args = args
+        meta.downloaded_files = []
+        meta.processed_files = {}
+        cache.download_marketdata(meta)
+
