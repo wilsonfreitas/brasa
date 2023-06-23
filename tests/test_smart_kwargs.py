@@ -1,5 +1,5 @@
 
-from brasa.util import DateRange, iterate_kwargs
+from brasa.util import DateRange, KwargsIterator
 
 
 def test_smart_kwargs() -> None:
@@ -9,7 +9,8 @@ def test_smart_kwargs() -> None:
         "color": ["red", "blue", "green"],
     }
 
-    kwargs_list = list(iterate_kwargs(**kwargs))
+    args = KwargsIterator(kwargs)
+    kwargs_list = list(args)
     assert isinstance(kwargs_list, list)
 
 
@@ -19,5 +20,6 @@ def test_smart_kwargs2() -> None:
         "refdate": DateRange(year=2020),
     }
 
-    kwargs_dict = list(iterate_kwargs(**kwargs))
+    args = KwargsIterator(kwargs)
+    kwargs_dict = list(args)
     assert isinstance(kwargs_dict, list)
