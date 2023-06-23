@@ -10,11 +10,12 @@ import sqlite3
 from typing import IO, Any, Callable
 
 import pandas as pd
+import progressbar
 import yaml
 import regexparser
 import duckdb
 
-from brasa.util import DateRange, generate_checksum_for_template, generate_checksum_from_file, iterate_kwargs, unzip_recursive
+from brasa.util import DateRange, KwargsIterator, generate_checksum_for_template, generate_checksum_from_file, iterate_kwargs, unzip_recursive
 
 
 def json_convert_from_object(obj):
@@ -600,7 +601,17 @@ def download_marketdata(template_name: str, **kwargs) -> None:
     meta = CacheMetadata(template.id)
     meta.extra_key = template.downloader.extra_key
     cache = CacheManager()
-    for args in iterate_kwargs(**kwargs):
+    kwargs_iter = KwargsIterator(kwargs)
+    widgets = [
+        f"Downloading {template_name} ",
+        progressbar.SimpleProgress(format="%(value_s)3s/%(max_value_s)-3s"),
+        progressbar.Bar(),
+        " ",
+        progressbar.Timer(),
+    ]
+    for args in progressbar.progressbar(kwargs_iter,
+                                        max_value=len(kwargs_iter),
+                                        widgets=widgets):
         meta.download_args = args
         meta.downloaded_files = []
         meta.processed_files = {}

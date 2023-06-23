@@ -121,8 +121,15 @@ class DateRange:
         return iter(self.dates)
 
 
-def iterate_kwargs(**kwargs):
-    elements = [list(x) if is_iterable(x) else [x] for x in kwargs.values()]
-    names = kwargs.keys()
-    for kw in itertools.product(*elements):
-        yield dict(tuple(zip(names, kw)))
+class KwargsIterator:
+    def __init__(self, kwargs: dict) -> None:
+        self.elements = [list(x) if is_iterable(x) else [x] for x in kwargs.values()]
+        self.__len = max(len(x) for x in self.elements)
+        self.names = kwargs.keys()
+
+    def __len__(self) -> int:
+        return self.__len
+
+    def __iter__(self):
+        for kw in itertools.product(*self.elements):
+            yield dict(tuple(zip(self.names, kw)))
