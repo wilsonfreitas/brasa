@@ -11,6 +11,7 @@ from typing import IO
 
 from bizdays import Calendar
 from bizdays import set_option
+from regexparser import TextParser
 
 
 set_option("mode.datetype", "datetime")
@@ -86,11 +87,26 @@ def is_iterable(i):
         return False
 
 
+class KwargsIterator:
+    def __init__(self, kwargs: dict) -> None:
+        self.elements = [list(x) if is_iterable(x) else [x] for x in kwargs.values()]
+        self.__len = max(len(x) for x in self.elements)
+        self.names = kwargs.keys()
+
+    def __len__(self) -> int:
+        return self.__len
+
+    def __iter__(self):
+        for kw in itertools.product(*self.elements):
+            yield dict(tuple(zip(self.names, kw)))
+
+
 class DateRange:
     def __init__(self,
                  start: datetime | None=None,
                  end: datetime | None=None,
                  year: int | None=None,
+                 month: int | None=None,
                  calendar: str | None=None
                  ) -> None:
         if start is None and year is None:
@@ -108,7 +124,13 @@ class DateRange:
             end = self.calendar.getdate("last bizday", year)
             if end > datetime.today():
                 end = self.calendar.offset(datetime.today(), -1)
+        if year is not None and month is not None:
+            start = self.calendar.getdate("first bizday", year, month)
+            end = self.calendar.getdate("last bizday", year, month)
+            if end > datetime.today():
+                end = self.calendar.offset(datetime.today(), -1)
         self.year = year
+        self.month = month
         self.start = start
         self.end = end
 
@@ -121,15 +143,63 @@ class DateRange:
         return iter(self.dates)
 
 
-class KwargsIterator:
-    def __init__(self, kwargs: dict) -> None:
-        self.elements = [list(x) if is_iterable(x) else [x] for x in kwargs.values()]
-        self.__len = max(len(x) for x in self.elements)
-        self.names = kwargs.keys()
+class DateRangeParser(TextParser):
+    def __init__(self, calendar: str):
+        super().__init__()
+        self.calendar_name = calendar
+        self.calendar = Calendar() if calendar == "actual" else Calendar.load(calendar)
 
-    def __len__(self) -> int:
-        return self.__len
+    def parse_year(self, text, match):
+        r"^\d{4}$"
+        year = int(match.group())
+        start = self.calendar.getdate("first day", year)
+        end = self.calendar.getdate("last day", year)
+        return DateRange(start=start, end=end, calendar=self.calendar_name)
 
-    def __iter__(self):
-        for kw in itertools.product(*self.elements):
-            yield dict(tuple(zip(self.names, kw)))
+    def parse_year_open_range(self, text, match):
+        r"^(\d{4}):$"
+        start = datetime(int(match.group(1)), 1, 1)
+        return DateRange(start=start, calendar=self.calendar_name)
+
+    def parse_year_range(self, text, match):
+        r"^(\d{4}):(\d{4})$"
+        start = datetime(int(match.group(1)), 1, 1)
+        end = datetime(int(match.group(2)), 12, 31)
+        return DateRange(start=start, end=end, calendar=self.calendar_name)
+
+    def parse_year_open_range(self, text, match):
+        r"^(\d{4}):$"
+        start = datetime(int(match.group(1)), 1, 1)
+        return DateRange(start=start, calendar=self.calendar_name)
+
+    def parse_month(self, text, match):
+        r"^(\d{4})-(\d{2})$"
+        year=int(match.group(1))
+        month=int(match.group(2))
+        start = self.calendar.getdate("first day", year, month)
+        end = self.calendar.getdate("last day", year, month)
+        return DateRange(start=start, end=end, calendar=self.calendar_name)
+
+    def parse_month_open_range(self, text, match):
+        r"^(\d{4})-(\d{2}):$"
+        year=int(match.group(1))
+        month=int(match.group(2))
+        start = self.calendar.getdate("first day", year, month)
+        return DateRange(start=start, calendar=self.calendar_name)
+
+    def parse_date(self, text, match):
+        r"^(\d{4}-\d{2}-\d{2})$"
+        start = datetime.strptime(match.group(1), "%Y-%m-%d")
+        end = start
+        return DateRange(start=start, end=end, calendar=self.calendar_name)
+
+    def parse_date_open_range(self, text, match):
+        r"^(\d{4}-\d{2}-\d{2}):$"
+        start = datetime.strptime(match.group(1), "%Y-%m-%d")
+        return DateRange(start=start, calendar=self.calendar_name)
+
+    def parse_date_range(self, text, match):
+        r"^(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})$"
+        start = datetime.strptime(match.group(1), "%Y-%m-%d")
+        end = datetime.strptime(match.group(2), "%Y-%m-%d")
+        return DateRange(start=start, end=end, calendar=self.calendar_name)
