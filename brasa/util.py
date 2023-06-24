@@ -102,7 +102,7 @@ class DateRange:
         if start is not None and end is None:
                 end = self.calendar.offset(datetime.today(), -1)
         else:
-            end = self.calendar.preceding(end)
+            end = min(self.calendar.preceding(end), self.calendar.offset(datetime.today(), -1))
         if year is not None:
             start = self.calendar.getdate("first bizday", year)
             end = self.calendar.getdate("last bizday", year)
