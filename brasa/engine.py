@@ -15,7 +15,7 @@ import yaml
 import regexparser
 import duckdb
 
-from brasa.util import DateRange, KwargsIterator, generate_checksum_for_template, generate_checksum_from_file, iterate_kwargs, unzip_recursive
+from brasa.util import KwargsIterator, generate_checksum_for_template, generate_checksum_from_file, unzip_recursive
 
 
 def json_convert_from_object(obj):
@@ -615,7 +615,13 @@ def download_marketdata(template_name: str, **kwargs) -> None:
         meta.download_args = args
         meta.downloaded_files = []
         meta.processed_files = {}
-        cache.download_marketdata(meta)
+        if cache.has_meta(meta):
+            cache.load_meta(meta)
+            check = all([os.path.exists(cache.cache_path(f)) for f in meta.processed_files])
+            if not check:
+                cache.download_marketdata(meta)
+        else:
+            cache.download_marketdata(meta)
 
 
 def process_marketdata(template_name: str) -> None:
