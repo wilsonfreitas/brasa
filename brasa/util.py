@@ -190,8 +190,7 @@ class DateRangeParser(TextParser):
     def parse_date(self, text, match):
         r"^(\d{4}-\d{2}-\d{2})$"
         start = datetime.strptime(match.group(1), "%Y-%m-%d")
-        end = start
-        return DateRange(start=start, end=end, calendar=self.calendar_name)
+        return [start]
 
     def parse_date_open_range(self, text, match):
         r"^(\d{4}-\d{2}-\d{2}):$"
