@@ -131,6 +131,8 @@ class FWFFile(metaclass=FWFFileMeta):
             fp = open(fname, "r", encoding=encoding)
         else:
             fp = fname
+        for nx in self._buckets:
+            self._buckets[nx] = []
         for ix, line in enumerate(fp):
             if ix < self.skip_row:
                 continue
