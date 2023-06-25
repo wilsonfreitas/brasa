@@ -617,7 +617,7 @@ def download_marketdata(template_name: str, **kwargs) -> None:
         meta.processed_files = {}
         if cache.has_meta(meta):
             cache.load_meta(meta)
-            check = all([os.path.exists(cache.cache_path(f)) for f in meta.processed_files])
+            check = all([os.path.exists(cache.cache_path(f)) for f in meta.downloaded_files])
             if not check:
                 cache.download_marketdata(meta)
         else:
@@ -630,8 +630,28 @@ def process_marketdata(template_name: str) -> None:
     with cache.meta_db_connection as conn:
         c = conn.cursor()
         c.execute("select id from cache_metadata where template = ? and processed_files = '{}'", (template_name,))
-        for meta_row in c.fetchall():
+        rows = c.fetchall()
+        widgets = [
+            f"Processing {template_name} ",
+            progressbar.SimpleProgress(format="%(value_s)3s/%(max_value_s)-3s"),
+            progressbar.Bar(),
+            " ",
+            progressbar.Timer(),
+        ]
+        errors = []
+        for meta_row in progressbar.progressbar(rows,
+                                            max_value=len(rows),
+                                            widgets=widgets):
             _meta = cache._load_meta_dict_by_id(meta_row[0])
             meta = CacheMetadata(template.id)
             meta.from_dict(_meta)
-            cache.process_with_checks(meta, reprocess="read")
+            try:
+                df = cache.process_with_checks(meta, reprocess="read")
+                del df
+            except Exception as ex:
+                errors.append((meta, ex))
+
+        if len(errors) > 0:
+            for err in errors:
+                # cache.remove_meta(err[0])
+                print(err[0].download_args)
