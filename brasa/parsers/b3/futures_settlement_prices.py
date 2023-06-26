@@ -6,10 +6,6 @@ import numpy as np
 import pandas as pd
 from lxml import etree
 from bizdays import Calendar
-from brasa.engine import CacheManager
-from brasa.engine import CacheMetadata
-
-from brasa.engine import MarketDataReader, retrieve_template
 
 
 def maturity2date_newcode(x: str, cal: Calendar, expr: str) -> datetime:
@@ -78,7 +74,8 @@ def future_settlement_prices_parser(fname: IO | str) -> pd.DataFrame:
     df = pd.read_html(fname,
                       attrs=dict(id="tblDadosAjustes"),
                       decimal=",",
-                      thousands=".",)[0]
+                      thousands=".",
+                      encoding="latin1")[0]
     df.columns = ["commodity", "maturity_code", "previous_settlement_price", "settlement_price", "price_variation", "settlement_value"]
     tree = etree.parse(fname, etree.HTMLParser())
     refdate_str = tree.xpath(f"//input[@id='dData1']")[0].attrib["value"]
