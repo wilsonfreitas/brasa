@@ -23,6 +23,7 @@ duckdb = "^0.8.0"
 progressbar2 = "^4.2.0"
 html5lib = "^1.1"
 beautifulsoup4 = "^4.12.2"
+python-bcb = "0.1.9"
 
 
 [tool.poetry.group.dev.dependencies]
