@@ -14,7 +14,7 @@ def maturity2date_newcode(x: str, cal: Calendar, expr: str) -> datetime:
     The new code is a single letter, as in "F" for January.
     This code started to be used in 2007.
     """
-    year = int(x[-1:]) + 2000
+    year = int(x[-2:]) + 2000
     month = code2month_newcode(x[0])
     return cal.getdate(expr, year, month)
 
