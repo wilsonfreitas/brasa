@@ -1,3 +1,4 @@
+import gzip
 import json
 from typing import IO
 
@@ -100,7 +101,8 @@ def read_b3_bvbg028(meta: CacheMetadata) -> dict[str, pd.DataFrame]:
     paths.sort()
     fname = paths[-1]
     man = CacheManager()
-    parser = BVBG028Parser(man.cache_path(fname))
+    with gzip.open(man.cache_path(fname)) as f:
+        parser = BVBG028Parser(f)
 
     df_equities = parser.data["EqtyInf"]
     df_equities["creation_date"] = pd.to_datetime(df_equities["creation_date"])
@@ -223,7 +225,8 @@ def read_b3_cdi(meta: CacheMetadata) -> pd.DataFrame:
 
 
 def read_b3_futures_settlement_prices(meta: CacheMetadata) -> pd.DataFrame:
-    fname = meta.downloaded_files[0]
+    fname = meta.downloaded_files[-1]
     man = CacheManager()
-    df = future_settlement_prices_parser(man.cache_path(fname))
+    with gzip.open(man.cache_path(fname)) as f:
+        df = future_settlement_prices_parser(f)
     return df

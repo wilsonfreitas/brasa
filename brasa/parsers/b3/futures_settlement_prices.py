@@ -1,5 +1,6 @@
 
 from datetime import datetime
+import io
 from typing import IO
 import numpy as np
 
@@ -77,6 +78,8 @@ def future_settlement_prices_parser(fname: IO | str) -> pd.DataFrame:
                       thousands=".",
                       encoding="latin1")[0]
     df.columns = ["commodity", "maturity_code", "previous_settlement_price", "settlement_price", "price_variation", "settlement_value"]
+    if isinstance(fname, io.IOBase):
+        fname.seek(0)
     tree = etree.parse(fname, etree.HTMLParser())
     refdate_str = tree.xpath(f"//input[@id='dData1']")[0].attrib["value"]
     df["refdate"] = pd.to_datetime(refdate_str, format="%d/%m/%Y")
