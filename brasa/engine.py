@@ -2,6 +2,7 @@
 import abc
 import base64
 from datetime import datetime
+import gzip
 import json
 import os
 import re
@@ -533,13 +534,14 @@ def _download_marketdata(meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
     fp.close()
     fp_dest.close()
 
+    downloaded_files = []
     if template.downloader.format == "zip":
         filenames = unzip_recursive(man.cache_path(file_rel_path))
         for filename in filenames:
             fname = os.path.basename(filename)
             _file_rel_path = os.path.join(download_folder, fname)
             shutil.move(filename, man.cache_path(_file_rel_path))
-            meta.downloaded_files.append(_file_rel_path)
+            downloaded_files.append(_file_rel_path)
         os.remove(man.cache_path(file_rel_path))
     elif template.downloader.format == "base64":
         with open(man.cache_path(file_rel_path), "rb") as fp:
@@ -547,10 +549,19 @@ def _download_marketdata(meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
             _file_rel_path = os.path.join(download_folder, fname)
             with open(man.cache_path(_file_rel_path), "wb") as fp_dest:
                 base64.decode(fp, fp_dest)
-            meta.downloaded_files.append(_file_rel_path)
+            downloaded_files.append(_file_rel_path)
         os.remove(man.cache_path(file_rel_path))
     else:
-        meta.downloaded_files.append(file_rel_path)
+        downloaded_files.append(file_rel_path)
+
+    for fname in downloaded_files:
+        _fname = man.cache_path(fname)
+        with open(_fname, "rb") as f_in:
+            with gzip.open(_fname + ".gz", "wb") as f_out:
+                shutil.copyfileobj(f_in, f_out)
+        meta.downloaded_files.append(fname + ".gz")
+        os.remove(_fname)
+
 
 
 def get_fname_part(meta: CacheMetadata, df: pd.DataFrame) -> str:
