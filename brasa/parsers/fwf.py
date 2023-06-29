@@ -134,6 +134,8 @@ class FWFFile(metaclass=FWFFileMeta):
         for nx in self._buckets:
             self._buckets[nx] = []
         for ix, line in enumerate(fp):
+            if isinstance(line, bytes):
+                line = line.decode(encoding)
             if ix < self.skip_row:
                 continue
             row_name, row_template = self._get_row_template(line)
