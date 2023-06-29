@@ -10,7 +10,7 @@ class BVBG028Parser(Parser):
             "refdate": "RptParams/RptDtAndTm/Dt",
             "security_id": "FinInstrmId/OthrId/Id",
             "security_proprietary": "FinInstrmId/OthrId/Tp/Prtry",
-            "security_market": "FinInstrmId/OthrId/PlcOfListg/MktIdrCd",
+            "security_market": "FinInstrmId/PlcOfListg/MktIdrCd",
             "instrument_asset": "FinInstrmAttrCmon/Asst",
             "instrument_asset_description": "FinInstrmAttrCmon/AsstDesc",
             "instrument_market": "FinInstrmAttrCmon/Mkt",
