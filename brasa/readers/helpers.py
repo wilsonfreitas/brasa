@@ -92,7 +92,8 @@ def read_b3_lending_trades(meta: CacheMetadata) -> pd.DataFrame:
 def read_b3_cotahist(meta: CacheMetadata) -> pd.DataFrame:
     fname = meta.downloaded_files[0]
     man = CacheManager()
-    parser = COTAHISTParser(man.cache_path(fname))
+    with gzip.open(man.cache_path(fname)) as f:
+        parser = COTAHISTParser(f)
     return parser._data._tables["data"]
 
 
@@ -184,7 +185,8 @@ def read_b3_bvbg086(meta: CacheMetadata) -> pd.DataFrame:
     paths.sort()
     fname = paths[-1]
     man = CacheManager()
-    parser = BVBG086Parser(man.cache_path(fname))
+    with gzip.open(man.cache_path(fname)) as f:
+        parser = BVBG086Parser(f)
     df = parser.data
     df["refdate"] = pd.to_datetime(df["refdate"])
     df["creation_date"] = pd.to_datetime(df["creation_date"])
