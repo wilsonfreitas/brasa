@@ -322,6 +322,9 @@ class CacheManager(Singleton):
     def cache_path(self, fname: str) -> str:
         return os.path.join(self.cache_folder, fname)
 
+    def db_path(self, name: str) -> str:
+        return os.path.join(self.cache_path(self.db_folder()), name)
+
     def create_db(self) -> None:
         db_conn = duckdb.connect(database=self.cache_path(self.db_filename), read_only=False)
         db_conn.commit()
@@ -665,4 +668,4 @@ def process_marketdata(template_name: str) -> None:
         if len(errors) > 0:
             for err in errors:
                 # cache.remove_meta(err[0])
-                print(err[0].download_args)
+                print(err[0].download_args, err[1])
