@@ -2,8 +2,11 @@
 from datetime import datetime
 import duckdb
 import pandas as pd
+import pyarrow.dataset as ds
 
 from brasa.engine import CacheManager
+
+__all__ = ["BrasaDB", "get_timeseries", "get_dataset"]
 
 
 class BrasaDB:
@@ -56,3 +59,8 @@ select * from (
 order by refdate
 """)
     return res.fetchdf().pivot(index="refdate", columns="symbol", values="close")
+
+
+def get_dataset(name: str) -> ds.Dataset:
+    man = CacheManager()
+    return ds.dataset(man.db_path(name), format="parquet")
