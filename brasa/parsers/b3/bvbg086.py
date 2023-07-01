@@ -74,6 +74,8 @@ class BVBG086Parser(Parser):
             els = node.findall(attrs[attr], ns)
             if len(els):
                 data[attr] = els[0].text
+            else:
+                data[attr] = None
         self.instruments.append(data)
 
     @property
