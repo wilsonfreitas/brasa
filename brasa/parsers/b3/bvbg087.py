@@ -1,3 +1,4 @@
+import pandas as pd
 from ..util import Parser
 from lxml import etree
 
@@ -56,6 +57,8 @@ class BVBG087Parser(Parser):
     def __init__(self, fname):
         self.fname = fname
         self.indexes = []
+        self.instrs = {}
+        self.__data = None
         self.parse()
 
     def parse(self):
@@ -79,7 +82,15 @@ class BVBG087Parser(Parser):
                 for k in fields:
                     data[k] = smart_find(node, fields[k], ns)
                 self.indexes.append(data)
+        for instr in self.indexes:
+            typo = instr['index_type']
+            try:
+                self.instrs[typo].append(instr)
+            except:
+                self.instrs[typo] = [instr]
+        self.__data = {k: pd.DataFrame(self.instrs[k]) for k in self.instrs.keys()}
+
 
     @property
     def data(self):
-        return self.indexes
+        return self.__data

@@ -7,6 +7,7 @@ import pandas as pd
 from brasa.engine import CacheManager, CacheMetadata, MarketDataReader, retrieve_template
 from brasa.parsers.b3.bvbg028 import BVBG028Parser
 from brasa.parsers.b3.bvbg086 import BVBG086Parser
+from brasa.parsers.b3.bvbg087 import BVBG087Parser
 from brasa.parsers.b3.cdi import CDIParser
 from brasa.parsers.b3.cotahist import COTAHISTParser
 from brasa.parsers.b3.futures_settlement_prices import \
@@ -216,6 +217,54 @@ def read_b3_bvbg086(meta: CacheMetadata) -> pd.DataFrame:
     df["nonregular_transactions_quantity"] = pd.to_numeric(df["nonregular_transactions_quantity"])
     df["nonregular_traded_contracts"] = pd.to_numeric(df["nonregular_traded_contracts"])
     df["nonregular_volume"] = pd.to_numeric(df["nonregular_volume"])
+
+    return parser.data
+
+
+def read_b3_bvbg087(meta: CacheMetadata) -> dict[str, pd.DataFrame]:
+    paths = meta.downloaded_files
+    paths.sort()
+    fname = paths[-1]
+    man = CacheManager()
+    with gzip.open(man.cache_path(fname)) as f:
+        parser = BVBG087Parser(f)
+
+    df_indexes = parser.data["IndxInf"]
+    df_indexes["trade_date"] = pd.to_datetime(df_indexes["trade_date"])
+    df_indexes["security_id"] = pd.to_numeric(df_indexes["security_id"])
+    df_indexes["security_proprietary"] = pd.to_numeric(df_indexes["security_proprietary"])
+    df_indexes["settlement_price"] = pd.to_numeric(df_indexes["settlement_price"])
+    df_indexes["open_price"] = pd.to_numeric(df_indexes["open_price"])
+    df_indexes["min_price"] = pd.to_numeric(df_indexes["min_price"])
+    df_indexes["max_price"] = pd.to_numeric(df_indexes["max_price"])
+    df_indexes["average_price"] = pd.to_numeric(df_indexes["average_price"])
+    df_indexes["close_price"] = pd.to_numeric(df_indexes["close_price"])
+    df_indexes["last_price"] = pd.to_numeric(df_indexes["last_price"])
+    df_indexes["oscillation_val"] = pd.to_numeric(df_indexes["oscillation_val"])
+    df_indexes["rising_shares_number"] = pd.to_numeric(df_indexes["rising_shares_number"])
+    df_indexes["falling_shares_number"] = pd.to_numeric(df_indexes["falling_shares_number"])
+    df_indexes["stable_shares_number"] = pd.to_numeric(df_indexes["stable_shares_number"])
+    df_indexes.rename(columns={"trade_date": "refdate", "ticker_symbol": "symbol"}, inplace=True)
+
+    df_iopv = parser.data["IOPVInf"]
+    df_iopv["trade_date"] = pd.to_datetime(df_iopv["trade_date"])
+    df_iopv["security_id"] = pd.to_numeric(df_iopv["security_id"])
+    df_iopv["security_proprietary"] = pd.to_numeric(df_iopv["security_proprietary"])
+    df_iopv["open_price"] = pd.to_numeric(df_iopv["open_price"])
+    df_iopv["min_price"] = pd.to_numeric(df_iopv["min_price"])
+    df_iopv["max_price"] = pd.to_numeric(df_iopv["max_price"])
+    df_iopv["average_price"] = pd.to_numeric(df_iopv["average_price"])
+    df_iopv["close_price"] = pd.to_numeric(df_iopv["close_price"])
+    df_iopv["last_price"] = pd.to_numeric(df_iopv["last_price"])
+    df_iopv["oscillation_val"] = pd.to_numeric(df_iopv["oscillation_val"])
+    df_iopv.rename(columns={"trade_date": "refdate", "ticker_symbol": "symbol"}, inplace=True)
+
+    df_bdr = parser.data["BDRInf"]
+    df_bdr["trade_date"] = pd.to_datetime(df_bdr["trade_date"])
+    df_bdr["security_id"] = pd.to_numeric(df_bdr["security_id"])
+    df_bdr["security_proprietary"] = pd.to_numeric(df_bdr["security_proprietary"])
+    df_bdr["ref_price"] = pd.to_numeric(df_bdr["ref_price"])
+    df_bdr.rename(columns={"trade_date": "refdate", "ticker_symbol": "symbol"}, inplace=True)
 
     return parser.data
 
