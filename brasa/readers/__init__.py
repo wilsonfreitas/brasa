@@ -10,6 +10,7 @@ from .helpers import (
     read_b3_cdi,
     read_b3_futures_settlement_prices,
     read_b3_trades_intraday,
+    read_b3_economic_indicators_price,
 )
 
 def null_reader(*args, **kwargs):

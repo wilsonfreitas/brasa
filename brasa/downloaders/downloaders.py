@@ -90,6 +90,22 @@ class SettlementPricesDownloader(DatetimeDownloader):
         return temp
 
 
+class B3FilesURLDownloader(DatetimeDownloader):
+    def __init__(self, url, verify_ssl, **kwargs):
+        super().__init__(url, verify_ssl, **kwargs)
+
+    @property
+    def url(self) -> str:
+        return f'https://arquivos.b3.com.br/api/download/?token={self._response1["token"]}'
+
+    def download(self) -> IO | None:
+        res = requests.get(self.refdate.strftime(self._url))
+        if res.status_code != 200:
+            return None
+        self._response1 = res.json()
+        return super().download()
+
+
 class PreparedURLDownloader(SimpleDownloader):
     def download(self, refdate=None):
         url = self.attrs["url"]
@@ -128,45 +144,6 @@ class PreparedURLDownloader(SimpleDownloader):
         temp.write(content)
         temp.seek(0)
         return name, temp, status_code
-
-
-class B3FilesURLDownloader(SimpleDownloader):
-    calendar = bizdays.Calendar.load("ANBIMA")
-
-    def download(self, refdate=None):
-        filename = self.attrs.get("filename")
-        refdate = refdate or self.get_refdate()
-        logging.info("refdate %s", refdate)
-        date = refdate.strftime("%Y-%m-%d")
-        url = f"https://arquivos.b3.com.br/api/download/requestname?fileName={filename}&date={date}&recaptchaToken="
-        res = requests.get(url)
-        msg = "status_code = {} url = {}".format(res.status_code, url)
-        logg = logging.warn if res.status_code != 200 else logging.info
-        logg(msg)
-        if res.status_code != 200:
-            return None, None, res.status_code, refdate
-        ret = res.json()
-        url = f'https://arquivos.b3.com.br/api/download/?token={ret["token"]}'
-        verify_ssl = self.attrs.get("verify_ssl", True)
-        fname, temp_file, status_code, res = download_url(url, verify_ssl=verify_ssl)
-        if res.status_code != 200:
-            return None, None, res.status_code, refdate
-        f_fname = self.get_fname(fname, refdate)
-        logging.info(
-            "Returned from download %s %s %s %s",
-            f_fname,
-            temp_file,
-            status_code,
-            refdate,
-        )
-        return f_fname, temp_file, status_code, refdate
-
-    def get_refdate(self):
-        offset = self.attrs.get("offset", 0)
-        refdate = self.calendar.offset(self.now, offset)
-        refdate = datetime(refdate.year, refdate.month, refdate.day)
-        refdate = pytz.timezone("America/Sao_Paulo").localize(refdate)
-        return refdate
 
 
 class VnaAnbimaURLDownloader(SimpleDownloader):
