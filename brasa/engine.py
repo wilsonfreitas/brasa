@@ -579,6 +579,16 @@ def get_fname_part(meta: CacheMetadata, df: pd.DataFrame) -> str:
     return fname_part
 
 
+def save_parquet_file(meta: CacheMetadata, folder: str, processed_files_name: str, df: pd.DataFrame) -> None:
+    man = CacheManager()
+    fname_part = get_fname_part(meta, df)
+    fname = os.path.join(folder, man.parquet_file_name(fname_part))
+    meta.processed_files[processed_files_name] = fname
+    if df.shape[0] == 0:
+        raise Exception(f"No data for {meta.template} - {fname}")
+    df.to_parquet(man.cache_path(fname))
+
+
 def _read_marketdata(meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
     template = retrieve_template(meta.template)
     df = template.reader.read(meta)
@@ -586,16 +596,10 @@ def _read_marketdata(meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFra
     db_folder = man.db_folder(template)
     if isinstance(df, dict) and isinstance(db_folder, dict):
         for name,dx in df.items():
-            fname_part = get_fname_part(meta, dx)
-            fname = os.path.join(db_folder[name], man.parquet_file_name(fname_part))
-            meta.processed_files[template.reader.multi[name]] = fname
-            dx.to_parquet(man.cache_path(fname))
+            save_parquet_file(meta, db_folder[name], template.reader.multi[name], dx)
         df = {template.reader.multi[k]:v for k,v in df.items()}
     elif isinstance(df, pd.DataFrame) and isinstance(db_folder, str):
-        fname_part = get_fname_part(meta, df)
-        fname = os.path.join(db_folder, man.parquet_file_name(fname_part))
-        meta.processed_files["data"] = fname
-        df.to_parquet(man.cache_path(fname))
+        save_parquet_file(meta, db_folder, "data", df)
     else:
         df = None
     return df
