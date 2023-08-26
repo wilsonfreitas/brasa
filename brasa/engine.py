@@ -14,7 +14,6 @@ import pandas as pd
 import progressbar
 import yaml
 import regexparser
-import duckdb
 
 from brasa.util import KwargsIterator, generate_checksum_for_template, generate_checksum_from_file, unzip_recursive
 
@@ -325,11 +324,6 @@ class CacheManager(Singleton):
     def db_path(self, name: str) -> str:
         return os.path.join(self.cache_path(self.db_folder()), name)
 
-    def create_db(self) -> None:
-        db_conn = duckdb.connect(database=self.cache_path(self.db_filename), read_only=False)
-        db_conn.commit()
-        db_conn.close()
-
     def create_meta_db(self) -> None:
         db_conn = sqlite3.connect(database=self.cache_path(self.meta_db_filename))
         c = db_conn.cursor()
@@ -337,10 +331,6 @@ class CacheManager(Singleton):
             c.executescript(f.read())
         db_conn.commit()
         db_conn.close()
-
-    @property
-    def db_connection(self) -> duckdb.DuckDBPyConnection:
-        return duckdb.connect(database=self.cache_path(self.db_filename), read_only=False)
 
     @property
     def meta_db_connection(self) -> sqlite3.Connection:
