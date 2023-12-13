@@ -1,0 +1,8 @@
+id: b3-curves-di1-standard
+description: Curva de juros prefixados com vértices padronizados
+etl:
+  function: brasa.etl.create_b3_curves_standard_terms
+  curves_dataset: b3-curves-di1
+  standard_terms: [21, 63, 126, 252, 504, 756, 1260, 2520, 3780, 5040]
+  symbol_prefix: DI1T
+  calendar: ANBIMA

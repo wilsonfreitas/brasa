@@ -3,6 +3,7 @@ from datetime import datetime
 
 from bcb import sgs, PTAX
 import pandas as pd
+import numpy as np
 import pyarrow
 import pyarrow.compute as pc
 from bizdays import Calendar
@@ -139,3 +140,33 @@ def create_b3_curves_di1(handler: MarketDataETL):
     write_dataset(tb_di1_curve.to_pandas(), handler.template_id)
 
 
+def interp_ff(term, rates, terms):
+    log_pu = np.log((1 + rates)**(terms/252))
+    pu = np.exp(np.interp(term, terms, log_pu))
+    return pu ** (252 / term) - 1
+
+
+def create_b3_curves_standard_terms(handler: MarketDataETL):
+    tb_di1_curve = (get_dataset(handler.curves_dataset)
+                    .to_table())
+    business_days_standard = np.array(handler.standard_terms)
+    symbols_standard = pyarrow.array([f"{handler.symbol_prefix}{d}" for d in business_days_standard])
+    cal = Calendar.load(handler.calendar)
+    tables = []
+    for date in tb_di1_curve.column("refdate").unique():
+        rates = tb_di1_curve.filter(pc.field("refdate") == date).column("adjusted_tax").to_numpy()
+        terms = tb_di1_curve.filter(pc.field("refdate") == date).column("business_days").to_numpy()
+        interp_rates = pyarrow.array(interp_ff(business_days_standard, rates, terms))
+        mat_dates = pyarrow.array(cal.offset(date.as_py(), business_days_standard))
+        ta = pyarrow.table([
+            pyarrow.array([date.as_py()] * len(interp_rates)),
+            symbols_standard,
+            mat_dates,
+            pyarrow.array(business_days_standard),
+            interp_rates
+        ], names=["refdate", "symbol", "maturity_date", "business_days", "adjusted_tax"])
+        tables.append(ta)
+    tb_di1_curve_standard = pyarrow.concat_tables(tables).sort_by([
+        ("refdate", "ascending"), ("business_days", "ascending")
+    ])
+    write_dataset(tb_di1_curve_standard.to_pandas(), handler.template_id)
