@@ -137,3 +137,4 @@ legacy/test_parsers_td.py
 legacy/test_readers_csv.py
 legacy/test_unzip.py
 .brasa-cache/
+.vscode/launch.json
