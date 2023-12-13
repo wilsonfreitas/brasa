@@ -1,0 +1,8 @@
+id: b3-futures-dap
+description: Futuros de Juros Real (Cupom de IPCA) - DAP
+etl:
+  function: brasa.etl.create_b3_rate_futures
+  futures_dataset: b3-futures-settlement-prices
+  maturity_day: 15th day
+  compounding: discrete
+  commodity: DAP

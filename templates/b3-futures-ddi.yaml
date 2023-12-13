@@ -1,0 +1,8 @@
+id: b3-futures-ddi
+description: Futuros de Cupom Cambial de Um Dia - DDI
+etl:
+  function: brasa.etl.create_b3_rate_futures
+  futures_dataset: b3-futures-settlement-prices
+  maturity_day: first day
+  compounding: simple
+  commodity: DDI

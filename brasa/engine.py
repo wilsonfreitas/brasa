@@ -207,6 +207,14 @@ class CacheMetadata:
         return generate_checksum_for_template(self.template, self.download_args, self.extra_key)
 
 
+class MarketDataETL:
+    def __init__(self, etl: dict, template_id: str) -> None:
+        for n in etl.keys():
+            self.__dict__[n] = etl[n]
+        self.template_id = template_id
+        self.process_function = load_function_by_name(etl["function"])
+
+
 class MarketDataReader:
     def __init__(self, reader: dict):
         for n in reader.keys():
@@ -272,6 +280,7 @@ class MarketDataTemplate:
         self.has_downloader = False
         self.has_parts = False
         self.id = ""
+        self.is_etl = False
         self.template = self.load_template()
 
     def load_template(self) -> dict:
@@ -290,6 +299,9 @@ class MarketDataTemplate:
             elif n == "parts":
                 self.has_parts = True
                 self.parts = template[n]
+            elif n == "etl":
+                self.etl = MarketDataETL(template[n], template["id"])
+                self.is_etl = True
         if self.has_reader:
             if self.has_parts:
                 self.reader.set_parts(self.parts)
@@ -497,7 +509,7 @@ class CacheManager(Singleton):
 
 def retrieve_template(template_name) -> MarketDataTemplate:
     dir = os.path.join(os.path.dirname(__file__), "../templates")
-    sel = [f for f in os.listdir(dir) if template_name in f]
+    sel = [f for f in os.listdir(dir) if f"{template_name}.yaml" == f]
     if len(sel) == 0:
         raise ValueError(f"Invalid template {template_name}")
     else:
@@ -663,3 +675,8 @@ def process_marketdata(template_name: str) -> None:
             for err in errors:
                 # cache.remove_meta(err[0])
                 print(err[0].download_args, err[1])
+
+
+def process_etl(template_name: str) -> None:
+    template = retrieve_template(template_name)
+    template.etl.process_function(template.etl)

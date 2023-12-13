@@ -1,0 +1,8 @@
+id: b3-futures-di1
+description: Futuros de Taxa DI - DI1
+etl:
+  function: brasa.etl.create_b3_rate_futures
+  futures_dataset: b3-futures-settlement-prices
+  maturity_day: first day
+  compounding: discrete
+  commodity: DI1

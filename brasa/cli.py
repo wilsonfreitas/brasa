@@ -2,7 +2,7 @@
 import argparse
 from datetime import datetime
 
-from . import download_marketdata, process_marketdata
+from . import download_marketdata, process_marketdata, process_etl, retrieve_template
 from .util import DateRangeParser
 
 parser = argparse.ArgumentParser()
@@ -32,4 +32,8 @@ if __name__ == "__main__":
             download_marketdata(template, refdate=date_range)
     elif args.command == "process":
         for template in args.template:
-            process_marketdata(template)
+            _template = retrieve_template(template)
+            if _template.is_etl:
+                process_etl(template)
+            else:
+                process_marketdata(template)

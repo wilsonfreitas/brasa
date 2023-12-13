@@ -1,0 +1,5 @@
+id: b3-futures-dol-first-generic
+description: Primeiro Futuro de Dólar
+etl:
+  function: brasa.etl.create_b3_futures_dol_first_generic
+  futures_dataset: b3-futures-dol

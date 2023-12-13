@@ -1,0 +1,7 @@
+id: b3-futures-dol
+description: Futuros de Dólar - DOL
+etl:
+  function: brasa.etl.create_b3_price_futures
+  futures_dataset: b3-futures-settlement-prices
+  maturity_day: first day
+  commodity: DOL
