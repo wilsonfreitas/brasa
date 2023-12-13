@@ -1,0 +1,5 @@
+id: bcb-data
+description: >
+  | Dataset com dados do BCB: dólar, CDI, SELIC, SETA, IPCA, IGPM
+etl:
+  function: brasa.etl.create_bcb_data
