@@ -3,6 +3,7 @@ from datetime import datetime
 
 from bcb import sgs, PTAX
 import pandas as pd
+import pyarrow
 import pyarrow.compute as pc
 from bizdays import Calendar
 
@@ -115,4 +116,26 @@ def create_bcb_data(handler: MarketDataETL):
     df_bcb = pd.concat([dd_cdi, dd_selic, dd_seta, dd_ipca, dd_igpm, dd_dol])
 
     write_dataset(df_bcb, handler.template_id)
+
+
+def create_b3_curves_di1(handler: MarketDataETL):
+    tb_di1 = (get_dataset(handler.futures_dataset)
+              .filter(pc.field("business_days") > 0)
+              .to_table())
+    tb_cdi = (get_dataset(handler.bcb_dataset)
+              .filter(pc.field("symbol") == 'CDI')
+              .filter(pc.field("refdate").isin(tb_di1.column("refdate").unique().to_pylist()))
+              .to_table())
+    cal = Calendar.load(handler.calendar)
+    tb_v1 = (tb_cdi
+                .set_column(1, "adjusted_tax", pc.divide(tb_cdi.column("value"), 100))
+                .append_column("maturity_date", pyarrow.array(cal.offset(tb_cdi.column("refdate").to_pylist(), 1)))
+                .append_column("business_days", pyarrow.array([1] * tb_cdi.shape[0]))
+                .select(["refdate", "symbol", "maturity_date", "business_days", "adjusted_tax"]))
+    tb_di1_curve = pyarrow.concat_tables([
+        tb_v1, tb_di1.select(["refdate", "symbol", "maturity_date", "business_days", "adjusted_tax"])
+    ]).sort_by([("refdate", "ascending"), ("business_days", "ascending")])
+
+    write_dataset(tb_di1_curve.to_pandas(), handler.template_id)
+
 
