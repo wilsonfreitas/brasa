@@ -1,13 +1,13 @@
 
-from datetime import datetime
 import pandas as pd
+import pyarrow
 import pyarrow.dataset as ds
 
 from .engine import CacheManager
 
 __all__ = [
     # "BrasaDB", "get_timeseries",
-    "get_dataset"]
+    "get_dataset", "write_dataset"]
 
 
 # class BrasaDB:
@@ -65,3 +65,9 @@ __all__ = [
 def get_dataset(name: str) -> ds.Dataset:
     man = CacheManager()
     return ds.dataset(man.db_path(name), format="parquet")
+
+
+def write_dataset(df: pd.DataFrame, name: str, format: str = "parquet") -> None:
+    man = CacheManager()
+    tb = pyarrow.Table.from_pandas(df)
+    ds.write_dataset(tb, man.db_path(name), format=format, existing_data_behavior="overwrite_or_ignore")
