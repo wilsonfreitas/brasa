@@ -1,0 +1,32 @@
+id: b3-equity-volatility-surface
+filename: ~
+filetype: CUSTOM
+description: Arquivo de Superfície de Volatilidade de Ações
+calendar: Brazil/B3
+downloader:
+  function: brasa.downloaders.datetime_download
+  url: http://www.bmf.com.br/Ftp/IPN/GPS/VolatilidadedeEquities/VE%y%m%d.ex_
+  format: zip
+  args:
+    refdate: ~
+reader:
+  function: brasa.readers.read_b3_equity_volatility_surface
+  locale: pt
+  separator: ";"
+  skip: 1
+  comment: ""
+fields:
+  - name: underlying
+    description: Nome do ativo objeto
+  - name: type
+    description: Tipo da opção (C = Call, V = Put)
+  - name: maturity_date
+    description: Data de vencimento da opção
+  - name: business_days
+    description: Dias úteis até o vencimento
+  - name: current_days
+    description: Dias corridos até o vencimento
+  - name: delta
+    description: Delta da opção
+  - name: volatility
+    description: Volatilidade

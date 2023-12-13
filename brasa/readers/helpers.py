@@ -304,3 +304,22 @@ def read_b3_economic_indicators_price(meta: CacheMetadata) -> pd.DataFrame:
     return df
 
 
+def _read_b3_equity_options_files(meta: CacheMetadata) -> pd.DataFrame:
+    fname = meta.downloaded_files[0]
+    man = CacheManager()
+    fname = man.cache_path(fname)
+    template = retrieve_template(meta.template)
+    reader = template.reader
+    df = pd.read_csv(fname,
+                     encoding=reader.encoding,
+                     header=None,
+                     skiprows=reader.skip,
+                     sep=reader.separator,
+                     names=reader.fields.names, dtype_backend="pyarrow")
+    df["maturity_date"] = pd.to_datetime(df["maturity_date"], format="%Y%m%d", errors="coerce")
+    df["refdate"] = meta.download_args["refdate"]
+    return df
+
+
+read_b3_equity_volatility_surface = _read_b3_equity_options_files
+read_b3_equity_options = _read_b3_equity_options_files

@@ -1,0 +1,32 @@
+id: b3-equity-options
+filename: ~
+filetype: CUSTOM
+description: Arquivo de Prêmio de opções de Ações
+calendar: Brazil/B3
+downloader:
+  function: brasa.downloaders.datetime_download
+  url: http://www.bmf.com.br/Ftp/IPN/GPS/OpcoesdeEquities/PE%y%m%d.ex_
+  format: zip
+  args:
+    refdate: ~
+reader:
+  function: brasa.readers.read_b3_equity_options
+  locale: pt
+  separator: ";"
+  skip: 1
+  comment: ""
+fields:
+  - name: symbol
+    description: Símbolo da opção
+  - name: type
+    description: Tipo da opção (C = Call, V = Put)
+  - name: option_style
+    description: Estilo da opção (E = European, A = American)
+  - name: maturity_date
+    description: Data de vencimento da opção
+  - name: strike
+    description: Preço de exercício da opção
+  - name: theoretic_price
+    description: Prêmio teórico da opção
+  - name: volatility
+    description: Volatilidade
