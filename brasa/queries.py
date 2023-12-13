@@ -3,7 +3,7 @@ from datetime import datetime
 import pandas as pd
 import pyarrow.dataset as ds
 
-from brasa.engine import CacheManager
+from .engine import CacheManager
 
 __all__ = [
     # "BrasaDB", "get_timeseries",

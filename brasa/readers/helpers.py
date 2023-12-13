@@ -4,15 +4,14 @@ from typing import IO
 
 import pandas as pd
 
-from brasa.engine import CacheManager, CacheMetadata, MarketDataReader, retrieve_template
-from brasa.parsers.b3.bvbg028 import BVBG028Parser
-from brasa.parsers.b3.bvbg086 import BVBG086Parser
-from brasa.parsers.b3.bvbg087 import BVBG087Parser
-from brasa.parsers.b3.cdi import CDIParser
-from brasa.parsers.b3.cotahist import COTAHISTParser
-from brasa.parsers.b3.futures_settlement_prices import \
-    future_settlement_prices_parser
-from brasa.util import SuppressUserWarnings
+from ..engine import CacheManager, CacheMetadata, MarketDataReader, retrieve_template
+from ..parsers.b3.bvbg028 import BVBG028Parser
+from ..parsers.b3.bvbg086 import BVBG086Parser
+from ..parsers.b3.bvbg087 import BVBG087Parser
+from ..parsers.b3.cdi import CDIParser
+from ..parsers.b3.cotahist import COTAHISTParser
+from ..parsers.b3.futures_settlement_prices import future_settlement_prices_parser
+from ..util import SuppressUserWarnings
 
 
 def read_json(reader: MarketDataReader, fname: IO | str) -> pd.DataFrame:

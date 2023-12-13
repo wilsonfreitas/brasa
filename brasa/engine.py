@@ -15,7 +15,7 @@ import progressbar
 import yaml
 import regexparser
 
-from brasa.util import KwargsIterator, generate_checksum_for_template, generate_checksum_from_file, unzip_recursive
+from .util import KwargsIterator, generate_checksum_for_template, generate_checksum_from_file, unzip_recursive
 
 
 def json_convert_from_object(obj):

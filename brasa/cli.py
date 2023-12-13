@@ -1,9 +1,9 @@
 
 import argparse
 from datetime import datetime
-import brasa
 
-from brasa.util import DateRangeParser
+from . import download_marketdata, process_marketdata
+from .util import DateRangeParser
 
 parser = argparse.ArgumentParser()
 
@@ -29,7 +29,7 @@ if __name__ == "__main__":
         else:
             date_range = [datetime.strptime(d, "%Y-%m-%d") for d in args.date]
         for template in args.template:
-            brasa.download_marketdata(template, refdate=date_range)
+            download_marketdata(template, refdate=date_range)
     elif args.command == "process":
         for template in args.template:
-            brasa.process_marketdata(template)
+            process_marketdata(template)
