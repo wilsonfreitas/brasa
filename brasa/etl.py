@@ -56,17 +56,19 @@ def create_b3_price_futures(handler: MarketDataETL):
     write_dataset(df_contracts, handler.template_id)
 
 
-def create_b3_futures_dol_first_generic(handler: MarketDataETL):
+def create_b3_futures_first_generic(handler: MarketDataETL):
     df_contracts = get_dataset(handler.futures_dataset).to_table().to_pandas()
 
     first = df_contracts.groupby("refdate").nth(0)
     second = df_contracts.groupby("refdate").nth(1)
-    merged = first.merge(second, on="refdate", how="left")
-    first_contracts = first.copy().reset_index(drop=True)
-    second_contracts = second.copy().reset_index(drop=True)
-    first_contracts.loc[merged["business_days_x"] <= 1, :] = second_contracts.loc[merged["business_days_x"] <= 1, :]
+    merged = first.merge(second, on="refdate", how="left").set_index("refdate")
+    first_contracts = first.copy().reset_index(drop=True).set_index("refdate")
+    second_contracts = second.copy().reset_index(drop=True).set_index("refdate")
+    idx = merged.index[merged["business_days_x"].isin(handler.business_days_to_ignore)]
+    first_contracts.loc[idx, :] = second_contracts.loc[idx, :]
     first_contracts["ref"] = first_contracts["symbol"]
-    first_contracts["symbol"] = "DOLT01"
+    first_contracts["symbol"] = handler.first_generic_symbol
+    first_contracts.reset_index(inplace=True)
 
     write_dataset(first_contracts, handler.template_id)
 
