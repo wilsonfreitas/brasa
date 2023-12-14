@@ -147,15 +147,15 @@ def interp_ff(term, rates, terms):
 
 
 def create_b3_curves_standard_terms(handler: MarketDataETL):
-    tb_di1_curve = (get_dataset(handler.curves_dataset)
+    tb_curve = (get_dataset(handler.curves_dataset)
                     .to_table())
     business_days_standard = np.array(handler.standard_terms)
     symbols_standard = pyarrow.array([f"{handler.symbol_prefix}{d}" for d in business_days_standard])
     cal = Calendar.load(handler.calendar)
     tables = []
-    for date in tb_di1_curve.column("refdate").unique():
-        rates = tb_di1_curve.filter(pc.field("refdate") == date).column("adjusted_tax").to_numpy()
-        terms = tb_di1_curve.filter(pc.field("refdate") == date).column("business_days").to_numpy()
+    for date in tb_curve.column("refdate").unique():
+        rates = tb_curve.filter(pc.field("refdate") == date).column("adjusted_tax").to_numpy()
+        terms = tb_curve.filter(pc.field("refdate") == date).column("business_days").to_numpy()
         interp_rates = pyarrow.array(interp_ff(business_days_standard, rates, terms))
         mat_dates = pyarrow.array(cal.offset(date.as_py(), business_days_standard))
         ta = pyarrow.table([
@@ -166,7 +166,28 @@ def create_b3_curves_standard_terms(handler: MarketDataETL):
             interp_rates
         ], names=["refdate", "symbol", "maturity_date", "business_days", "adjusted_tax"])
         tables.append(ta)
-    tb_di1_curve_standard = pyarrow.concat_tables(tables).sort_by([
+    tb_curve_standard = pyarrow.concat_tables(tables).sort_by([
         ("refdate", "ascending"), ("business_days", "ascending")
     ])
-    write_dataset(tb_di1_curve_standard.to_pandas(), handler.template_id)
+    write_dataset(tb_curve_standard.to_pandas(), handler.template_id)
+
+
+def create_rate_returns(handler: MarketDataETL):
+    tb_curve_standard = (get_dataset(handler.curves_dataset)
+                    .to_table())
+    tables = []
+    for symbol in tb_curve_standard.column("symbol").unique():
+        rates = tb_curve_standard.filter(pc.field("symbol") == symbol).column("adjusted_tax").to_numpy()
+        dates = tb_curve_standard.filter(pc.field("symbol") == symbol).column("refdate")
+        symbols = tb_curve_standard.filter(pc.field("symbol") == symbol).column("symbol")
+        returns = np.concatenate([np.array([np.nan]), np.diff(rates)])
+        ta = pyarrow.table([
+            dates,
+            symbols,
+            pyarrow.array(returns)
+        ], names=["refdate", "symbol", "returns"])
+        tables.append(ta)
+
+    tb_curve_standard_returns = (pyarrow.concat_tables(tables)
+                                 .sort_by([("refdate", "ascending"), ("symbol", "ascending")]))
+    write_dataset(tb_curve_standard_returns.to_pandas(), handler.template_id)

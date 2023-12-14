@@ -1,0 +1,5 @@
+id: b3-curves-di1-standard-returns
+description: Retornos dos juros prefixados com vértices padronizados
+etl:
+  function: brasa.etl.create_rate_returns
+  curves_dataset: b3-curves-di1-standard
