@@ -140,6 +140,16 @@ def create_b3_curves_di1(handler: MarketDataETL):
     write_dataset(tb_di1_curve.to_pandas(), handler.template_id)
 
 
+def create_b3_curves(handler: MarketDataETL):
+    tb = (get_dataset(handler.futures_dataset)
+          .filter(pc.field("business_days") > 0)
+          .to_table())
+    tb_curve = (tb
+                .select(["refdate", "symbol", "maturity_date", "business_days", "adjusted_tax"])
+                .sort_by([("refdate", "ascending"), ("business_days", "ascending")]))
+    write_dataset(tb_curve.to_pandas(), handler.template_id)
+
+
 def interp_ff(term, rates, terms):
     log_pu = np.log((1 + rates)**(terms/252))
     pu = np.exp(np.interp(term, terms, log_pu))

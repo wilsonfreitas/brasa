@@ -1,0 +1,8 @@
+id: b3-curves-dap-standard
+description: Curva de juros reais com vértices padronizados
+etl:
+  function: brasa.etl.create_b3_curves_standard_terms
+  curves_dataset: b3-curves-dap
+  standard_terms: [252, 504]
+  symbol_prefix: DAPT
+  calendar: ANBIMA
