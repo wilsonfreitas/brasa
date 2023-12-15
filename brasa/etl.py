@@ -216,3 +216,26 @@ def copy_dataset_and_drop_duplicates(handler: MarketDataETL):
     df_futures = ds_register.to_table(columns=handler.columns).to_pandas().drop_duplicates()
     write_dataset(df_futures, handler.template_id)
 
+
+def create_b3_price_futures_from_register(handler: MarketDataETL):
+    tb = get_dataset(handler.futures_dataset).to_table()
+    symbols = tb.filter(pc.field("instrument_asset") == handler.commodity).column("symbol").unique()
+    df_futures_settl = (tb.filter(pc.field("instrument_asset") == handler.commodity)
+                        .select(["symbol", "maturity_date"])
+                        .to_pandas()
+                        .drop_duplicates())
+    tb_futures = (get_dataset(handler.futures_settlement_dataset)
+                  .filter(pc.field("symbol").isin(symbols))
+                  .to_table())
+    df_futures = tb_futures.to_pandas()
+    df_futures = df_futures.merge(df_futures_settl, on="symbol", how="left")
+    cal = Calendar()
+    bcal = Calendar.load(handler.calendar)
+    adj_maturity = cal.following(df_futures["maturity_date"])
+    df_futures["business_days"] = bcal.bizdays(df_futures['refdate'], adj_maturity)
+    df_futures["calendar_days"] = cal.bizdays(df_futures['refdate'], adj_maturity)
+    df_futures.sort_values(["refdate", "maturity_date"], inplace=True)
+    df_futures = df_futures[["refdate", "symbol", "maturity_date", "settlement_price", "business_days",
+                                     "calendar_days"]]
+    write_dataset(df_futures, handler.template_id)
+

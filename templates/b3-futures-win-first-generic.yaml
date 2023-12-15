@@ -1,0 +1,7 @@
+id: b3-futures-win-first-generic
+description: Primeiro Futuro de Índice
+etl:
+  function: brasa.etl.create_b3_futures_first_generic
+  futures_dataset: b3-futures-win
+  business_days_to_ignore: [0]
+  first_generic_symbol: WINT01
