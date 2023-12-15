@@ -209,3 +209,10 @@ def create_cotahist_dataset(handler: MarketDataETL):
     tb_cotahist = pyarrow.concat_tables([tb_cotahist_yearly, tb_cotahist_daily])
     tb_cotahist.sort_by([("refdate", "ascending")])
     write_dataset(tb_cotahist.to_pandas(), handler.template_id)
+
+
+def copy_dataset_and_drop_duplicates(handler: MarketDataETL):
+    ds_register = get_dataset(handler.futures_dataset)
+    df_futures = ds_register.to_table(columns=handler.columns).to_pandas().drop_duplicates()
+    write_dataset(df_futures, handler.template_id)
+
