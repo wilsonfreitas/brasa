@@ -1,0 +1,6 @@
+id: b3-cotahist
+description: Dataset dos arquivos COTAHIST
+etl:
+  function: brasa.etl.create_cotahist_dataset
+  yearly_dataset: b3-cotahist-yearly
+  daily_dataset: b3-cotahist-daily

@@ -201,3 +201,11 @@ def create_rate_returns(handler: MarketDataETL):
     tb_curve_standard_returns = (pyarrow.concat_tables(tables)
                                  .sort_by([("refdate", "ascending"), ("symbol", "ascending")]))
     write_dataset(tb_curve_standard_returns.to_pandas(), handler.template_id)
+
+
+def create_cotahist_dataset(handler: MarketDataETL):
+    tb_cotahist_yearly = get_dataset(handler.yearly_dataset).to_table()
+    tb_cotahist_daily = get_dataset(handler.daily_dataset).to_table()
+    tb_cotahist = pyarrow.concat_tables([tb_cotahist_yearly, tb_cotahist_daily])
+    tb_cotahist.sort_by([("refdate", "ascending")])
+    write_dataset(tb_cotahist.to_pandas(), handler.template_id)
