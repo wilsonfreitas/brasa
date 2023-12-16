@@ -1,0 +1,6 @@
+id: b3-equities-returns
+description: Dataset de retornos de ações
+etl:
+  function: brasa.etl.create_equities_returns
+  equities_dataset: b3-equities-spot-market
+  marketdata_dataset: b3-bvbg086

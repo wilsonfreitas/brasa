@@ -1,0 +1,38 @@
+id: b3-equity-register
+description: Dataset de dados cadastrais de ações
+etl:
+  function: brasa.etl.copy_dataset_and_drop_duplicates
+  futures_dataset: b3-bvbg028-equities
+  columns:
+    - refdate
+    - security_id
+    - security_proprietary
+    - security_market
+    - instrument_asset
+    - instrument_asset_description
+    - instrument_market
+    - instrument_segment
+    - instrument_description
+    - security_category
+    - isin
+    - distribution_id
+    - cfi_code
+    - specification_code
+    - corporation_name
+    - symbol
+    - payment_type
+    - allocation_lot_size
+    - price_factor
+    - trading_start_date
+    - trading_end_date
+    - corporate_action_start_date
+    - ex_distribution_number
+    - custody_treatment_type
+    - trading_currency
+    - market_capitalisation
+    - close
+    - open
+    - days_to_settlement
+    - right_issue_price
+    - instrument_type
+    - governance_indicator

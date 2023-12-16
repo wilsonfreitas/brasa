@@ -239,3 +239,33 @@ def create_b3_price_futures_from_register(handler: MarketDataETL):
                                      "calendar_days"]]
     write_dataset(df_futures, handler.template_id)
 
+
+def create_equities_spot_market_dataset(handler: MarketDataETL):
+    tb = get_dataset(handler.equities_dataset)\
+        .filter(pc.field("instrument_market") == 10)\
+        .filter(pc.field("instrument_segment") == 1)\
+        .filter(pc.field("instrument_asset") != "TAXA")\
+        .filter(pc.field("trading_start_date") != datetime(9999, 12, 31))\
+        .filter(pc.field("security_category").isin(pyarrow.array([1, 11, 6, 21, 3, 13])))\
+        .to_table()
+    write_dataset(tb.to_pandas(), handler.template_id)
+
+
+def create_equities_returns(handler: MarketDataETL):
+    tb_equities = get_dataset(handler.equities_dataset).to_table()
+    symbols = tb_equities.column("symbol").unique()
+    ds_returns = get_dataset(handler.marketdata_dataset)
+    cols = [
+        "refdate",
+        "symbol",
+        "oscillation_percentage",
+    ]
+    df_returns = ds_returns\
+        .filter(pc.field("symbol").isin(symbols))\
+        .filter(~pc.is_null(pc.field("oscillation_percentage")))\
+        .to_table(columns=cols)\
+        .to_pandas()
+    df_returns["pct_return"] = df_returns["oscillation_percentage"] / 100
+    df_returns["log_return"] = np.log(1 + df_returns["pct_return"])
+    df_returns.sort_values(["refdate", "symbol"], inplace=True)
+    write_dataset(df_returns[["refdate", "symbol", "pct_return", "log_return"]], handler.template_id)

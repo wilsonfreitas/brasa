@@ -1,0 +1,14 @@
+id: b3-equities-spot-market
+description: >
+  | Dataset de dados cadastrais de ações fitrando mercado à vista e
+  | instrumentos válidos:
+  |
+  | 1 - BDR
+  | 3 - ETF EQUITIES
+  | 6 - FUNDS
+  | 11 - SHARES
+  | 13 - UNIT
+  | 21 - ETF FOREIGN INDEX
+etl:
+  function: brasa.etl.create_equities_spot_market_dataset
+  equities_dataset: b3-equity-register
