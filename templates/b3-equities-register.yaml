@@ -1,4 +1,4 @@
-id: b3-equity-register
+id: b3-equities-register
 description: Dataset de dados cadastrais de ações
 etl:
   function: brasa.etl.copy_dataset_and_drop_duplicates

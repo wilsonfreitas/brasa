@@ -11,4 +11,4 @@ description: >
   | 21 - ETF FOREIGN INDEX
 etl:
   function: brasa.etl.create_equities_spot_market_dataset
-  equities_dataset: b3-equity-register
+  equities_dataset: b3-equities-register
