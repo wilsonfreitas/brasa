@@ -1,0 +1,5 @@
+id: b3-indexes-returns
+description: Dataset de retornos de índices de ações da B3
+etl:
+  function: brasa.etl.create_indexes_returns
+  indexes_dataset: b3-bvbg087-indexes_info

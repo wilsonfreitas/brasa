@@ -269,3 +269,19 @@ def create_equities_returns(handler: MarketDataETL):
     df_returns["log_return"] = np.log(1 + df_returns["pct_return"])
     df_returns.sort_values(["refdate", "symbol"], inplace=True)
     write_dataset(df_returns[["refdate", "symbol", "pct_return", "log_return"]], handler.template_id)
+
+
+def create_indexes_returns(handler: MarketDataETL):
+    cols = [
+        "refdate",
+        "symbol",
+        "oscillation_val",
+    ]
+    df_index = get_dataset(handler.indexes_dataset)\
+        .to_table(columns=cols)\
+        .to_pandas()
+    df_index
+    df_index["pct_return"] = df_index["oscillation_val"]
+    df_index["log_return"] = np.log(1 + df_index["pct_return"])
+    write_dataset(df_index[["refdate", "symbol", "pct_return", "log_return"]], handler.template_id)
+
