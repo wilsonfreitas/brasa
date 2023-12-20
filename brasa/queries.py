@@ -1,14 +1,17 @@
 
+from datetime import datetime
 import pandas as pd
 import pyarrow
 import pyarrow.dataset as ds
+import pyarrow.compute as pc
+from bizdays import Calendar, set_option
 
 from .engine import CacheManager
 
-__all__ = [
-    # "BrasaDB", "get_timeseries",
-    "get_dataset", "write_dataset"]
+__all__ = ["get_returns", "get_dataset", "write_dataset"]
 
+
+set_option("mode", "pandas")
 
 # class BrasaDB:
 #     connection: duckdb.DuckDBPyConnection | None = None
@@ -60,6 +63,29 @@ __all__ = [
 # order by refdate
 # """)
 #     return res.fetchdf().pivot(index="refdate", columns="symbol", values="close")
+
+
+def get_returns(symbols: str|list[str], start=None, end=None, calendar="B3") -> pd.DataFrame:
+    cal = Calendar.load(calendar)
+    if isinstance(symbols, str):
+        symbols = [symbols]
+    if start is None:
+        start = datetime(2000, 1, 1)
+    if end is None:
+        end = datetime.today()
+    df = get_dataset("brasa-returns")\
+            .filter(pc.field("symbol").isin(symbols))\
+            .filter(pc.field("refdate") >= start)\
+            .filter(pc.field("refdate") <= end)\
+            .to_table()\
+            .sort_by("refdate")\
+            .to_pandas()
+    df = df.pivot_table(values="returns", index="refdate", columns="symbol")
+    df.index.name = None
+    df.columns.name = None
+    idx = cal.seq(df.index[0], df.index[-1])
+    df = df.reindex(idx)
+    return df
 
 
 def get_dataset(name: str) -> ds.Dataset:
