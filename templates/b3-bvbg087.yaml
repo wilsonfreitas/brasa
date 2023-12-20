@@ -6,7 +6,8 @@ calendar: Brazil/B3
 locale: en
 downloader:
   function: brasa.downloaders.datetime_download
-  url: https://www.b3.com.br/pesquisapregao/download?filelist=IR%y%m%d.zip
+  # url: https://www.b3.com.br/pesquisapregao/download?filelist=IR%y%m%d.zip
+  url: http://www.bmf.com.br/Ftp/IPN/GPS/BVBG.087.01/IR%y%m%d.zip
   format: zip
   args:
     refdate: ~
