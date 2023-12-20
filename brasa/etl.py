@@ -307,3 +307,12 @@ def create_indexes_returns(handler: MarketDataETL):
     df_index["log_return"] = np.log(1 + df_index["pct_return"])
     write_dataset(df_index[["refdate", "symbol", "pct_return", "log_return"]], handler.template_id)
 
+
+def concat_datasets(handler: MarketDataETL):
+    names = handler.dataset_names
+    tables = []
+    for ds in handler.datasets:
+        tb = get_dataset(ds["name"]).scanner(columns=ds["columns"]).to_table().rename_columns(names)
+        tables.append(tb)
+    rets = pyarrow.concat_tables(tables)
+    write_dataset(rets.to_pandas(), handler.template_id)
