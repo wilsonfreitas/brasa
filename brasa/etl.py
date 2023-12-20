@@ -267,6 +267,28 @@ def create_equities_returns(handler: MarketDataETL):
         .to_pandas()
     df_returns["pct_return"] = df_returns["oscillation_percentage"] / 100
     df_returns["log_return"] = np.log(1 + df_returns["pct_return"])
+    # cotahist values to correct missing date 20210610 ----
+    df = get_dataset("b3-cotahist")\
+        .filter(pc.field("instrument_market") == 10)\
+        .filter(pc.field("refdate") >= datetime(2021, 6, 9))\
+        .filter(pc.field("refdate") <= datetime(2021, 6, 10))\
+        .scanner(["refdate", "symbol", "close", "distribution_id"])\
+        .to_table()\
+        .to_pandas()
+    symbols = df.groupby(["symbol"]).apply(lambda x: x.shape[0])
+    symbols_to_ignore = symbols[symbols == 1].index
+    df_clean = df[~df["symbol"].isin(symbols_to_ignore)]
+    symbols = df_clean.groupby(["symbol"]).apply(lambda x: len(x["distribution_id"].unique()))
+    symbols_to_use = symbols[symbols == 1].index
+    df_final = df[df["symbol"].isin(symbols_to_use)]
+    df_final = df_final\
+        .groupby(["symbol"])\
+        .apply(lambda x: pd.DataFrame([(x.refdate.iloc[1], x.close.iloc[1] / x.close.iloc[0] - 1)], columns=["refdate", "pct_return"]))\
+        .reset_index()
+    df_final = df_final[["refdate", "symbol", "pct_return"]]
+    df_final["log_return"] = np.log(1 + df_final["pct_return"])
+    # ----
+    df_returns = pd.concat([df_returns, df_final])
     df_returns.sort_values(["refdate", "symbol"], inplace=True)
     write_dataset(df_returns[["refdate", "symbol", "pct_return", "log_return"]], handler.template_id)
 
