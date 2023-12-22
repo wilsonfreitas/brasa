@@ -3,12 +3,14 @@ import abc
 import base64
 from datetime import datetime
 import gzip
+import io
 import json
 import os
 import re
 import shutil
 import sqlite3
 from typing import IO, Any, Callable
+from numpy import empty
 
 import pandas as pd
 import progressbar
@@ -522,6 +524,12 @@ def _download_marketdata(meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
     meta.download_args = kwargs
     meta.extra_key = template.downloader.extra_key
     fp, response = template.downloader.download(**kwargs)
+    fp.seek(0, io.SEEK_END)
+    size = fp.tell()
+    if size == 0:
+        raise Exception("Downloaded file is empty")
+    else:
+        fp.seek(0)
     meta.response = response
     if fp is None:
         return None
@@ -574,6 +582,10 @@ def get_fname_part(meta: CacheMetadata, df: pd.DataFrame) -> str:
     fmt = template.reader.output_filename_format
     if "refdate" in meta.download_args:
         fname_part = meta.download_args["refdate"].strftime(fmt)
+    elif template.id == "b3-company-info":
+        fname_part = f'{df["refdate"].iloc[0].strftime(fmt)}-{meta.download_args["issuingCompany"]}'
+    elif template.id == "b3-company-details":
+        fname_part = f'{df["refdate"].iloc[0].strftime(fmt)}-{meta.download_args["codeCVM"]}'
     elif "refdate" in df:
         fname_part = df["refdate"].iloc[0].strftime(fmt)
     else:
@@ -586,8 +598,6 @@ def save_parquet_file(meta: CacheMetadata, folder: str, processed_files_name: st
     fname_part = get_fname_part(meta, df)
     fname = os.path.join(folder, man.parquet_file_name(fname_part))
     meta.processed_files[processed_files_name] = fname
-    if df.shape[0] == 0:
-        raise Exception(f"No data for {meta.template} - {fname}")
     df.to_parquet(man.cache_path(fname))
 
 
@@ -598,7 +608,8 @@ def _read_marketdata(meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFra
     db_folder = man.db_folder(template)
     if isinstance(df, dict) and isinstance(db_folder, dict):
         for name,dx in df.items():
-            save_parquet_file(meta, db_folder[name], template.reader.multi[name], dx)
+            if dx.shape[0] > 0:
+                save_parquet_file(meta, db_folder[name], template.reader.multi[name], dx)
         df = {template.reader.multi[k]:v for k,v in df.items()}
     elif isinstance(df, pd.DataFrame) and isinstance(db_folder, str):
         save_parquet_file(meta, db_folder, "data", df)

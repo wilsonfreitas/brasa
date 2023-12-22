@@ -2,6 +2,7 @@ import gzip
 import json
 from typing import IO
 
+import numpy as np
 import pandas as pd
 
 from ..engine import CacheManager, CacheMetadata, MarketDataReader, retrieve_template
@@ -322,3 +323,75 @@ def _read_b3_equity_options_files(meta: CacheMetadata) -> pd.DataFrame:
 
 read_b3_equity_volatility_surface = _read_b3_equity_options_files
 read_b3_equity_options = _read_b3_equity_options_files
+
+
+def read_b3_company_info(meta: CacheMetadata) -> dict[str, pd.DataFrame]:
+    fname = meta.downloaded_files[0]
+    man = CacheManager()
+    fname = man.cache_path(fname)
+    with gzip.open(fname) as f:
+        obj = json.load(f)
+    data = {}
+    # Info ----
+    df = pd.DataFrame(obj)
+    df = df.drop(columns=["cashDividends", "stockDividends", "subscriptions"])
+    df["stockCapital"] = pd.to_numeric(df["stockCapital"].str.replace(".", "").str.replace(",", "."))
+    df["numberCommonShares"] = pd.to_numeric(df["numberCommonShares"].str.replace(".", "").str.replace(",", "."))
+    df["numberPreferredShares"] = pd.to_numeric(df["numberPreferredShares"].str.replace(".", "").str.replace(",", "."))
+    df["totalNumberShares"] = pd.to_numeric(df["totalNumberShares"].str.replace(".", "").str.replace(",", "."))
+    with SuppressUserWarnings():
+        df["quotedPerSharSince"] = pd.to_datetime(df["quotedPerSharSince"], format="%d/%m/%Y", errors="coerce")
+    df["refdate"] = meta.timestamp.date()
+    data["Info"] = df
+    # Cash Dividends ----
+    df = pd.DataFrame(obj[0]["cashDividends"])
+    if df.shape[0] > 0:
+        df["rate"] = pd.to_numeric(df["rate"].str.replace(".", "").str.replace(",", "."))
+        with SuppressUserWarnings():
+            df["paymentDate"] = pd.to_datetime(df["paymentDate"], format="%d/%m/%Y", errors="coerce")
+            df["approvedOn"] = pd.to_datetime(df["approvedOn"], format="%d/%m/%Y", errors="coerce")
+            df["lastDatePrior"] = pd.to_datetime(df["lastDatePrior"], format="%d/%m/%Y", errors="coerce")
+        df["refdate"] = meta.timestamp.date()
+    data["CashDividends"] = df
+    # Stock Dividends ----
+    df = pd.DataFrame(obj[0]["stockDividends"])
+    if df.shape[0] > 0:
+        df["factor"] = pd.to_numeric(df["factor"].str.replace(".", "").str.replace(",", "."))
+        with SuppressUserWarnings():
+            df["approvedOn"] = pd.to_datetime(df["approvedOn"], format="%d/%m/%Y", errors="coerce")
+            df["lastDatePrior"] = pd.to_datetime(df["lastDatePrior"], format="%d/%m/%Y", errors="coerce")
+        df["refdate"] = meta.timestamp.date()
+    data["StockDividends"] = df
+    # Subscriptions ----
+    df = pd.DataFrame(obj[0]["subscriptions"])
+    if df.shape[0] > 0:
+        df["percentage"] = pd.to_numeric(df["percentage"].str.replace(".", "").str.replace(",", "."))
+        df["priceUnit"] = pd.to_numeric(df["priceUnit"].str.replace(".", "").str.replace(",", "."))
+        with SuppressUserWarnings():
+            df["subscriptionDate"] = pd.to_datetime(df["subscriptionDate"], format="%d/%m/%Y", errors="coerce")
+            df["approvedOn"] = pd.to_datetime(df["approvedOn"], format="%d/%m/%Y", errors="coerce")
+            df["lastDatePrior"] = pd.to_datetime(df["lastDatePrior"], format="%d/%m/%Y", errors="coerce")
+        df["refdate"] = meta.timestamp.date()
+    data["Subscriptions"] = df
+    return data
+
+
+def read_b3_company_details(meta: CacheMetadata) -> pd.DataFrame:
+    fname = meta.downloaded_files[0]
+    man = CacheManager()
+    fname = man.cache_path(fname)
+    with gzip.open(fname) as f:
+        obj = json.load(f)
+    if isinstance(obj, list):
+        df = pd.DataFrame(obj)
+    else:
+        df = pd.DataFrame([obj])
+    if df["otherCodes"].item() is not None:
+        df["code"] = [d["code"] for d in df["otherCodes"]]
+        df["isin"] = [d["isin"] for d in df["otherCodes"]]
+    else:    
+        df["code"] = np.nan
+        df["isin"] = np.nan
+    df.drop(columns=["otherCodes"], inplace=True)
+    df["refdate"] = meta.timestamp.date()
+    return df

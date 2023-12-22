@@ -12,66 +12,71 @@ downloader:
     language: pt-br
   extra-key: date
 reader:
-  function: brasa.readers.null_reader
+  function: brasa.readers.read_b3_company_info
+  multi:
+    Info: report
+    CashDividends: cash_dividends
+    StockDividends: stock_dividends
+    Subscriptions: subscriptions
 parts:
   Info:
     name: info
     fields:
-      - name: stockCapital
+      - name: stock_capital
         description: Capital da companhia em ações
-      - name: segment
-        description: Segmento do mercado de capitais (Novo Mercado, ...)
-      - name: quotedPerSharSince
+      - name: quoted_per_share_since
         description: Data de início de cotação
         handler:
           type: Date
           format: "%d/%m/%Y"
-      - name: commonSharesForm
+      - name: common_shares_form
         description: Forma das ações ordinárias
-      - name: preferredSharesForm
+      - name: preferred_shares_form
         description: Forma das ações preferenciais
-      - name: hasCommom
+      - name: has_commom
         description: Forma das ações ordinárias
-      - name: hasPreferred
+      - name: has_preferred
         description: Forma das ações preferenciais
+      - name: round_lot
+        description: Lote padrão de negociação
+      - name: trading_name
+        description: Nome da empresa
+      - name: number_common_shares
+        description: Número total de ações ordinárias
+      - name: number_preferred_shares
+        description: Número total de ações preferenciais
+      - name: total_number_shares
+        description: Número total de ações
       - name: code
         description: Código da empresa
       - name: codeCVM
         description: Código CVM da empresa
-      - name: totalNumberShares
-        description: Número total de ações
-      - name: numberCommonShares
-        description: Número total de ações ordinárias
-      - name: numberPreferredShares
-        description: Número total de ações preferenciais
-      - name: roundLot
-        description: Lote padrão de negociação
-      - name: tradingName
-        description: Nome da empresa
+      - name: segment
+        description: Segmento do mercado de capitais (Novo Mercado, ...)
   CashDividends:
     name: cashDividends
     fields:
-      - name: assetIssued
+      - name: asset_issued
         description: Código do ativo emitido
-      - name: paymentDate
+      - name: payment_date
         description: Data de início de pagamento do provento
         handler:
           type: Date
           format: "%d/%m/%Y"
       - name: rate
         description: Valor do provento (R$)
-      - name: relatedTo
+      - name: related_to
         description: Período de referência do provento
-      - name: approvedOn
+      - name: approved_on
         description: Data em que foi deliberado
         handler:
           type: Date
           format: "%d/%m/%Y"
-      - name: isinCode
+      - name: isin_code
         description: Código ISIN da companhia
       - name: label
         description: Tipo de provento
-      - name: lastDatePrior
+      - name: last_date_prior
         description: Data COM (última data antes da ação ficar EX do provento)
         handler:
           type: Date
@@ -81,20 +86,20 @@ parts:
   StockDividends:
     name: stockDividends
     fields:
-      - name: assetIssued
+      - name: asset_issued
         description: Código do ativo emitido
       - name: factor
         description: Percentual ou fator de grupamento
-      - name: approvedOn
+      - name: approved_on
         description: Data em que foi deliberado
         handler:
           type: Date
           format: "%d/%m/%Y"
-      - name: isinCode
+      - name: isin_code
         description: Código ISIN
       - name: label
         description: Tipo do provento
-      - name: lastDatePrior
+      - name: last_date_prior
         description: Data COM (última data antes da ação ficar EX do provento)
         handler:
           type: Date
@@ -104,29 +109,29 @@ parts:
   Subscriptions:
     name: subscriptions
     fields:
-      - name: assetIssued
+      - name: asset_issued
         description: Código do ativo emitido
       - name: percentage
         description: Percentual
-      - name: priceUnit
+      - name: price_unit
         description: Preço Emissão (R$)
-      - name: tradingPeriod
+      - name: trading_period
         description: Negociação de Direitos
-      - name: subscriptionDate
+      - name: subscription_date
         description: Data limite para subscrição
         handler:
           type: Date
           format: "%d/%m/%Y"
-      - name: approvedOn
+      - name: approved_on
         description: Data em que foi deliberado
         handler:
           type: Date
           format: "%d/%m/%Y"
-      - name: isinCode
+      - name: isin_code
         description: Código ISIN
       - name: label
         description: Tipo do evento
-      - name: lastDatePrior
+      - name: last_date_prior
         description: Data COM (última data antes da ação ficar EX do provento)
         handler:
           type: Date

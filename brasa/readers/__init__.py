@@ -12,7 +12,9 @@ from .helpers import (
     read_b3_trades_intraday,
     read_b3_economic_indicators_price,
     read_b3_equity_volatility_surface,
-    read_b3_equity_options
+    read_b3_equity_options,
+    read_b3_company_info,
+    read_b3_company_details,
 )
 
 def null_reader(*args, **kwargs):
