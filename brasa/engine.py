@@ -542,6 +542,8 @@ def _download_marketdata(meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
 
     fname = f"downloaded.{template.downloader.format}"
     file_rel_path = os.path.join(download_folder, fname)
+    if os.path.exists(man.cache_path(file_rel_path)):
+        return None
     fp_dest = open(man.cache_path(file_rel_path), "wb")
     shutil.copyfileobj(fp, fp_dest)
     fp.close()
