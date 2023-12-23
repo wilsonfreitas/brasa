@@ -588,6 +588,8 @@ def get_fname_part(meta: CacheMetadata, df: pd.DataFrame) -> str:
         fname_part = f'{df["refdate"].iloc[0].strftime(fmt)}-{meta.download_args["issuingCompany"]}'
     elif template.id == "b3-company-details":
         fname_part = f'{df["refdate"].iloc[0].strftime(fmt)}-{meta.download_args["codeCVM"]}'
+    elif template.id == "b3-cash-dividends":
+        fname_part = f'{df["refdate"].iloc[0].strftime(fmt)}-{meta.download_args["tradingName"]}'
     elif "refdate" in df:
         fname_part = df["refdate"].iloc[0].strftime(fmt)
     else:

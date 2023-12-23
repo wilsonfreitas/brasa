@@ -1,8 +1,14 @@
 
 from brasa.downloaders.downloaders import (
-    SimpleDownloader, DatetimeDownloader,
+    SimpleDownloader,
+    DatetimeDownloader,
 )
 
 from brasa.downloaders.helpers import (
-    simple_download, datetime_download, b3_url_encoded_download, settlement_prices_download, b3_files_download
+    simple_download,
+    datetime_download,
+    b3_url_encoded_download,
+    settlement_prices_download,
+    b3_files_download,
+    b3_paged_url_encoded_download,
 )

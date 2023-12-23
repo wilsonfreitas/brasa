@@ -395,3 +395,25 @@ def read_b3_company_details(meta: CacheMetadata) -> pd.DataFrame:
     df.drop(columns=["otherCodes"], inplace=True)
     df["refdate"] = meta.timestamp.date()
     return df
+
+
+def read_b3_cash_dividends(meta: CacheMetadata) -> pd.DataFrame:
+    fname = meta.downloaded_files[0]
+    man = CacheManager()
+    fname = man.cache_path(fname)
+    with gzip.open(fname) as f:
+        obj = json.load(f)
+    df = pd.DataFrame(obj)
+    df["valueCash"] = pd.to_numeric(df["valueCash"].str.replace(".", "").str.replace(",", "."))
+    df["ratio"] = pd.to_numeric(df["ratio"].str.replace(".", "").str.replace(",", "."))
+    df["quotedPerShares"] = pd.to_numeric(df["quotedPerShares"].str.replace(".", "").str.replace(",", "."))
+    df["closingPricePriorExDate"] = pd.to_numeric(df["closingPricePriorExDate"].str.replace(".", "").str.replace(",", "."))
+    df["corporateActionPrice"] = pd.to_numeric(df["corporateActionPrice"].str.replace(".", "").str.replace(",", "."))
+    with SuppressUserWarnings():
+        df["dateApproval"] = pd.to_datetime(df["dateApproval"], format="%d/%m/%Y", errors="coerce")
+        df["dateClosingPricePriorExDate"] = pd.to_datetime(df["dateClosingPricePriorExDate"], format="%d/%m/%Y", errors="coerce")
+        df["lastDateTimePriorEx"] = pd.to_datetime(df["lastDateTimePriorEx"], format="%Y-%m-%dT%H:%M:%S", errors="coerce")
+        df["lastDatePriorEx"] = pd.to_datetime(df["lastDatePriorEx"], format="%d/%m/%Y", errors="coerce")
+    df["tradingName"] = meta.download_args["tradingName"]
+    df["refdate"] = meta.timestamp.date()
+    return df

@@ -64,6 +64,36 @@ class B3URLEncodedDownloader(SimpleDownloader):
         return f"{self._url}/{params_enc}"
 
 
+class B3PagedURLEncodedDownloader(B3URLEncodedDownloader):
+    def __init__(self, url, verify_ssl, **kwargs):
+        super().__init__(url, verify_ssl, **kwargs)
+        self.page = 1
+
+    @property
+    def url(self) -> str:
+        self.args["pageNumber"] = self.page
+        self.args["pageSize"] = 100
+        return super().url
+
+    def download(self) -> IO | None:
+        fp = super().download()
+        obj = json.load(fp)
+        total_pages = obj["page"]["totalPages"]
+        results = obj["results"]
+        if len(results) == 0:
+            return None
+        while self.page < total_pages:
+            self.page += 1
+            fp = super().download()
+            obj = json.load(fp)
+            results.extend(obj["results"])
+        content = json.dumps(results)
+        temp = tempfile.TemporaryFile()
+        temp.write(bytes(content, "utf8"))
+        temp.seek(0)
+        return temp
+
+
 class SettlementPricesDownloader(DatetimeDownloader):
     def __init__(self, url, verify_ssl, **kwargs):
         super().__init__(url, verify_ssl, **kwargs)

@@ -4,17 +4,17 @@ filetype: CUSTOM
 description: Listagem de dividendos em dinheiro
 locale: pt
 downloader:
-  function: brasa.downloaders.b3_url_encoded_download
+  function: brasa.downloaders.b3_paged_url_encoded_download
   url: https://sistemaswebb3-listados.b3.com.br/listedCompaniesProxy/CompanyCall/GetListedCashDividends
   format: json
   args:
     tradingName: ~
     language: pt-br
     pageNumber: 1
-    pageSize: 9999
+    pageSize: 200
   extra-key: date
 reader:
-  function: brasa.readers.null_reader
+  function: brasa.readers.read_b3_cash_dividends
 fields:
   - name: typeStock
     description: Tipo da ação (ON, PN)
