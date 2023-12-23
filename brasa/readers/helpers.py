@@ -417,3 +417,23 @@ def read_b3_cash_dividends(meta: CacheMetadata) -> pd.DataFrame:
     df["tradingName"] = meta.download_args["tradingName"]
     df["refdate"] = meta.timestamp.date()
     return df
+
+
+def read_b3_index_theoretical_portfolio(meta: CacheMetadata) -> pd.DataFrame:
+    fname = meta.downloaded_files[0]
+    man = CacheManager()
+    fname = man.cache_path(fname)
+    with gzip.open(fname) as f:
+        obj = json.load(f)
+
+    df = pd.DataFrame(obj["results"])
+    df["part"] = pd.to_numeric(df["part"].str.replace(".", "").str.replace(",", "."))
+    df["theoricalQty"] = pd.to_numeric(df["theoricalQty"].str.replace(".", "").str.replace(",", "."))
+    df["total_theorical_qty"] = obj["header"]["theoricalQty"]
+    df["reductor"] = obj["header"]["reductor"]
+    df["total_theorical_qty"] = pd.to_numeric(df["total_theorical_qty"].str.replace(".", "").str.replace(",", "."))
+    df["reductor"] = pd.to_numeric(df["reductor"].str.replace(".", "").str.replace(",", "."))
+    df["index_name"] = meta.download_args["index"]
+    df["refdate"] = meta.timestamp.date()
+
+    return df

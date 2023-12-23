@@ -15,7 +15,7 @@ downloader:
     index: ~
   extra-key: date
 reader:
-  function: brasa.readers.null_reader
+  function: brasa.readers.read_b3_index_theoretical_portfolio
 parts:
   Header:
     name: header

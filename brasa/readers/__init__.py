@@ -16,6 +16,7 @@ from .helpers import (
     read_b3_company_info,
     read_b3_company_details,
     read_b3_cash_dividends,
+    read_b3_index_theoretical_portfolio,
 )
 
 def null_reader(*args, **kwargs):
