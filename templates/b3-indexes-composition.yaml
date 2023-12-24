@@ -13,7 +13,7 @@ downloader:
     pageSize: 9999
   extra-key: date
 reader:
-  function: brasa.readers.null_reader
+  function: brasa.readers.read_b3_indexes_composition
 parts:
   Header:
     name: header
