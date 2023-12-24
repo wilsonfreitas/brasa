@@ -90,8 +90,12 @@ def is_iterable(i):
 class KwargsIterator:
     def __init__(self, kwargs: dict) -> None:
         self.elements = [list(x) if is_iterable(x) else [x] for x in kwargs.values()]
-        self.__len = max(len(x) for x in self.elements)
-        self.names = kwargs.keys()
+        if len(self.elements) == 0:
+            self.__len = 0
+            self.names = []
+        else:
+            self.__len = max(len(x) for x in self.elements)
+            self.names = kwargs.keys()
 
     def __len__(self) -> int:
         return self.__len
