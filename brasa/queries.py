@@ -8,10 +8,11 @@ from bizdays import Calendar, set_option, get_option
 
 from .engine import CacheManager
 
-__all__ = ["get_returns", "get_dataset", "write_dataset"]
+__all__ = [
+    "get_returns", "get_dataset", "write_dataset", "get_indexes_names", "get_companies_trading_names",
+    "get_companies_cvm_codes", "get_companies_names",
+]
 
-
-set_option("mode", "pandas")
 
 # class BrasaDB:
 #     connection: duckdb.DuckDBPyConnection | None = None
@@ -66,7 +67,6 @@ set_option("mode", "pandas")
 
 
 def get_returns(symbols: str|list[str], start=None, end=None, calendar="B3") -> pd.DataFrame:
-    cal = Calendar.load(calendar)
     if isinstance(symbols, str):
         symbols = [symbols]
     if start is None:
@@ -102,3 +102,46 @@ def write_dataset(df: pd.DataFrame, name: str, format: str = "parquet") -> None:
     man = CacheManager()
     tb = pyarrow.Table.from_pandas(df)
     ds.write_dataset(tb, man.db_path(name), format=format, existing_data_behavior="overwrite_or_ignore")
+
+
+def get_companies_trading_names() -> list:
+    tb = get_dataset("b3-company-details").scanner(columns=["refdate"]).to_table()
+    max_date = pyarrow.compute.max(tb.column("refdate"))
+    df = get_dataset("b3-company-details")\
+        .filter(pc.field("refdate") == max_date)\
+        .scanner(columns=["tradingName"])\
+        .to_table().to_pandas()
+    return list(df.tradingName.unique())
+
+
+def get_companies_names() -> list:
+    tb = get_dataset("b3-equities-register").scanner(columns=["refdate"]).to_table()
+    max_date = pyarrow.compute.max(tb.column("refdate"))
+    df = get_dataset("b3-equities-register")\
+        .filter(pc.field("instrument_market") == 10)\
+        .filter(pc.field("security_category") == 11)\
+        .filter(pc.field("refdate") == max_date)\
+        .scanner(columns=["instrument_asset"])\
+        .to_table().to_pandas()
+    return list(df.instrument_asset.unique())
+
+
+def get_companies_cvm_codes() -> list:
+    tb = get_dataset("b3-company-info-report").scanner(columns=["refdate"]).to_table()
+    max_date = pyarrow.compute.max(tb.column("refdate"))
+    df = get_dataset("b3-company-info-report")\
+        .filter(pc.field("refdate") == max_date)\
+        .filter(pc.field("codeCVM") != "0")\
+        .scanner(columns=["codeCVM"])\
+        .to_table().to_pandas()
+    return list(df.codeCVM.unique())
+
+
+def get_indexes_names() -> list:
+    tb = get_dataset("b3-indexes-composition").scanner(columns=["refdate"]).to_table()
+    max_date = pyarrow.compute.max(tb.column("refdate"))
+    df = get_dataset("b3-indexes-composition")\
+        .filter(pc.field("refdate") == max_date)\
+        .scanner(columns=["indexes"])\
+        .to_table().to_pandas()
+    return list(df.indexes.unique())
