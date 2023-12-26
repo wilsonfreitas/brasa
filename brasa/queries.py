@@ -4,7 +4,7 @@ import pandas as pd
 import pyarrow
 import pyarrow.dataset as ds
 import pyarrow.compute as pc
-from bizdays import Calendar, set_option
+from bizdays import Calendar, set_option, get_option
 
 from .engine import CacheManager
 
@@ -83,7 +83,12 @@ def get_returns(symbols: str|list[str], start=None, end=None, calendar="B3") -> 
     df = df.pivot_table(values="returns", index="refdate", columns="symbol")
     df.index.name = None
     df.columns.name = None
+
+    bizdays_mode = get_option("mode")
+    set_option("mode", "pandas")
+    cal = Calendar.load(calendar)
     idx = cal.seq(df.index[0], df.index[-1])
+    set_option("mode", bizdays_mode)
     df = df.reindex(idx)
     return df
 
