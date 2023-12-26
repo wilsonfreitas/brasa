@@ -1,0 +1,6 @@
+id: b3-companies-properties
+description: Informações de companias com ações listadas na B3
+etl:
+  function: brasa.etl.create_b3_companies_properties
+  companies_info_dataset: b3-companies-info
+  companies_details_dataset: b3-companies-details

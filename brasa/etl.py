@@ -316,3 +316,160 @@ def concat_datasets(handler: MarketDataETL):
         tables.append(tb)
     rets = pyarrow.concat_tables(tables)
     write_dataset(rets.to_pandas(), handler.template_id)
+
+
+def create_b3_companies_details(handler: MarketDataETL):
+    df = get_dataset(handler.companies_dataset).scanner(columns=["issuingCompany", "refdate"]).to_table().to_pandas()
+    df = df.groupby(["issuingCompany", "refdate"], sort=True).last().reset_index()
+
+    comp_det = get_dataset(handler.companies_dataset)\
+        .to_table()\
+        .to_pandas()
+
+    comp_det = pd.merge(df, comp_det, on=["issuingCompany", "refdate"], how="inner")
+
+    comp_det["issuingCompany"] = comp_det["issuingCompany"].astype(str).str.strip()
+    comp_det["companyName"] = comp_det["companyName"].astype(str).str.strip()
+    comp_det["tradingName"] = comp_det["tradingName"].astype(str).str.strip()
+    comp_det["cnpj"] = comp_det["cnpj"].astype(str).str.strip()
+    comp_det["industryClassification"] = comp_det["industryClassification"].astype(str).str.strip()
+    comp_det["industryClassificationEng"] = comp_det["industryClassificationEng"].astype(str).str.strip()
+    comp_det["activity"] = comp_det["activity"].astype(str).str.strip()
+    comp_det["website"] = comp_det["website"].astype(str).str.strip()
+    comp_det["hasQuotation"] = comp_det["hasQuotation"].astype(bool)
+    comp_det["status"] = comp_det["status"].astype(str).str.strip()
+    comp_det["marketIndicator"] = comp_det["marketIndicator"].astype("int64")
+    comp_det["market"] = comp_det["market"].astype(str).str.strip()
+    comp_det["institutionCommon"] = comp_det["institutionCommon"].astype(str).str.strip()
+    comp_det["institutionPreferred"] = comp_det["institutionPreferred"].astype(str).str.strip()
+    comp_det["code"] = comp_det["code"].astype(str).str.strip()
+    comp_det["codeCVM"] = comp_det["codeCVM"].astype("int64")
+    comp_det["lastDate"] = pd.to_datetime(comp_det["lastDate"], dayfirst=True)
+    comp_det["hasEmissions"] = comp_det["hasEmissions"].astype(bool)
+    comp_det["hasBDR"] = comp_det["hasBDR"].astype(bool)
+    comp_det["typeBDR"] = comp_det["typeBDR"].astype(str).str.strip()
+    comp_det["describleCategoryBVMF"] = comp_det["describleCategoryBVMF"].astype(str).str.strip()
+    comp_det["isin"] = comp_det["isin"].astype(str).str.strip()
+    comp_det["refdate"] = pd.to_datetime(comp_det["refdate"])
+
+    comp_det = comp_det.rename(columns={
+        "issuingCompany": "asset_name",
+        "companyName": "company_name",
+        "tradingName": "trading_name",
+        "industryClassification": "industry_classification",
+        "industryClassificationEng": "industry_classification_eng",
+        "hasQuotation": "has_quotation",
+        "marketIndicator": "market_indicator",
+        "market": "market",
+        "institutionCommon": "institution_common",
+        "institutionPreferred": "institution_preferred",
+        "codeCVM": "code_cvm",
+        "lastDate": "last_date",
+        "hasEmissions": "has_emissions",
+        "hasBDR": "has_bdr",
+        "typeBDR": "type_bdr",
+        "describleCategoryBVMF": "describle_category_bvmf",
+        "code": "symbol",
+    })
+
+    industry_sectors = comp_det["industry_classification"].str\
+        .replace(r" +/ +", "/", regex=True).str\
+        .split("/", expand=True)\
+        .rename(columns={0: "sector", 1: "subsector", 2: "segment"})
+    comp_det[["sector", "subsector", "segment"]] = industry_sectors
+    comp_det = comp_det.replace({"None": pd.NA})
+    
+    write_dataset(comp_det, handler.template_id)
+
+
+def create_b3_companies_info(handler: MarketDataETL):
+    df = get_dataset(handler.companies_dataset).scanner(columns=["code", "refdate"]).to_table().to_pandas()
+    df = df.groupby(["code", "refdate"], sort=True).last().reset_index()
+
+    comp_info = get_dataset(handler.companies_dataset)\
+        .to_table()\
+        .to_pandas()
+
+    comp_info = pd.merge(df, comp_info, on=["code", "refdate"], how="inner")
+
+    comp_info["stockCapital"] = comp_info["stockCapital"].astype("float64")
+    comp_info["commonSharesForm"] = comp_info["commonSharesForm"].astype(str).str.strip()
+    comp_info["preferredSharesForm"] = comp_info["preferredSharesForm"].astype(str).str.strip()
+    comp_info["hasCommom"] = comp_info["hasCommom"].astype(bool)
+    comp_info["hasPreferred"] = comp_info["hasPreferred"].astype(bool)
+    comp_info["roundLot"] = comp_info["roundLot"].astype("int64")
+    comp_info["tradingName"] = comp_info["tradingName"].astype(str).str.strip()
+    comp_info["numberCommonShares"] = comp_info["numberCommonShares"].astype("int64")
+    comp_info["numberPreferredShares"] = comp_info["numberPreferredShares"].astype("int64")
+    comp_info["totalNumberShares"] = comp_info["totalNumberShares"].astype("int64")
+    comp_info["code"] = comp_info["code"].astype(str).str.strip()
+    comp_info["codeCVM"] = comp_info["codeCVM"].astype("int64")
+    comp_info["segment"] = comp_info["segment"].astype(str).str.strip()
+    comp_info["refdate"] = pd.to_datetime(comp_info["refdate"])
+
+    comp_info = comp_info\
+        .rename(columns={
+            "tradingName": "trading_name",
+            "code": "asset_name",
+            "codeCVM": "code_cvm",
+            "quotedPerSharSince": "quoted_per_shar_since",
+            "commonSharesForm": "common_shares_form",
+            "preferredSharesForm": "preferred_shares_form",
+            "hasCommom": "has_common",
+            "hasPreferred": "has_preferred",
+            "roundLot": "round_lot",
+            "stockCapital": "stock_capital",
+            "numberCommonShares": "number_common_shares",
+            "numberPreferredShares": "number_preferred_shares",
+            "totalNumberShares": "total_number_shares",
+        })
+
+    comp_info = comp_info.replace({"None": pd.NA})
+
+    write_dataset(comp_info, handler.template_id)
+
+
+def create_b3_companies_properties(handler: MarketDataETL):
+    cols = ["asset_name", "company_name", "trading_name", "cnpj", "code_cvm", "industry_classification", "activity",
+            "website", "market_indicator", "market", "refdate"]
+    cd0 = get_dataset(handler.companies_details_dataset)\
+        .filter(pc.field("code_cvm") != 0)\
+        .scanner(columns=cols)\
+        .to_table()\
+        .to_pandas()\
+        .drop_duplicates()
+
+    cols = ["trading_name", "asset_name", "code_cvm", "segment", "has_common", "has_preferred", "quoted_per_shar_since",
+            "round_lot", "stock_capital", "number_common_shares", "number_preferred_shares", "total_number_shares",
+            "refdate"]
+    ci0 = get_dataset(handler.companies_info_dataset)\
+        .filter(pc.field("code_cvm") != 0)\
+        .scanner(columns=cols)\
+        .to_table()\
+        .to_pandas()
+
+    companies_properties = pd.merge(cd0, ci0, on=["asset_name", "code_cvm", "trading_name"], how="outer")
+    write_dataset(companies_properties, handler.template_id)
+
+
+def create_b3_symbols_properties(handler: MarketDataETL):
+    cols = ["symbol", "asset_name", "trading_name", "company_name", "code_cvm", "isin"]
+    companies_symbols = get_dataset(handler.companies_details_dataset)\
+        .filter(pc.field("code_cvm") != 0)\
+        .scanner(columns=cols)\
+        .to_table()\
+        .to_pandas()
+    companies_symbols["stock_type"] = companies_symbols["isin"].str[9:11]\
+        .map({"PR": "PN", "OR": "ON", "PA": "PNA", "PB": "PNB", "M1": "UNT"})
+
+    cols = ["trading_name", "asset_name", "code_cvm", "segment"]
+    symbol_info = get_dataset(handler.companies_info_dataset)\
+        .filter(pc.field("code_cvm") != 0)\
+        .scanner(columns=cols)\
+        .to_table()\
+        .to_pandas()
+
+    symbols_properties = pd.merge(companies_symbols, symbol_info, on=("asset_name", "code_cvm", "trading_name"))
+    symbols_properties = symbols_properties[~symbols_properties["symbol"].isna()]
+    
+    write_dataset(symbols_properties, handler.template_id)
