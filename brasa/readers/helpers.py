@@ -458,3 +458,18 @@ def read_b3_indexes_composition(meta: CacheMetadata) -> pd.DataFrame:
     df_stock_indexes["refdate"] = meta.timestamp.date()
 
     return df_stock_indexes
+
+
+def read_b3_listed_funds(meta: CacheMetadata) -> pd.DataFrame:
+    fname = meta.downloaded_files[0]
+    man = CacheManager()
+    fname = man.cache_path(fname)
+    with gzip.open(fname) as f:
+        obj = json.load(f)
+
+    template = retrieve_template(meta.template)
+    df = pd.DataFrame(obj)
+    df["typeFund"] = template.downloader.args["typeFund"]
+    df["refdate"] = meta.timestamp.date()
+
+    return df

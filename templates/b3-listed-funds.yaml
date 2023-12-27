@@ -1,0 +1,8 @@
+id: b3-listed-funds
+description: Fundos listados na B3, renda variável, renda fixa e imobiliários
+etl:
+  function: brasa.etl.create_b3_listed_funds
+  datasets:
+    - b3-listed-fixed-income-etfs
+    - b3-listed-stock-etfs
+    - b3-listed-reits

@@ -18,6 +18,7 @@ from .helpers import (
     read_b3_cash_dividends,
     read_b3_index_theoretical_portfolio,
     read_b3_indexes_composition,
+    read_b3_listed_funds,
 )
 
 def null_reader(*args, **kwargs):

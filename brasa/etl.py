@@ -473,3 +473,16 @@ def create_b3_symbols_properties(handler: MarketDataETL):
     symbols_properties = symbols_properties[~symbols_properties["symbol"].isna()]
     
     write_dataset(symbols_properties, handler.template_id)
+
+
+def create_b3_listed_funds(handler: MarketDataETL):
+    tables = []
+    cols = ["refdate", "acronym", "fundName", "typeFund"]
+    for ds in handler.datasets:
+        tb = get_dataset(ds).scanner(columns=cols).to_table()
+        tables.append(tb)
+    df = pyarrow.concat_tables(tables).to_pandas()
+    df["symbol"] = df["acronym"] + "11"
+    df["typeFund"] = df["typeFund"].map({7: "FII", 20: "ETF", 19: "Fixed Income ETF"})
+    df = df.rename(columns={"fundName": "fund_name", "acronym": "asset_name", "typeFund": "fund_type"})
+    write_dataset(df, handler.template_id)
