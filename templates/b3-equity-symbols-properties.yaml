@@ -1,6 +1,6 @@
-id: b3-symbols-properties
+id: b3-equity-symbols-properties
 description: Informações dos símbolos (tickers) de companias com ações listadas na B3
 etl:
-  function: brasa.etl.create_b3_symbols_properties
+  function: brasa.etl.create_b3_equity_symbols_properties
   companies_info_dataset: b3-companies-info
   companies_details_dataset: b3-companies-details
