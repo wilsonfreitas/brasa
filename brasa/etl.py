@@ -269,7 +269,7 @@ def create_equities_returns(handler: MarketDataETL):
     df_returns["log_return"] = np.log(1 + df_returns["pct_return"])
     # cotahist values to correct missing date 20210610 ----
     df = get_dataset("b3-cotahist")\
-        .filter(pc.field("instrument_market") == 10)\
+        .filter(pc.field("symbol").isin(symbols))\
         .filter(pc.field("refdate") >= datetime(2021, 6, 9))\
         .filter(pc.field("refdate") <= datetime(2021, 6, 10))\
         .scanner(["refdate", "symbol", "close", "distribution_id"])\
@@ -291,6 +291,32 @@ def create_equities_returns(handler: MarketDataETL):
     df_returns = pd.concat([df_returns, df_final])
     df_returns.sort_values(["refdate", "symbol"], inplace=True)
     write_dataset(df_returns[["refdate", "symbol", "pct_return", "log_return"]], handler.template_id)
+
+
+def create_etf_returns_before_20180101(handler: MarketDataETL):
+    symbols = get_dataset("b3-listed-funds")\
+        .filter(pc.field("fund_type") == "ETF")\
+        .scanner(columns=["symbol"])\
+        .to_table().to_pandas().iloc[:,0]
+    cal = Calendar.load("B3")
+    df_cotahist = get_dataset("b3-cotahist")\
+            .filter(pc.field("refdate") >= cal.startdate)\
+            .filter(pc.field("symbol").isin(symbols))\
+            .scanner(columns=["refdate", "symbol", "close"])\
+            .to_table()\
+            .to_pandas()
+    def calc_pct_change(df):
+        dfi = df[["refdate", "close"]].set_index("refdate").sort_index()
+        idx = pd.DatetimeIndex(cal.seq(dfi.index[0], dfi.index[-1]))
+        dfi = dfi.reindex(idx)
+        dfi.index.name = "refdate"
+        dfi = dfi.pct_change(fill_method=None).iloc[1:]
+        dfi.columns = ["pct_return"]
+        dfi["log_return"] = np.log(1 + dfi["pct_return"])
+        return dfi
+    df_cotahist_etfs_returns = df_cotahist.groupby("symbol").apply(calc_pct_change).reset_index()
+    ix = df_cotahist_etfs_returns["refdate"] < datetime(2018, 1, 1)
+    write_dataset(df_cotahist_etfs_returns[ix], handler.template_id)
 
 
 def create_indexes_returns(handler: MarketDataETL):
