@@ -9,8 +9,7 @@ from bizdays import Calendar, set_option, get_option
 from .engine import CacheManager
 
 __all__ = [
-    "get_returns", "get_dataset", "write_dataset", "get_indexes_names", "get_companies_trading_names",
-    "get_companies_cvm_codes", "get_companies_names",
+    "get_returns", "get_dataset", "write_dataset", "get_symbols"
 ]
 
 
@@ -104,7 +103,23 @@ def write_dataset(df: pd.DataFrame, name: str, format: str = "parquet") -> None:
     ds.write_dataset(tb, man.db_path(name), format=format, existing_data_behavior="overwrite_or_ignore")
 
 
-def get_companies_trading_names() -> list:
+def _get_equity_symbols(sector=None) -> list:
+    df = get_dataset("b3-equity-symbols-properties")\
+        .scanner(columns=["symbol", "sector"])\
+        .to_table().to_pandas()
+    if sector is not None:
+        df = df[df.sector == sector]
+    return list(df.symbol.unique())
+
+
+def _get_companies_sectors() -> list:
+    df = get_dataset("b3-companies-properties")\
+        .scanner(columns=["sector"])\
+        .to_table().to_pandas()
+    return list(df.sector.unique())
+
+
+def _get_companies_trading_names() -> list:
     tb = get_dataset("b3-company-details").scanner(columns=["refdate"]).to_table()
     max_date = pyarrow.compute.max(tb.column("refdate"))
     df = get_dataset("b3-company-details")\
@@ -114,7 +129,7 @@ def get_companies_trading_names() -> list:
     return list(df.tradingName.unique())
 
 
-def get_companies_names() -> list:
+def _get_companies_names() -> list:
     tb = get_dataset("b3-equities-register").scanner(columns=["refdate"]).to_table()
     max_date = pyarrow.compute.max(tb.column("refdate"))
     df = get_dataset("b3-equities-register")\
@@ -126,7 +141,7 @@ def get_companies_names() -> list:
     return list(df.instrument_asset.unique())
 
 
-def get_companies_cvm_codes() -> list:
+def _get_companies_cvm_codes() -> list:
     tb = get_dataset("b3-company-info-report").scanner(columns=["refdate"]).to_table()
     max_date = pyarrow.compute.max(tb.column("refdate"))
     df = get_dataset("b3-company-info-report")\
@@ -137,7 +152,7 @@ def get_companies_cvm_codes() -> list:
     return list(df.codeCVM.unique())
 
 
-def get_indexes_names() -> list:
+def _get_indexes_names() -> list:
     tb = get_dataset("b3-indexes-composition").scanner(columns=["refdate"]).to_table()
     max_date = pyarrow.compute.max(tb.column("refdate"))
     df = get_dataset("b3-indexes-composition")\
@@ -145,3 +160,54 @@ def get_indexes_names() -> list:
         .scanner(columns=["indexes"])\
         .to_table().to_pandas()
     return list(df.indexes.unique())
+
+
+def _get_symbols_by_index(index) -> list:
+    tb = get_dataset("b3-indexes-composition").scanner(columns=["refdate"]).to_table()
+    max_date = pyarrow.compute.max(tb.column("refdate"))
+    df = get_dataset("b3-indexes-composition")\
+        .filter(pc.field("refdate") == max_date)\
+        .filter(pc.field("indexes") == index)\
+        .scanner(columns=["code"])\
+        .to_table().to_pandas()
+    return list(df.code.unique())
+
+
+def _get_funds_symbols(type: str) -> list:
+    tb = get_dataset("b3-listed-funds").scanner(columns=["refdate"]).to_table()
+    max_date = pyarrow.compute.max(tb.column("refdate"))
+    symbols = get_dataset("b3-listed-funds")\
+        .filter(pc.field("refdate") == max_date)\
+        .filter(pc.field("fund_type") == type)\
+        .scanner(columns=["symbol"])\
+        .to_table().to_pandas().iloc[:,0]
+    return list(symbols)
+
+
+def get_symbols(type: str, **kwargs) -> list:
+    type = type.lower()
+    if type == "etf":
+        return _get_funds_symbols("ETF")
+    elif type == "fii":
+        return _get_funds_symbols("FII")
+    elif type == "fixed-income-etf" or type == "fietf":
+        return _get_funds_symbols("Fixed Income ETF")
+    elif type == "index":
+        return _get_indexes_names()
+    elif type == "company":
+        return _get_companies_names()
+    elif type == "company-cvm-code":
+        return _get_companies_cvm_codes()
+    elif type == "company-trading-name":
+        return _get_companies_trading_names()
+    elif type == "sector":
+        return _get_companies_sectors()
+    elif type == "equity":
+        if "sector" in kwargs:
+            return _get_equity_symbols(kwargs["sector"])
+        elif "index" in kwargs:
+            return _get_symbols_by_index(kwargs["index"])
+        else:
+            return _get_equity_symbols()
+    else:
+        return []
