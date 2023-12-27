@@ -457,7 +457,7 @@ def create_b3_companies_info(handler: MarketDataETL):
 
 def create_b3_companies_properties(handler: MarketDataETL):
     cols = ["asset_name", "company_name", "trading_name", "cnpj", "code_cvm", "industry_classification", "activity",
-            "website", "market_indicator", "market", "refdate"]
+            "website", "market_indicator", "market", "refdate", "sector", "subsector", "segment"]
     cd0 = get_dataset(handler.companies_details_dataset)\
         .filter(pc.field("code_cvm") != 0)\
         .scanner(columns=cols)\
@@ -472,14 +472,15 @@ def create_b3_companies_properties(handler: MarketDataETL):
         .filter(pc.field("code_cvm") != 0)\
         .scanner(columns=cols)\
         .to_table()\
-        .to_pandas()
+        .to_pandas()\
+        .rename(columns={"segment": "exchange_segment"})
 
     companies_properties = pd.merge(cd0, ci0, on=["asset_name", "code_cvm", "trading_name"], how="outer")
     write_dataset(companies_properties, handler.template_id)
 
 
-def create_b3_symbols_properties(handler: MarketDataETL):
-    cols = ["symbol", "asset_name", "trading_name", "company_name", "code_cvm", "isin"]
+def create_b3_equity_symbols_properties(handler: MarketDataETL):
+    cols = ["symbol", "asset_name", "trading_name", "company_name", "code_cvm", "isin", "sector", "subsector", "segment"]
     companies_symbols = get_dataset(handler.companies_details_dataset)\
         .filter(pc.field("code_cvm") != 0)\
         .scanner(columns=cols)\
@@ -493,7 +494,8 @@ def create_b3_symbols_properties(handler: MarketDataETL):
         .filter(pc.field("code_cvm") != 0)\
         .scanner(columns=cols)\
         .to_table()\
-        .to_pandas()
+        .to_pandas()\
+        .rename(columns={"segment": "exchange_segment"})
 
     symbols_properties = pd.merge(companies_symbols, symbol_info, on=("asset_name", "code_cvm", "trading_name"))
     symbols_properties = symbols_properties[~symbols_properties["symbol"].isna()]
