@@ -162,8 +162,11 @@ def _get_indexes_names() -> list:
     return list(df.indexes.unique())
 
 
-def _get_symbols_by_index(index) -> list:
-    tb = get_dataset("b3-indexes-composition").scanner(columns=["refdate"]).to_table()
+def _get_symbols_by_index(index, end_month=None) -> list:
+    ds = get_dataset("b3-indexes-composition")
+    if end_month is not None:
+        ds = ds.filter(pc.field("end_month") == end_month)
+    tb = ds.scanner(columns=["refdate"]).to_table()
     max_date = pyarrow.compute.max(tb.column("refdate"))
     df = get_dataset("b3-indexes-composition")\
         .filter(pc.field("refdate") == max_date)\
@@ -206,7 +209,10 @@ def get_symbols(type: str, **kwargs) -> list:
         if "sector" in kwargs:
             return _get_equity_symbols(kwargs["sector"])
         elif "index" in kwargs:
-            return _get_symbols_by_index(kwargs["index"])
+            if "end_month" in kwargs:
+                return _get_symbols_by_index(kwargs["index"], kwargs["end_month"])
+            else:
+                return _get_symbols_by_index(kwargs["index"])
         else:
             return _get_equity_symbols()
     else:
