@@ -4,7 +4,7 @@ filetype: MCUSTOM
 description: Composição dos índices da B3
 locale: pt
 downloader:
-  function: brasa.downloaders.b3_url_encoded_download
+  function: brasa.downloaders.b3_paged_url_encoded_download
   url: https://sistemaswebb3-listados.b3.com.br/indexProxy/indexCall/GetStockIndex
   format: json
   encoding: latin1
