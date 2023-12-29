@@ -87,7 +87,10 @@ class B3PagedURLEncodedDownloader(B3URLEncodedDownloader):
             fp = super().download()
             obj = json.load(fp)
             results.extend(obj["results"])
-        content = json.dumps(results)
+        data = {"results": results}
+        if "header" in obj:
+            data["header"] = obj["header"]
+        content = json.dumps(data)
         temp = tempfile.TemporaryFile()
         temp.write(bytes(content, "utf8"))
         temp.seek(0)
