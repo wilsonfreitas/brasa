@@ -1,4 +1,5 @@
 
+import json
 from datetime import datetime
 import pandas as pd
 import pyarrow
@@ -9,7 +10,8 @@ from bizdays import Calendar, set_option, get_option
 from .engine import CacheManager
 
 __all__ = [
-    "get_returns", "get_dataset", "write_dataset", "get_symbols"
+    "get_returns", "get_dataset", "write_dataset", "get_symbols", "get_industry_sectors",
+    "describe",
 ]
 
 
@@ -97,6 +99,15 @@ def get_dataset(name: str) -> ds.Dataset:
     return ds.dataset(man.db_path(name), format="parquet")
 
 
+def describe(name: str) -> pd.DataFrame:
+    ds = get_dataset(name)
+    sc = ds.schema
+    cols = json.loads(sc.metadata[b"pandas"].decode("utf-8"))["columns"]
+    for k in cols:
+        print(k["field_name"]+":", k["pandas_type"])
+    return None
+
+
 def write_dataset(df: pd.DataFrame, name: str, format: str = "parquet") -> None:
     man = CacheManager()
     tb = pyarrow.Table.from_pandas(df)
@@ -112,21 +123,26 @@ def _get_equity_symbols(sector=None) -> list:
     return list(df.symbol.unique())
 
 
-def _get_companies_sectors() -> list:
-    df = get_dataset("b3-companies-properties")\
-        .scanner(columns=["sector"])\
-        .to_table().to_pandas()
-    return list(df.sector.unique())
+def get_industry_sectors() -> pd.DataFrame:
+    return get_dataset("b3-equity-symbols-properties")\
+        .scanner(columns=["sector", "subsector", "segment"])\
+        .to_table()\
+        .to_pandas()\
+        .drop_duplicates()\
+        .sort_values(["sector", "subsector", "segment"]).reset_index(drop=True)
+
+
+def _get_companies_industry_sectors(column) -> list:
+    df = get_industry_sectors()
+    return list(df[column].unique())
 
 
 def _get_companies_trading_names() -> list:
-    tb = get_dataset("b3-company-details").scanner(columns=["refdate"]).to_table()
-    max_date = pyarrow.compute.max(tb.column("refdate"))
-    df = get_dataset("b3-company-details")\
-        .filter(pc.field("refdate") == max_date)\
-        .scanner(columns=["tradingName"])\
+    df = get_dataset("b3-companies-details")\
+        .scanner(columns=["refdate", "trading_name"])\
         .to_table().to_pandas()
-    return list(df.tradingName.unique())
+    df = df.groupby(["trading_name"], sort=True).last().reset_index()
+    return list(df.trading_name.unique())
 
 
 def _get_companies_names() -> list:
@@ -142,14 +158,12 @@ def _get_companies_names() -> list:
 
 
 def _get_companies_cvm_codes() -> list:
-    tb = get_dataset("b3-company-info-report").scanner(columns=["refdate"]).to_table()
-    max_date = pyarrow.compute.max(tb.column("refdate"))
-    df = get_dataset("b3-company-info-report")\
-        .filter(pc.field("refdate") == max_date)\
-        .filter(pc.field("codeCVM") != "0")\
-        .scanner(columns=["codeCVM"])\
+    df = get_dataset("b3-companies-info")\
+        .filter(pc.field("code_cvm") != 0)\
+        .scanner(columns=["code_cvm", "refdate"])\
         .to_table().to_pandas()
-    return list(df.codeCVM.unique())
+    df = df.groupby(["code_cvm"], sort=True).last().reset_index()
+    return list(df.code_cvm.unique())
 
 
 def _get_indexes_names() -> list:
@@ -203,8 +217,12 @@ def get_symbols(type: str, **kwargs) -> list:
         return _get_companies_cvm_codes()
     elif type == "company-trading-name":
         return _get_companies_trading_names()
-    elif type == "sector":
-        return _get_companies_sectors()
+    elif type == "industry-sector":
+        return _get_companies_industry_sectors("sector")
+    elif type == "industry-subsector":
+        return _get_companies_industry_sectors("subsector")
+    elif type == "industry-segment":
+        return _get_companies_industry_sectors("segment")
     elif type == "equity":
         if "sector" in kwargs:
             return _get_equity_symbols(kwargs["sector"])
