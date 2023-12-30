@@ -1,0 +1,6 @@
+id: b3-companies-subscriptions
+description: Informações de subscrições das companias listadas na B3
+etl:
+  function: brasa.etl.create_b3_companies_subscriptions
+  company_info_subscriptions_dataset: b3-company-info-subscriptions
+  symbols_properties_dataset: b3-equity-symbols-properties

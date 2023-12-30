@@ -346,7 +346,7 @@ def concat_datasets(handler: MarketDataETL):
 
 def create_b3_companies_details(handler: MarketDataETL):
     df = get_dataset(handler.companies_dataset).scanner(columns=["issuingCompany", "refdate"]).to_table().to_pandas()
-    df = df.groupby(["issuingCompany", "refdate"], sort=True).last().reset_index()
+    df = df.groupby(["issuingCompany"], sort=True).last().reset_index()
 
     comp_det = get_dataset(handler.companies_dataset)\
         .to_table()\
@@ -410,7 +410,7 @@ def create_b3_companies_details(handler: MarketDataETL):
 
 def create_b3_companies_info(handler: MarketDataETL):
     df = get_dataset(handler.companies_dataset).scanner(columns=["code", "refdate"]).to_table().to_pandas()
-    df = df.groupby(["code", "refdate"], sort=True).last().reset_index()
+    df = df.groupby(["code"], sort=True).last().reset_index()
 
     comp_info = get_dataset(handler.companies_dataset)\
         .to_table()\
@@ -457,7 +457,7 @@ def create_b3_companies_info(handler: MarketDataETL):
 
 def create_b3_companies_properties(handler: MarketDataETL):
     cols = ["asset_name", "company_name", "trading_name", "cnpj", "code_cvm", "industry_classification", "activity",
-            "website", "market_indicator", "market", "refdate", "sector", "subsector", "segment"]
+            "website", "market_indicator", "market", "sector", "subsector", "segment"]
     cd0 = get_dataset(handler.companies_details_dataset)\
         .filter(pc.field("code_cvm") != 0)\
         .scanner(columns=cols)\
@@ -488,19 +488,9 @@ def create_b3_equity_symbols_properties(handler: MarketDataETL):
         .to_pandas()
     companies_symbols["stock_type"] = companies_symbols["isin"].str[9:11]\
         .map({"PR": "PN", "OR": "ON", "PA": "PNA", "PB": "PNB", "M1": "UNT"})
-
-    cols = ["trading_name", "asset_name", "code_cvm", "segment"]
-    symbol_info = get_dataset(handler.companies_info_dataset)\
-        .filter(pc.field("code_cvm") != 0)\
-        .scanner(columns=cols)\
-        .to_table()\
-        .to_pandas()\
-        .rename(columns={"segment": "exchange_segment"})
-
-    symbols_properties = pd.merge(companies_symbols, symbol_info, on=("asset_name", "code_cvm", "trading_name"))
-    symbols_properties = symbols_properties[~symbols_properties["symbol"].isna()]
+    companies_symbols = companies_symbols[~companies_symbols["symbol"].isna()]
     
-    write_dataset(symbols_properties, handler.template_id)
+    write_dataset(companies_symbols, handler.template_id)
 
 
 def create_b3_listed_funds(handler: MarketDataETL):
@@ -514,3 +504,124 @@ def create_b3_listed_funds(handler: MarketDataETL):
     df["typeFund"] = df["typeFund"].map({7: "FII", 20: "ETF", 19: "Fixed Income ETF"})
     df = df.rename(columns={"fundName": "fund_name", "acronym": "asset_name", "typeFund": "fund_type"})
     write_dataset(df, handler.template_id)
+
+
+def create_b3_companies_cash_dividends(handler: MarketDataETL):
+    sp = get_dataset(handler.symbols_properties_dataset)\
+        .scanner(columns=["stock_type", "trading_name", "isin", "symbol"]).to_table().to_pandas()
+
+    # cash dividends ----
+    df = get_dataset(handler.cash_dividends_dataset).scanner(columns=["tradingName", "refdate"]).to_table().to_pandas()
+    df = df.groupby(["tradingName"], sort=True).last().reset_index()
+
+    cd = get_dataset(handler.cash_dividends_dataset).to_table().to_pandas()
+    cd = pd.merge(df, cd, on=["tradingName", "refdate"], how="inner")
+    cd_ = cd[["typeStock", "tradingName", "dateApproval", "lastDatePriorEx", "valueCash", "ratio", "corporateAction", "refdate"]]\
+        .rename(columns={
+            "dateApproval": "approved_on",
+            "lastDatePriorEx": "last_date_prior_ex",
+            "valueCash": "value_cash",
+            "corporateAction": "corporate_action_label",
+            "typeStock": "stock_type",
+            "tradingName": "trading_name",
+        })
+    cd_["payment_date"] = pd.NaT
+    cd_ = pd.merge(cd_, sp[["stock_type", "trading_name", "symbol"]], on=["stock_type", "trading_name"])\
+        .drop(columns=["stock_type", "trading_name"])
+
+    # company info cash dividends ----
+    df = get_dataset(handler.company_info_cash_dividends_dataset).scanner(columns=["isinCode", "refdate"])\
+        .to_table().to_pandas()
+    df = df.groupby(["isinCode"], sort=True).last().reset_index()
+
+    cd1 = get_dataset(handler.company_info_cash_dividends_dataset).to_table().to_pandas()
+    cd1 = pd.merge(df, cd1, on=["isinCode", "refdate"], how="inner")
+
+    cd1_ = cd1[["isinCode", "paymentDate", "approvedOn", "lastDatePrior", "rate", "label", "refdate"]]\
+        .rename(columns={
+            "approvedOn": "approved_on",
+            "lastDatePrior": "last_date_prior_ex",
+            "rate": "value_cash",
+            "label": "corporate_action_label",
+            "paymentDate": "payment_date",
+            "isinCode": "isin",
+        })
+    cd1_ = pd.merge(cd1_, sp[["isin", "symbol"]], on="isin").drop(columns="isin")
+    cd1_["ratio"] = pd.NA
+
+    # join: cash dividends + company info cash dividends ----
+    cash_dividends = pd.concat([cd_, cd1_]).reset_index(drop=True)
+    def ffill_n_remove_duplicates(df):
+        if len(df) < 2:
+            return df
+        ix = ~df["payment_date"].isna()
+        if ix.any():
+            df["payment_date"] = df.loc[ix.idxmax(), "payment_date"]
+        ix = ~df["ratio"].isna()
+        if ix.any():
+            df["ratio"] = df.loc[ix.idxmax(), "ratio"]
+        return df.iloc[[0],:]
+    cash_dividends = cash_dividends\
+        .groupby(["symbol", "last_date_prior_ex", "value_cash", "corporate_action_label"])\
+        .apply(ffill_n_remove_duplicates).reset_index(drop=True)
+
+    write_dataset(cash_dividends, handler.template_id)
+
+
+def create_b3_companies_stock_dividends(handler: MarketDataETL):
+    sp = get_dataset(handler.symbols_properties_dataset)\
+        .scanner(columns=["isin", "symbol"])\
+        .to_table().to_pandas()
+
+    # stock dividends ----
+    df = get_dataset(handler.company_info_stock_dividends_dataset)\
+        .scanner(columns=["isinCode", "refdate"])\
+        .to_table().to_pandas()
+    df = df.groupby(["isinCode"], sort=True).last().reset_index()
+
+    sd0 = get_dataset(handler.company_info_stock_dividends_dataset).to_table().to_pandas()
+    sd0 = pd.merge(df, sd0, on=["isinCode", "refdate"], how="inner")
+
+    sd0_ = sd0[["isinCode", "label", "lastDatePrior", "approvedOn", "factor", "refdate"]]\
+        .rename(columns={
+            "isinCode": "isin",
+            "label": "corporate_action_label",
+            "lastDatePrior": "last_date_prior_ex",
+            "approvedOn": "approved_on",
+        })
+
+    sd0_ = pd.merge(sd0_, sp[["isin", "symbol"]], on="isin", how="inner").drop(columns="isin")
+    write_dataset(sd0_, handler.template_id)
+
+
+def create_b3_companies_subscriptions(handler: MarketDataETL):
+    sp = get_dataset(handler.symbols_properties_dataset)\
+        .scanner(columns=["isin", "symbol"])\
+        .to_table().to_pandas()
+
+    # stock dividends ----
+    df = get_dataset(handler.company_info_subscriptions_dataset)\
+        .scanner(columns=["isinCode", "refdate"])\
+        .to_table().to_pandas()
+    df = df.groupby(["isinCode"], sort=True).last().reset_index()
+
+    su0 = get_dataset(handler.company_info_subscriptions_dataset).to_table().to_pandas()
+    su0 = pd.merge(df, su0, on=["isinCode", "refdate"], how="inner")
+
+    su0_ = su0[["isinCode", "label", "lastDatePrior", "approvedOn", "subscriptionDate", "tradingPeriod", "percentage",
+                "priceUnit", "refdate"]]\
+        .rename(columns={
+            "isinCode": "isin",
+            "label": "corporate_action_label",
+            "lastDatePrior": "last_date_prior_ex",
+            "approvedOn": "approved_on",
+            "subscriptionDate": "subscription_date",
+            "priceUnit": "price_unit",
+            "tradingPeriod": "trading_period",
+        })
+
+    su0_["trading_period_start"] = pd.to_datetime(su0_["trading_period"].str[:10], format="%d/%m/%Y", errors="coerce")
+    su0_["trading_period_end"] = pd.to_datetime(su0_["trading_period"].str[-10:], format="%d/%m/%Y", errors="coerce")
+    su0_ = pd.merge(su0_, sp[["isin", "symbol"]], on="isin").drop(columns="isin")
+
+    write_dataset(su0_, handler.template_id)

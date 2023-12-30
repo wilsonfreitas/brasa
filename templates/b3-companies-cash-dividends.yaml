@@ -1,0 +1,7 @@
+id: b3-companies-cash-dividends
+description: Informações de dividendos em dinheiro das companias listadas na B3
+etl:
+  function: brasa.etl.create_b3_companies_cash_dividends
+  cash_dividends_dataset: b3-cash-dividends
+  company_info_cash_dividends_dataset: b3-company-info-cash_dividends
+  symbols_properties_dataset: b3-equity-symbols-properties
