@@ -403,7 +403,7 @@ def read_b3_cash_dividends(meta: CacheMetadata) -> pd.DataFrame:
     fname = man.cache_path(fname)
     with gzip.open(fname) as f:
         obj = json.load(f)
-    df = pd.DataFrame(obj)
+    df = pd.DataFrame(obj["results"])
     df["valueCash"] = pd.to_numeric(df["valueCash"].str.replace(".", "").str.replace(",", "."))
     df["ratio"] = pd.to_numeric(df["ratio"].str.replace(".", "").str.replace(",", "."))
     df["quotedPerShares"] = pd.to_numeric(df["quotedPerShares"].str.replace(".", "").str.replace(",", "."))
