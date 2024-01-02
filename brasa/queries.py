@@ -99,13 +99,18 @@ def get_dataset(name: str) -> ds.Dataset:
     return ds.dataset(man.db_path(name), format="parquet")
 
 
-def describe(name: str) -> pd.DataFrame:
+def describe(name: str) -> None:
     ds = get_dataset(name)
     sc = ds.schema
     cols = json.loads(sc.metadata[b"pandas"].decode("utf-8"))["columns"]
     for k in cols:
         print(k["field_name"]+":", k["pandas_type"])
     return None
+
+
+def show(name: str, n: int = 10):
+    ds = get_dataset(name)
+    return ds.head(n).to_pandas().style.format(thousands=",", precision=2)
 
 
 def write_dataset(df: pd.DataFrame, name: str, format: str = "parquet") -> None:
