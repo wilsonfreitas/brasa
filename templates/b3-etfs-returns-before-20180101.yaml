@@ -2,3 +2,5 @@ id: b3-etfs-returns-before-20180101
 description: Dataset de retornos de etfs de renda variável antes de 20180101
 etl:
   function: brasa.etl.create_etf_returns_before_20180101
+  listed_funds_dataset: b3-listed-funds
+  cotahist_dataset: b3-cotahist

@@ -294,12 +294,12 @@ def create_equities_returns(handler: MarketDataETL):
 
 
 def create_etf_returns_before_20180101(handler: MarketDataETL):
-    symbols = get_dataset("b3-listed-funds")\
+    symbols = get_dataset(handler.listed_funds_dataset)\
         .filter(pc.field("fund_type") == "ETF")\
         .scanner(columns=["symbol"])\
         .to_table().to_pandas().iloc[:,0]
     cal = Calendar.load("B3")
-    df_cotahist = get_dataset("b3-cotahist")\
+    df_cotahist = get_dataset(handler.cotahist_dataset)\
             .filter(pc.field("refdate") >= cal.startdate)\
             .filter(pc.field("symbol").isin(symbols))\
             .scanner(columns=["refdate", "symbol", "close"])\
