@@ -5,6 +5,7 @@ description: Informação suplementar das companhias listadas na Bolsa
 locale: pt
 downloader:
   function: brasa.downloaders.b3_url_encoded_download
+  validator: brasa.downloaders.validate_json_empty_file
   url: https://sistemaswebb3-listados.b3.com.br/listedCompaniesProxy/CompanyCall/GetDetail
   format: json
   args:

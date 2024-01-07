@@ -5,6 +5,7 @@ description: Carteira Teórica dos índices da B3 com pesos e quantidades por se
 locale: pt
 downloader:
   function: brasa.downloaders.b3_url_encoded_download
+  validator: brasa.downloaders.validate_json_empty_file
   url: https://sistemaswebb3-listados.b3.com.br/indexProxy/indexCall/GetPortfolioDay
   format: json
   encoding: UTF-8

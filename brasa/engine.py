@@ -250,6 +250,9 @@ class MarketDataDownloader:
         self.encoding = downloader.get("encoding", "utf-8")
         self.verify_ssl = downloader.get("verify_ssl", True)
         self.download_function = load_function_by_name(downloader["function"])
+        validator = "brasa.downloaders.validate_empty_file" if downloader.get("validator") is None else \
+            downloader.get("validator")
+        self.validate_function = load_function_by_name(validator)
         self._extra_key = downloader.get("extra-key", None)
         if self._extra_key == "date":
             self.extra_key = datetime.now().isoformat()[:10]
@@ -273,6 +276,9 @@ class MarketDataDownloader:
         args = self.download_args(**kwargs)
         fp, response = self.download_function(self, **args)
         return fp, response
+
+    def validate(self, fname: str) -> None:
+        return self.validate_function(fname)
 
 
 class MarketDataTemplate:
@@ -569,12 +575,17 @@ def _download_marketdata(meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
     else:
         downloaded_files.append(file_rel_path)
 
+    meta.downloaded_files = downloaded_files
     for fname in downloaded_files:
+        template.downloader.validate(man.cache_path(fname))
+
+    for fname in meta.downloaded_files:
         _fname = man.cache_path(fname)
         with open(_fname, "rb") as f_in:
             with gzip.open(_fname + ".gz", "wb") as f_out:
                 shutil.copyfileobj(f_in, f_out)
         meta.downloaded_files.append(fname + ".gz")
+        meta.downloaded_files.remove(fname)
         os.remove(_fname)
 
 
