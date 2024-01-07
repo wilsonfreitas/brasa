@@ -183,6 +183,7 @@ class CacheMetadata:
         self.timestamp = datetime.now()
         self.response = None
         self.download_checksum = ""
+        self.download_folder = ""
         self.download_args = {}
         self.downloaded_files = []
         self.processed_files = {}
@@ -457,9 +458,7 @@ class CacheManager(Singleton):
             conn.commit()
 
     def remove_meta(self, meta: CacheMetadata) -> None:
-        for fname in meta.downloaded_files:
-            if os.path.isfile(self.cache_path(fname)):
-                os.remove(self.cache_path(fname))
+        shutil.rmtree(self.cache_path(meta.download_folder), ignore_errors=True)
         for fname in meta.processed_files.values():
             if os.path.isfile(self.cache_path(fname)):
                 os.remove(self.cache_path(fname))
@@ -503,7 +502,7 @@ class CacheManager(Singleton):
         try:
             _download_marketdata(meta, **meta.download_args)
             self.save_meta(meta)
-        except:
+        except Exception as ex:
             self.remove_meta(meta)
             return None
 
@@ -530,26 +529,18 @@ def _download_marketdata(meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
     meta.download_args = kwargs
     meta.extra_key = template.downloader.extra_key
     fp, response = template.downloader.download(**kwargs)
-    fp.seek(0, io.SEEK_END)
-    size = fp.tell()
-    if size == 0:
-        raise Exception("Downloaded file is empty")
-    else:
-        fp.seek(0)
-    meta.response = response
     if fp is None:
-        return None
+        raise Exception("Market data download failed: null file pointer")
+    meta.response = response
 
     checksum = generate_checksum_from_file(fp)
     meta.download_checksum = checksum
 
     man = CacheManager()
-    download_folder = man.download_folder(template.id, checksum)
+    meta.download_folder = man.download_folder(template.id, checksum)
 
     fname = f"downloaded.{template.downloader.format}"
-    file_rel_path = os.path.join(download_folder, fname)
-    if os.path.exists(man.cache_path(file_rel_path)):
-        return None
+    file_rel_path = os.path.join(meta.download_folder, fname)
     fp_dest = open(man.cache_path(file_rel_path), "wb")
     shutil.copyfileobj(fp, fp_dest)
     fp.close()
@@ -558,16 +549,18 @@ def _download_marketdata(meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
     downloaded_files = []
     if template.downloader.format == "zip":
         filenames = unzip_recursive(man.cache_path(file_rel_path))
+        if len(filenames) == 0:
+            raise Exception("Market data download failed: empty zip file")
         for filename in filenames:
             fname = os.path.basename(filename)
-            _file_rel_path = os.path.join(download_folder, fname)
+            _file_rel_path = os.path.join(meta.download_folder, fname)
             shutil.move(filename, man.cache_path(_file_rel_path))
             downloaded_files.append(_file_rel_path)
         os.remove(man.cache_path(file_rel_path))
     elif template.downloader.format == "base64":
         with open(man.cache_path(file_rel_path), "rb") as fp:
             fname = f"decoded.{template.downloader.decoded_format}"
-            _file_rel_path = os.path.join(download_folder, fname)
+            _file_rel_path = os.path.join(meta.download_folder, fname)
             with open(man.cache_path(_file_rel_path), "wb") as fp_dest:
                 base64.decode(fp, fp_dest)
             downloaded_files.append(_file_rel_path)
