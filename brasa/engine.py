@@ -640,8 +640,6 @@ def get_marketdata(template_name: str, reprocess: str | None=None, **kwargs) -> 
 
 def download_marketdata(template_name: str, **kwargs) -> None:
     template = retrieve_template(template_name)
-    meta = CacheMetadata(template.id)
-    meta.extra_key = template.downloader.extra_key
     cache = CacheManager()
     kwargs_iter = KwargsIterator(kwargs)
     widgets = [
@@ -654,6 +652,8 @@ def download_marketdata(template_name: str, **kwargs) -> None:
     for args in progressbar.progressbar(kwargs_iter,
                                         max_value=len(kwargs_iter),
                                         widgets=widgets):
+        meta = CacheMetadata(template.id)
+        meta.extra_key = template.downloader.extra_key
         meta.download_args = args
         meta.downloaded_files = []
         meta.processed_files = {}
