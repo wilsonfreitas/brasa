@@ -183,7 +183,7 @@ class CacheMetadata:
         self.timestamp = datetime.now()
         self.response = None
         self.download_checksum = ""
-        self.download_folder = ""
+        self.download_folder = None
         self.download_args = {}
         self.downloaded_files = []
         self.processed_files = {}
@@ -458,7 +458,10 @@ class CacheManager(Singleton):
             conn.commit()
 
     def remove_meta(self, meta: CacheMetadata) -> None:
-        shutil.rmtree(self.cache_path(meta.download_folder), ignore_errors=True)
+        if meta.download_folder == "" or meta.download_folder is None:
+            raise Exception("No download folder")
+        folder = self.cache_path(meta.download_folder)
+        shutil.rmtree(folder, ignore_errors=True)
         for fname in meta.processed_files.values():
             if os.path.isfile(self.cache_path(fname)):
                 os.remove(self.cache_path(fname))
