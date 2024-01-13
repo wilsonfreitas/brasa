@@ -11,7 +11,7 @@ from .engine import CacheManager
 
 __all__ = [
     "get_returns", "get_dataset", "write_dataset", "get_symbols", "get_industry_sectors",
-    "describe",
+    "describe", "show",
 ]
 
 
