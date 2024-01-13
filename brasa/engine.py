@@ -568,14 +568,19 @@ def _download_marketdata(meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
     for fname in downloaded_files:
         template.downloader.validate(man.cache_path(fname))
 
+    gz_downloaded_files = []
+    removed_downloaded_files = []
     for fname in meta.downloaded_files:
         _fname = man.cache_path(fname)
         with open(_fname, "rb") as f_in:
             with gzip.open(_fname + ".gz", "wb") as f_out:
                 shutil.copyfileobj(f_in, f_out)
-        meta.downloaded_files.append(fname + ".gz")
-        meta.downloaded_files.remove(fname)
+        gz_downloaded_files.append(fname + ".gz")
+        removed_downloaded_files.append(fname)
         os.remove(_fname)
+    meta.downloaded_files += gz_downloaded_files
+    for fname in removed_downloaded_files:
+        meta.downloaded_files.remove(fname)
 
 
 
