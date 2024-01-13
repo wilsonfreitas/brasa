@@ -320,7 +320,6 @@ class MarketDataTemplate:
 
 
 class CacheManager(Singleton):
-    _db_filename = "brasa.db"
     _meta_db_filename = "meta.db"
     _meta_folder = "meta"
     _db_folder = "db"
@@ -330,8 +329,6 @@ class CacheManager(Singleton):
         os.makedirs(self._cache_folder, exist_ok=True)
         os.makedirs(self.cache_path(self._meta_folder), exist_ok=True)
         os.makedirs(self.cache_path(self._db_folder), exist_ok=True)
-        if not os.path.exists(self.cache_path(self.db_filename)):
-            self.create_db()
         if not os.path.exists(self.cache_path(self.meta_db_filename)):
             self.create_meta_db()
 
@@ -356,10 +353,6 @@ class CacheManager(Singleton):
     @property
     def meta_db_connection(self) -> sqlite3.Connection:
         return sqlite3.connect(database=self.cache_path(self.meta_db_filename))
-
-    @property
-    def db_filename(self) -> str:
-        return os.path.join(self._db_folder, self._db_filename)
 
     def db_folder(self, template: MarketDataTemplate | None=None) -> str | dict[str, str]:
         if template is None:
