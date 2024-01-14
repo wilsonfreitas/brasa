@@ -240,6 +240,10 @@ class MarketDataReader:
         return df
 
 
+class DownloadException(Exception):
+    pass
+
+
 class MarketDataDownloader:
     def __init__(self, downloader: dict) -> None:
         self.url = None
@@ -275,7 +279,10 @@ class MarketDataDownloader:
 
     def download(self, **kwargs) -> tuple[IO | None, Any]:
         args = self.download_args(**kwargs)
-        fp, response = self.download_function(self, **args)
+        try:
+            fp, response = self.download_function(self, **args)
+        except:
+            raise DownloadException("Problem downloading data.")
         return fp, response
 
     def validate(self, fname: str) -> None:
@@ -485,11 +492,9 @@ class CacheManager(Singleton):
                 return df
         else: # reprocess == "download" or reprocess == "all"
             try:
-                _download_marketdata(meta, **meta.download_args)
-                self.save_meta(meta)
-                dfs = _read_marketdata(meta)
-                self.save_meta(meta)
-                return dfs
+                self.process_without_checks(meta)
+            except DownloadException:
+                return None
             except:
                 self.remove_meta(meta)
                 return None
@@ -498,6 +503,8 @@ class CacheManager(Singleton):
         try:
             _download_marketdata(meta, **meta.download_args)
             self.save_meta(meta)
+        except DownloadException:
+            return None
         except Exception as ex:
             self.remove_meta(meta)
             return None
