@@ -647,13 +647,12 @@ def get_marketdata(template_name: str, reprocess: bool=False, **kwargs) -> pd.Da
     cache = CacheManager()
     if reprocess:
         try:
-            cache.process_without_checks(meta)
+            return cache.process_without_checks(meta)
         except DownloadException:
             return None
         except:
             cache.remove_meta(meta)
             return None
-        return cache.load_marketdata(meta, reprocess)
     else:
         if cache.has_meta(meta):
             return cache.load_marketdata(meta, reprocess)
