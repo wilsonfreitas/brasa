@@ -640,6 +640,7 @@ def get_marketdata(template_name: str, reprocess: bool=False, **kwargs) -> pd.Da
     # reprocess: false
     #   if has meta: read data from downloaded files previously downloaded
     #   if not has meta: download files and read data from downloaded files
+    # this function only returns None if it has problems to download the data
     template = retrieve_template(template_name)
     meta = CacheMetadata(template.id)
     meta.download_args = kwargs
