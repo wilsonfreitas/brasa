@@ -482,26 +482,19 @@ class CacheManager(Singleton):
             fname = f"part-{fname_part}.parquet"
         return fname
     
-    def process_with_checks(self, meta: CacheMetadata, reprocess: str | None=None) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
-        if self.has_meta(meta) and (reprocess is None or reprocess == "read"):
-            self.load_meta(meta)
-            if len(meta.processed_files) > 0 and reprocess != "read":
+    def load_marketdata(self, meta: CacheMetadata, reprocess: str | None=None) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
+        if reprocess == "read":
+            df = _read_marketdata(meta)
+            self.save_meta(meta)
+            return df
+        else:
+            if len(meta.processed_files) > 0:
                 dfs = {key:pd.read_parquet(self.cache_path(fname)) for key,fname in meta.processed_files.items()}
                 if len(dfs) == 1:
                     return dfs["data"]
                 else:
                     return dfs
             else:
-                df = _read_marketdata(meta)
-                self.save_meta(meta)
-                return df
-        else: # reprocess == "download" or reprocess == "all"
-            try:
-                self.process_without_checks(meta)
-            except DownloadException:
-                return None
-            except:
-                self.remove_meta(meta)
                 return None
 
     def download_marketdata(self, meta: CacheMetadata) -> None:
@@ -647,7 +640,17 @@ def get_marketdata(template_name: str, reprocess: str | None=None, **kwargs) -> 
     meta.download_args = kwargs
     meta.extra_key = template.downloader.extra_key
     cache = CacheManager()
-    return cache.process_with_checks(meta, reprocess)
+    cache.load_meta(meta)
+    return cache.load_marketdata(meta, reprocess)
+    # if self.has_meta(meta) and (reprocess is None or reprocess == "read"):
+    # else: # reprocess == "download" or reprocess == "all"
+    #     try:
+    #         self.process_without_checks(meta)
+    #     except DownloadException:
+    #         return None
+    #     except:
+    #         self.remove_meta(meta)
+    #         return None
 
 
 def download_marketdata(template_name: str, **kwargs) -> None:
@@ -700,7 +703,8 @@ def process_marketdata(template_name: str) -> None:
             meta = CacheMetadata(template.id)
             meta.from_dict(_meta)
             try:
-                df = cache.process_with_checks(meta, reprocess="read")
+                meta.processing_errors = ""
+                df = cache.load_marketdata(meta, reprocess="read")
                 del df
             except Exception as ex:
                 errors.append((meta, ex))
