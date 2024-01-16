@@ -7,5 +7,6 @@ create table if not exists cache_metadata (
     template TEXT,
     downloaded_files TEXT,
     processed_files TEXT,
-    extra_key TEXT
+    extra_key TEXT,
+    processing_errors TEXT,
 );

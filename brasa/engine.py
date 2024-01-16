@@ -188,6 +188,7 @@ class CacheMetadata:
         self.downloaded_files = []
         self.processed_files = {}
         self.extra_key = ""
+        self.processing_errors = ""
 
     def to_dict(self) -> dict:
         return {
@@ -198,7 +199,8 @@ class CacheMetadata:
             "template": self.template,
             "downloaded_files": self.downloaded_files,
             "processed_files": self.processed_files,
-            "extra_key": self.extra_key
+            "extra_key": self.extra_key,
+            "processing_errors": self.processing_errors,
         }
 
     def from_dict(self, kwargs) -> None:
@@ -422,6 +424,7 @@ class CacheManager(Singleton):
                     "downloaded_files": json.loads(meta_row[6], object_hook=json_convert_to_object),
                     "processed_files": json.loads(meta_row[7], object_hook=json_convert_to_object),
                     "extra_key": meta_row[8],
+                    "processing_errors": meta_row[9],
                 }
                 return _meta
 
@@ -439,9 +442,10 @@ class CacheManager(Singleton):
                     json.dumps(meta.downloaded_files, default=json_convert_from_object),
                     json.dumps(meta.processed_files, default=json_convert_from_object),
                     meta.extra_key,
+                    meta.processing_errors,
                     meta.id,
                 )
-                c.execute("update cache_metadata set download_checksum = ?, timestamp = ?, response = ?, download_args = ?, template = ?, downloaded_files = ?, processed_files = ?, extra_key = ? where id = ?", params)
+                c.execute("update cache_metadata set download_checksum = ?, timestamp = ?, response = ?, download_args = ?, template = ?, downloaded_files = ?, processed_files = ?, extra_key = ?, processing_errors = ? where id = ?", params)
             else:
                 params = (
                     meta.id,
@@ -453,6 +457,7 @@ class CacheManager(Singleton):
                     json.dumps(meta.downloaded_files, default=json_convert_from_object),
                     json.dumps(meta.processed_files, default=json_convert_from_object),
                     meta.extra_key,
+                    meta.processing_errors,
                 )
                 c.execute("insert into cache_metadata values (?, ?, ?, ?, ?, ?, ?, ?, ?)", params)
             conn.commit()
@@ -533,7 +538,7 @@ def _download_marketdata(meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
     meta.extra_key = template.downloader.extra_key
     fp, response = template.downloader.download(**kwargs)
     if fp is None:
-        raise Exception("Market data download failed: null file pointer")
+        raise DownloadException("Market data download failed: null file pointer")
     meta.response = response
 
     checksum = generate_checksum_from_file(fp)
@@ -699,6 +704,8 @@ def process_marketdata(template_name: str) -> None:
                 del df
             except Exception as ex:
                 errors.append((meta, ex))
+                meta.processing_errors = str(ex)
+                cache.save_meta(meta)
 
         if len(errors) > 0:
             for err in errors:
