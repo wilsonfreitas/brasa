@@ -733,5 +733,15 @@ def process_marketdata(template_name: str) -> None:
 
 
 def process_etl(template_name: str) -> None:
-    template = retrieve_template(template_name)
-    template.etl.process_function(template.etl)
+    widgets = [
+        f"ETL {template_name} ",
+        progressbar.SimpleProgress(format="%(value_s)3s/%(max_value_s)-3s"),
+        progressbar.Bar(),
+        " ",
+        progressbar.Timer(),
+    ]
+    
+    with progressbar.ProgressBar(max_value=progressbar.UnknownLength, widgets=widgets) as bar:
+        template = retrieve_template(template_name)
+        template.etl.process_function(template.etl)
+        bar.update(1)
