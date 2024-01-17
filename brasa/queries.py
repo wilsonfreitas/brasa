@@ -119,7 +119,7 @@ def write_dataset(df: pd.DataFrame, name: str, format: str = "parquet") -> None:
     ds.write_dataset(tb, man.db_path(name), format=format, existing_data_behavior="overwrite_or_ignore")
 
 
-def _get_equity_symbols(sector=None) -> list:
+def _get_equity_symbols(sector=None) -> list[str]:
     df = get_dataset("b3-equity-symbols-properties")\
         .scanner(columns=["symbol", "sector"])\
         .to_table().to_pandas()
@@ -137,12 +137,12 @@ def get_industry_sectors() -> pd.DataFrame:
         .sort_values(["sector", "subsector", "segment"]).reset_index(drop=True)
 
 
-def _get_companies_industry_sectors(column) -> list:
+def _get_companies_industry_sectors(column) -> list[str]:
     df = get_industry_sectors()
     return list(df[column].unique())
 
 
-def _get_companies_trading_names() -> list:
+def _get_companies_trading_names() -> list[str]:
     df = get_dataset("b3-companies-details")\
         .scanner(columns=["refdate", "trading_name"])\
         .to_table().to_pandas()
@@ -150,7 +150,7 @@ def _get_companies_trading_names() -> list:
     return list(df.trading_name.unique())
 
 
-def _get_companies_names() -> list:
+def _get_companies_names() -> list[str]:
     tb = get_dataset("b3-equities-register").scanner(columns=["refdate"]).to_table()
     max_date = pyarrow.compute.max(tb.column("refdate"))
     df = get_dataset("b3-equities-register")\
@@ -171,7 +171,7 @@ def _get_companies_cvm_codes() -> list[int]:
     return [int(i) for i in df.code_cvm.unique()]
 
 
-def _get_indexes_names() -> list:
+def _get_indexes_names() -> list[str]:
     tb = get_dataset("b3-indexes-composition").scanner(columns=["refdate"]).to_table()
     max_date = pyarrow.compute.max(tb.column("refdate"))
     df = get_dataset("b3-indexes-composition")\
@@ -181,7 +181,7 @@ def _get_indexes_names() -> list:
     return list(df.indexes.unique())
 
 
-def _get_symbols_by_index(index, end_month=None) -> list:
+def _get_symbols_by_index(index, end_month=None) -> list[str]:
     ds = get_dataset("b3-indexes-composition")
     if end_month is not None:
         ds = ds.filter(pc.field("end_month") == end_month)
@@ -195,7 +195,7 @@ def _get_symbols_by_index(index, end_month=None) -> list:
     return list(df.code.unique())
 
 
-def _get_funds_symbols(type: str) -> list:
+def _get_funds_symbols(type: str) -> list[str]:
     tb = get_dataset("b3-listed-funds").scanner(columns=["refdate"]).to_table()
     max_date = pyarrow.compute.max(tb.column("refdate"))
     symbols = get_dataset("b3-listed-funds")\
