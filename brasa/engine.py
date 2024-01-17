@@ -183,7 +183,6 @@ class CacheMetadata:
         self.timestamp = datetime.now()
         self.response = None
         self.download_checksum = ""
-        self.download_folder = None
         self.download_args = {}
         self.downloaded_files = []
         self.processed_files = {}
@@ -210,6 +209,13 @@ class CacheMetadata:
     @property
     def id(self) -> str:
         return generate_checksum_for_template(self.template, self.download_args, self.extra_key)
+
+    @property
+    def download_folder(self) -> str | None:
+        if self.download_checksum == "":
+            return None
+        else:
+            return os.path.join(CacheManager._raw_folder, self.template, self.download_checksum)
 
 
 class MarketDataETL:
@@ -283,7 +289,7 @@ class MarketDataDownloader:
         args = self.download_args(**kwargs)
         try:
             fp, response = self.download_function(self, **args)
-        except:
+        except Exception as ex:
             raise DownloadException("Problem downloading data.")
         return fp, response
 
@@ -332,6 +338,7 @@ class CacheManager(Singleton):
     _meta_db_filename = "meta.db"
     _meta_folder = "meta"
     _db_folder = "db"
+    _raw_folder = "raw"
 
     def init(self) -> None:
         self._cache_folder = os.environ.get("BRASA_DATA_PATH", os.path.join(os.getcwd(), ".brasa-cache"))
@@ -378,14 +385,8 @@ class CacheManager(Singleton):
             folder = db_folders
         return folder
 
-    def download_folder(self, template_id: str, checksum: str) -> str:
-        folder = os.path.join("raw", template_id, checksum)
-        os.makedirs(self.cache_path(folder), exist_ok=True)
-        return folder
-
-    def downloaded_file_paths(self, template_id: str, checksum: str, files: list) -> list[str]:
-        folder = self.download_folder(template_id, checksum)
-        return [os.path.join(folder, f) for f in files]
+    def create_download_folder(self, meta: CacheMetadata) -> str:
+        os.makedirs(self.cache_path(meta.download_folder), exist_ok=True)
 
     @property
     def meta_db_filename(self) -> str:
@@ -459,7 +460,7 @@ class CacheManager(Singleton):
                     meta.extra_key,
                     meta.processing_errors,
                 )
-                c.execute("insert into cache_metadata values (?, ?, ?, ?, ?, ?, ?, ?, ?)", params)
+                c.execute("insert into cache_metadata values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", params)
             conn.commit()
 
     def remove_meta(self, meta: CacheMetadata) -> None:
@@ -501,7 +502,7 @@ class CacheManager(Singleton):
         try:
             _download_marketdata(meta, **meta.download_args)
             self.save_meta(meta)
-        except DownloadException:
+        except DownloadException as ex:
             return None
         except Exception as ex:
             self.remove_meta(meta)
@@ -538,7 +539,7 @@ def _download_marketdata(meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
     meta.download_checksum = checksum
 
     man = CacheManager()
-    meta.download_folder = man.download_folder(template.id, checksum)
+    man.create_download_folder(meta)
 
     fname = f"downloaded.{template.downloader.format}"
     file_rel_path = os.path.join(meta.download_folder, fname)
