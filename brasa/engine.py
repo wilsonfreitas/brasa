@@ -662,7 +662,7 @@ def get_marketdata(template_name: str, reprocess: bool=False, **kwargs) -> pd.Da
             return get_marketdata(template_name, reprocess=True, **kwargs)
 
 
-def download_marketdata(template_name: str, **kwargs) -> None:
+def download_marketdata(template_name: str, reprocess: bool=False, **kwargs) -> None:
     template = retrieve_template(template_name)
     cache = CacheManager()
     kwargs_iter = KwargsIterator(kwargs)
@@ -681,13 +681,19 @@ def download_marketdata(template_name: str, **kwargs) -> None:
         meta.download_args = args
         meta.downloaded_files = []
         meta.processed_files = {}
-        if cache.has_meta(meta):
-            cache.load_meta(meta)
-            check = all([os.path.exists(cache.cache_path(f)) for f in meta.downloaded_files])
-            if not check:
-                cache.download_marketdata(meta)
-        else:
+        if reprocess:
+            if cache.has_meta(meta):
+                cache.load_meta(meta)
+                cache.remove_meta(meta)
             cache.download_marketdata(meta)
+        else:
+            if cache.has_meta(meta):
+                cache.load_meta(meta)
+                check = all([os.path.exists(cache.cache_path(f)) for f in meta.downloaded_files])
+                if not check:
+                    cache.download_marketdata(meta)
+            else:
+                cache.download_marketdata(meta)
 
 
 def process_marketdata(template_name: str) -> None:
