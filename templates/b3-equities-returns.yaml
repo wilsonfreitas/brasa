@@ -4,3 +4,4 @@ etl:
   function: brasa.etl.create_equities_returns
   equities_dataset: b3-equities-spot-market
   marketdata_dataset: b3-bvbg086
+  cotahist_dataset: b3-cotahist

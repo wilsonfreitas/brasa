@@ -268,7 +268,7 @@ def create_equities_returns(handler: MarketDataETL):
     df_returns["pct_return"] = df_returns["oscillation_percentage"] / 100
     df_returns["log_return"] = np.log(1 + df_returns["pct_return"])
     # cotahist values to correct missing date 20210610 ----
-    df = get_dataset("b3-cotahist")\
+    df = get_dataset(handler.cotahist_dataset)\
         .filter(pc.field("symbol").isin(symbols))\
         .filter(pc.field("refdate") >= datetime(2021, 6, 9))\
         .filter(pc.field("refdate") <= datetime(2021, 6, 10))\
