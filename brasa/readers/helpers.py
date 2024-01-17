@@ -387,8 +387,11 @@ def read_b3_company_details(meta: CacheMetadata) -> pd.DataFrame:
     else:
         df = pd.DataFrame([obj])
     if df["otherCodes"].item() is not None:
-        df["code"] = [d["code"] for d in df["otherCodes"]]
-        df["isin"] = [d["isin"] for d in df["otherCodes"]]
+        codes = [d["code"] for d in df["otherCodes"].item()]
+        isins = [d["isin"] for d in df["otherCodes"].item()]
+        df = pd.concat([df] * len(codes), ignore_index=True)
+        df["code"] = codes
+        df["isin"] = isins
     else:    
         df["code"] = np.nan
         df["isin"] = np.nan
@@ -468,7 +471,7 @@ def read_b3_listed_funds(meta: CacheMetadata) -> pd.DataFrame:
         obj = json.load(f)
 
     template = retrieve_template(meta.template)
-    df = pd.DataFrame(obj)
+    df = pd.DataFrame(obj["results"])
     df["typeFund"] = template.downloader.args["typeFund"]
     df["refdate"] = meta.timestamp.date()
 
