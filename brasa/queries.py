@@ -162,13 +162,13 @@ def _get_companies_names() -> list:
     return list(df.instrument_asset.unique())
 
 
-def _get_companies_cvm_codes() -> list:
+def _get_companies_cvm_codes() -> list[int]:
     df = get_dataset("b3-companies-info")\
         .filter(pc.field("code_cvm") != 0)\
         .scanner(columns=["code_cvm", "refdate"])\
         .to_table().to_pandas()
     df = df.groupby(["code_cvm"], sort=True).last().reset_index()
-    return list(df.code_cvm.unique())
+    return [int(i) for i in df.code_cvm.unique()]
 
 
 def _get_indexes_names() -> list:
