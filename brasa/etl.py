@@ -1,4 +1,4 @@
-
+import re
 from datetime import datetime
 
 from bcb import sgs, PTAX
@@ -509,12 +509,15 @@ def create_b3_listed_funds(handler: MarketDataETL):
 def create_b3_companies_cash_dividends(handler: MarketDataETL):
     sp = get_dataset(handler.symbols_properties_dataset)\
         .scanner(columns=["stock_type", "trading_name", "isin", "symbol"]).to_table().to_pandas()
+    sp["trading_name"] = sp["trading_name"].apply(lambda x: re.sub("[^A-Z0-9]", "", x))
 
     # cash dividends ----
     df = get_dataset(handler.cash_dividends_dataset).scanner(columns=["tradingName", "refdate"]).to_table().to_pandas()
+    df["tradingName"] = df["tradingName"].apply(lambda x: re.sub("[^A-Z0-9]", "", x))
     df = df.groupby(["tradingName"], sort=True).last().reset_index()
 
     cd = get_dataset(handler.cash_dividends_dataset).to_table().to_pandas()
+    cd["tradingName"] = cd["tradingName"].apply(lambda x: re.sub("[^A-Z0-9]", "", x))
     cd = pd.merge(df, cd, on=["tradingName", "refdate"], how="inner")
     cd_ = cd[["typeStock", "tradingName", "dateApproval", "lastDatePriorEx", "valueCash", "ratio", "corporateAction", "refdate"]]\
         .rename(columns={
