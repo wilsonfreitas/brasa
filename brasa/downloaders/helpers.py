@@ -53,6 +53,10 @@ def validate_empty_file(fname:  str) -> None:
 
 def validate_json_empty_file(fname: str) -> None:
     fp = open(fname, "rb")
+    if fp.readlines() == []:
+        fp.close()
+        raise Exception("JSON file is empty")
+    fp.seek(0)
     obj = json.load(fp)
     fp.close()
     if len(obj) == 0:
