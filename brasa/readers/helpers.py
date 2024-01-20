@@ -41,7 +41,7 @@ def read_b3_trades_intraday(meta: CacheMetadata) -> pd.DataFrame:
     
     df["traded_quantity"] = pd.to_numeric(df["traded_quantity"], errors="coerce")
     df["traded_price"] = pd.to_numeric(df["traded_price"].str.replace(",", "."), errors="coerce")
-    df["trade_date"] = pd.to_datetime(df["trade_date"])
+    df["trade_date"] = pd.to_datetime(df["trade_date"] + " " + df["trade_time"], format="%Y-%m-%d %H%M%S%f", errors="coerce")
     df["refdate"] = pd.to_datetime(df["refdate"])
 
     return df
