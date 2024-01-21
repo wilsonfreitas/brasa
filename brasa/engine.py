@@ -10,6 +10,7 @@ import re
 import shutil
 import sqlite3
 from typing import IO, Any, Callable
+from warnings import warn
 from numpy import empty
 
 import pandas as pd
@@ -252,6 +253,10 @@ class DownloadException(Exception):
     pass
 
 
+class DownloadAlreadyExistsException(Exception):
+    pass
+
+
 class MarketDataDownloader:
     def __init__(self, downloader: dict) -> None:
         self.url = None
@@ -463,19 +468,31 @@ class CacheManager(Singleton):
                 c.execute("insert into cache_metadata values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", params)
             conn.commit()
 
-    def remove_meta(self, meta: CacheMetadata) -> None:
+    def clean_meta_raw_folder(self, meta: CacheMetadata) -> None:
+        warn(f"Cleaning meta download {meta.download_args}")
         if meta.download_folder == "" or meta.download_folder is None:
             raise Exception("No download folder")
         folder = self.cache_path(meta.download_folder)
-        shutil.rmtree(folder, ignore_errors=True)
+        shutil.rmtree(folder, ignore_errors=False)
+
+    def clean_meta_db_folder(self, meta: CacheMetadata) -> None:
+        warn(f"Cleaning meta db {meta.download_args}")
         for fname in meta.processed_files.values():
-            if os.path.isfile(self.cache_path(fname)):
-                os.remove(self.cache_path(fname))
+            fname = self.cache_path(fname)
+            if os.path.isfile(fname):
+                os.remove(fname)
+
+    def clean_meta_db(self, meta: CacheMetadata) -> None:
         with self.meta_db_connection as conn:
             c = conn.cursor()
             c.execute("delete from cache_metadata where id = ?", (meta.id,))
             conn.commit()
-        
+
+    def remove_meta(self, meta: CacheMetadata) -> None:
+        self.clean_meta_raw_folder(meta)
+        self.clean_meta_db_folder(meta)
+        self.clean_meta_db(meta)
+
     def parquet_file_name(self, fname_part: str) -> str:
         if re.fullmatch(r"\d{4}(-\d{2}(-\d{2})?)?", fname_part):
             fname = f"{fname_part}.parquet"
@@ -483,37 +500,45 @@ class CacheManager(Singleton):
             fname = f"part-{fname_part}.parquet"
         return fname
     
+    def read_marketdata(self, meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
+        _read_marketdata(meta)
+        self.save_meta(meta)
+
     def load_marketdata(self, meta: CacheMetadata, reprocess: bool=False) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
         if reprocess:
-            df = _read_marketdata(meta)
-            self.save_meta(meta)
-            return df
-        else:
-            if len(meta.processed_files) > 0:
-                dfs = {key:pd.read_parquet(self.cache_path(fname)) for key,fname in meta.processed_files.items()}
-                if len(dfs) == 1:
-                    return dfs["data"]
-                else:
-                    return dfs
+            self.read_marketdata(meta)
+        if len(meta.processed_files) > 0:
+            dfs = {key:pd.read_parquet(self.cache_path(fname)) for key,fname in meta.processed_files.items()}
+            if len(dfs) == 1:
+                return dfs["data"]
             else:
-                return None
+                return dfs
+        else:
+            warn("No processed files")
+            return None
 
     def download_marketdata(self, meta: CacheMetadata) -> None:
         try:
             _download_marketdata(meta, **meta.download_args)
-            self.save_meta(meta)
-        except DownloadException as ex:
-            return None
+        except DownloadAlreadyExistsException as ex:
+            return
         except Exception as ex:
-            self.remove_meta(meta)
-            return None
+            self.clean_meta_raw_folder(meta)
+            return
+        try:
+            self.save_meta(meta)
+        except Exception as ex:
+            self.clean_meta_db(meta)
+            return
 
     def process_without_checks(self, meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
         _download_marketdata(meta, **meta.download_args)
         self.save_meta(meta)
-        dfs = _read_marketdata(meta)
-        self.save_meta(meta)
-        return dfs
+        if len(meta.downloaded_files) > 0:
+            return self.load_marketdata(meta, reprocess=True)
+        else:
+            warn("No downloaded files")
+            return None
 
 
 def retrieve_template(template_name) -> MarketDataTemplate:
@@ -537,8 +562,9 @@ def _download_marketdata(meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
 
     checksum = generate_checksum_from_file(fp)
     meta.download_checksum = checksum
-
     man = CacheManager()
+    if os.path.exists(man.cache_path(meta.download_folder)):
+        raise DownloadAlreadyExistsException(f"Market data download failed: download folder {meta.download_folder} already exists")
     man.create_download_folder(meta)
 
     fname = f"downloaded.{template.downloader.format}"
@@ -618,7 +644,7 @@ def save_parquet_file(meta: CacheMetadata, folder: str, processed_files_name: st
     df.to_parquet(man.cache_path(fname))
 
 
-def _read_marketdata(meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
+def _read_marketdata(meta: CacheMetadata) -> None:
     template = retrieve_template(meta.template)
     df = template.reader.read(meta)
     man = CacheManager()
@@ -627,12 +653,8 @@ def _read_marketdata(meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFra
         for name,dx in df.items():
             if dx.shape[0] > 0:
                 save_parquet_file(meta, db_folder[name], template.reader.multi[name], dx)
-        df = {template.reader.multi[k]:v for k,v in df.items()}
     elif isinstance(df, pd.DataFrame) and isinstance(db_folder, str):
         save_parquet_file(meta, db_folder, "data", df)
-    else:
-        df = None
-    return df
 
 
 def get_marketdata(template_name: str, reprocess: bool=False, **kwargs) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
@@ -667,7 +689,7 @@ def download_marketdata(template_name: str, reprocess: bool=False, **kwargs) -> 
     cache = CacheManager()
     kwargs_iter = KwargsIterator(kwargs)
     widgets = [
-        f"Downloading {template_name} ",
+        f"D {template_name} ",
         progressbar.SimpleProgress(format="%(value_s)3s/%(max_value_s)-3s"),
         progressbar.Bar(),
         " ",
@@ -696,35 +718,38 @@ def download_marketdata(template_name: str, reprocess: bool=False, **kwargs) -> 
                 cache.download_marketdata(meta)
 
 
-def process_marketdata(template_name: str) -> None:
+def process_marketdata(template_name: str, reprocess: bool=False) -> None:
     template = retrieve_template(template_name)
     cache = CacheManager()
     with cache.meta_db_connection as conn:
         c = conn.cursor()
-        c.execute("select id from cache_metadata where template = ? and processed_files = '{}'", (template_name,))
+        c.execute("select id from cache_metadata where template = ?", (template_name,))
         rows = c.fetchall()
         widgets = [
-            f"Processing {template_name} ",
+            f"P {template_name} ",
             progressbar.SimpleProgress(format="%(value_s)3s/%(max_value_s)-3s"),
             progressbar.Bar(),
             " ",
             progressbar.Timer(),
         ]
         errors = []
-        for meta_row in progressbar.progressbar(rows,
-                                            max_value=len(rows),
-                                            widgets=widgets):
-            _meta = cache._load_meta_dict_by_id(meta_row[0])
-            meta = CacheMetadata(template.id)
-            meta.from_dict(_meta)
-            try:
-                meta.processing_errors = ""
-                df = cache.load_marketdata(meta, reprocess=True)
-                del df
-            except Exception as ex:
-                errors.append((meta, ex))
-                meta.processing_errors = str(ex)
-                cache.save_meta(meta)
+        with progressbar.ProgressBar(max_value=len(rows), widgets=widgets) as pbar:
+            for meta_row in rows:
+                pbar.update(pbar.value + 1)
+                _meta = cache._load_meta_dict_by_id(meta_row[0])
+                meta = CacheMetadata(template.id)
+                meta.from_dict(_meta)
+                try:
+                    if reprocess:
+                        meta.processing_errors = ""
+                        cache.read_marketdata(meta)
+                    elif len(meta.processed_files) == 0:
+                        meta.processing_errors = ""
+                        cache.read_marketdata(meta)
+                except Exception as ex:
+                    errors.append((meta, ex))
+                    meta.processing_errors = str(ex)
+                    cache.save_meta(meta)
 
         if len(errors) > 0:
             for err in errors:
@@ -741,7 +766,7 @@ def process_etl(template_name: str) -> None:
         progressbar.Timer(),
     ]
     
-    with progressbar.ProgressBar(max_value=progressbar.UnknownLength, widgets=widgets) as bar:
+    with progressbar.ProgressBar(max_value=1, widgets=widgets) as bar:
+        bar.update(1)
         template = retrieve_template(template_name)
         template.etl.process_function(template.etl)
-        bar.update(1)
