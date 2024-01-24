@@ -5,10 +5,7 @@ description = "Python library to extract finance market data from brazillian fin
 authors = ["wilsonfreitas <wilson.freitas@gmail.com>"]
 license = "MIT"
 readme = "README.md"
-include = [
-  {path = "brasa"},
-  {path = "templates"},
-]
+include = [{ path = "brasa" }, { path = "templates" }]
 
 [tool.poetry.dependencies]
 python = "^3.10"
@@ -19,7 +16,7 @@ xlrd = "^2.0.1"
 regexparser = "^0.1.0"
 pyyaml = "^6.0"
 pyarrow = "^12.0.0"
-progressbar2 = "^4.2.0"
+progressbar2 = "^4.3.2"
 html5lib = "^1.1"
 beautifulsoup4 = "^4.12.2"
 python-bcb = "0.1.9"
@@ -42,6 +39,4 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
-pythonpath = [
-  "."
-]
+pythonpath = ["."]
