@@ -6,6 +6,7 @@ import gzip
 import io
 import json
 import os
+from pathlib import Path
 import re
 import shutil
 import sqlite3
@@ -354,7 +355,12 @@ class CacheManager(Singleton):
         return self._cache_folder
     
     def cache_path(self, fname: str) -> str:
-        return os.path.join(self.cache_folder, fname)
+        if "\\" in fname:
+            parts = fname.split("\\")
+            path = Path(self.cache_folder, *parts)
+        else:
+            path = Path(self.cache_folder, fname)
+        return str(path)
 
     def db_path(self, name: str) -> str:
         return os.path.join(self.cache_path(self.db_folder()), name)
