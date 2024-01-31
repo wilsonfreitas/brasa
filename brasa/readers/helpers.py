@@ -317,7 +317,7 @@ def _read_b3_equity_options_files(meta: CacheMetadata) -> pd.DataFrame:
                      sep=reader.separator,
                      names=reader.fields.names, dtype_backend="pyarrow")
     df["maturity_date"] = pd.to_datetime(df["maturity_date"], format="%Y%m%d", errors="coerce")
-    df["refdate"] = meta.download_args["refdate"]
+    df["refdate"] = pd.to_datetime(meta.download_args["refdate"])
     return df
 
 
@@ -341,7 +341,7 @@ def read_b3_company_info(meta: CacheMetadata) -> dict[str, pd.DataFrame]:
     df["totalNumberShares"] = pd.to_numeric(df["totalNumberShares"].str.replace(".", "").str.replace(",", "."))
     with SuppressUserWarnings():
         df["quotedPerSharSince"] = pd.to_datetime(df["quotedPerSharSince"], format="%d/%m/%Y", errors="coerce")
-    df["refdate"] = meta.timestamp.date()
+    df["refdate"] = pd.to_datetime(meta.timestamp.date())
     data["Info"] = df
     # Cash Dividends ----
     df = pd.DataFrame(obj[0]["cashDividends"])
@@ -351,7 +351,7 @@ def read_b3_company_info(meta: CacheMetadata) -> dict[str, pd.DataFrame]:
             df["paymentDate"] = pd.to_datetime(df["paymentDate"], format="%d/%m/%Y", errors="coerce")
             df["approvedOn"] = pd.to_datetime(df["approvedOn"], format="%d/%m/%Y", errors="coerce")
             df["lastDatePrior"] = pd.to_datetime(df["lastDatePrior"], format="%d/%m/%Y", errors="coerce")
-        df["refdate"] = meta.timestamp.date()
+        df["refdate"] = pd.to_datetime(meta.timestamp.date())
     data["CashDividends"] = df
     # Stock Dividends ----
     df = pd.DataFrame(obj[0]["stockDividends"])
@@ -360,7 +360,7 @@ def read_b3_company_info(meta: CacheMetadata) -> dict[str, pd.DataFrame]:
         with SuppressUserWarnings():
             df["approvedOn"] = pd.to_datetime(df["approvedOn"], format="%d/%m/%Y", errors="coerce")
             df["lastDatePrior"] = pd.to_datetime(df["lastDatePrior"], format="%d/%m/%Y", errors="coerce")
-        df["refdate"] = meta.timestamp.date()
+        df["refdate"] = pd.to_datetime(meta.timestamp.date())
     data["StockDividends"] = df
     # Subscriptions ----
     df = pd.DataFrame(obj[0]["subscriptions"])
@@ -371,7 +371,7 @@ def read_b3_company_info(meta: CacheMetadata) -> dict[str, pd.DataFrame]:
             df["subscriptionDate"] = pd.to_datetime(df["subscriptionDate"], format="%d/%m/%Y", errors="coerce")
             df["approvedOn"] = pd.to_datetime(df["approvedOn"], format="%d/%m/%Y", errors="coerce")
             df["lastDatePrior"] = pd.to_datetime(df["lastDatePrior"], format="%d/%m/%Y", errors="coerce")
-        df["refdate"] = meta.timestamp.date()
+        df["refdate"] = pd.to_datetime(meta.timestamp.date())
     data["Subscriptions"] = df
     return data
 
@@ -396,7 +396,7 @@ def read_b3_company_details(meta: CacheMetadata) -> pd.DataFrame:
         df["code"] = np.nan
         df["isin"] = np.nan
     df.drop(columns=["otherCodes"], inplace=True)
-    df["refdate"] = meta.timestamp.date()
+    df["refdate"] = pd.to_datetime(meta.timestamp.date())
     return df
 
 
@@ -418,7 +418,7 @@ def read_b3_cash_dividends(meta: CacheMetadata) -> pd.DataFrame:
         df["lastDateTimePriorEx"] = pd.to_datetime(df["lastDateTimePriorEx"], format="%Y-%m-%dT%H:%M:%S", errors="coerce")
         df["lastDatePriorEx"] = pd.to_datetime(df["lastDatePriorEx"], format="%d/%m/%Y", errors="coerce")
     df["tradingName"] = meta.download_args["tradingName"]
-    df["refdate"] = meta.timestamp.date()
+    df["refdate"] = pd.to_datetime(meta.timestamp.date())
     return df
 
 
@@ -437,7 +437,7 @@ def read_b3_index_theoretical_portfolio(meta: CacheMetadata) -> pd.DataFrame:
     df["total_theorical_qty"] = pd.to_numeric(df["total_theorical_qty"].str.replace(".", "").str.replace(",", "."))
     df["reductor"] = pd.to_numeric(df["reductor"].str.replace(".", "").str.replace(",", "."))
     df["index_name"] = meta.download_args["index"]
-    df["refdate"] = meta.timestamp.date()
+    df["refdate"] = pd.to_datetime(meta.timestamp.date())
 
     return df
 
@@ -458,7 +458,7 @@ def read_b3_indexes_composition(meta: CacheMetadata) -> pd.DataFrame:
     df_stock_indexes["start_month"] = f"{header['year']}-{str.zfill(str(header['startMonth']), 2)}"
     df_stock_indexes["end_month"] = f"{header['year']}-{str.zfill(str(header['endMonth']), 2)}"
     df_stock_indexes["index_update_date"] = pd.to_datetime(header["update"])
-    df_stock_indexes["refdate"] = meta.timestamp.date()
+    df_stock_indexes["refdate"] = pd.to_datetime(meta.timestamp.date())
 
     return df_stock_indexes
 
@@ -473,6 +473,6 @@ def read_b3_listed_funds(meta: CacheMetadata) -> pd.DataFrame:
     template = retrieve_template(meta.template)
     df = pd.DataFrame(obj["results"])
     df["typeFund"] = template.downloader.args["typeFund"]
-    df["refdate"] = meta.timestamp.date()
+    df["refdate"] = pd.to_datetime(meta.timestamp.date())
 
     return df
