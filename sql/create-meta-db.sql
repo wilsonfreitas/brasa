@@ -8,5 +8,5 @@ create table if not exists cache_metadata (
     downloaded_files TEXT,
     processed_files TEXT,
     extra_key TEXT,
-    processing_errors TEXT,
+    processing_errors TEXT
 );
