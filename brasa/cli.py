@@ -2,12 +2,17 @@
 import argparse
 from datetime import datetime
 
+from brasa.engine import CacheManager
+
 from . import download_marketdata, process_marketdata, process_etl, retrieve_template
 from .util import DateRangeParser
 
 parser = argparse.ArgumentParser()
 
 subparsers = parser.add_subparsers(dest="command", title="Commands")
+
+parser_setup = subparsers.add_parser("setup", help="setup brasa: create cache directories and metadata.db")
+
 parser_download = subparsers.add_parser("download", help="download market data")
 parser_download.add_argument("-d", "--date", "--date-range", nargs="+", help="specify date or date range to download and process market data")
 parser_download.add_argument("--calendar", help="specify calendar to be used for creating date range", default="B3",
@@ -23,7 +28,9 @@ parser_show.add_argument("choice", choices=["templates"])
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    if args.command == "download":
+    if args.command == "setup":
+        man = CacheManager()
+    elif args.command == "download":
         if len(args.date) == 1:
             date_range = DateRangeParser(args.calendar).parse(args.date[0])
         else:
