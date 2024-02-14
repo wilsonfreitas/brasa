@@ -1,0 +1,50 @@
+id: td-historical-prices
+filename: ~
+filetype: CUSTOM
+description: Tesouro Direto preços e taxas históricas
+downloader:
+  verifyssl: false
+  function: brasa.downloaders.multi_download
+  url: https://cdn.tesouro.gov.br/sistemas-internos/apex/producao/sistemas/sistd/{year}/{contract}_{year}.xls
+  format: xls
+  use-filename: true
+  args:
+    year: ~
+    contract: ~
+  multi:
+    contract:
+      lft: LFT
+      ltn: LTN
+      ntnb: NTN-B
+      ntnb_principal: NTN-B_Principal
+      ntnf: NTN-F
+      ntnc: NTN-C
+reader:
+  function: brasa.readers.null_reader
+fields:
+  - name: symbol
+    description: Código da opção
+  - name: strike
+    description: Preço de exercício da opção
+  - name: description
+    description: Nome da empresa
+  - name: covered
+    description: Posição coberta
+  - name: uncovered
+    description: Posição descoberta
+  - name: qt_holder
+    description: Quantidade de clientes comprados
+  - name: lock
+    description: Posição travada
+  - name: total_positions
+    description: Posição total
+  - name: qt_issuer
+    description: Quantidade de clientes lançadores
+  - name: maturity_date
+    description: Data de vencimento da opção
+  - name: instrument_market
+    description: Tipo de mercado (70 CALLS, 80 PUTS)
+  - name: asset_name
+    description: Código da empresa
+  - name: asset_specification
+    description: Especificação do ativo
