@@ -94,9 +94,9 @@ def get_returns(symbols: str|list[str], start=None, end=None, calendar="B3") -> 
     return df
 
 
-def get_dataset(name: str) -> ds.Dataset:
+def get_dataset(name: str, schema: pyarrow.Schema = None) -> ds.Dataset:
     man = CacheManager()
-    return ds.dataset(man.db_path(name), format="parquet")
+    return ds.dataset(man.db_path(name), schema=schema, format="parquet")
 
 
 def describe(name: str) -> None:
