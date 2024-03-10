@@ -348,7 +348,18 @@ def create_b3_companies_details(handler: MarketDataETL):
     df = get_dataset(handler.companies_dataset).scanner(columns=["issuingCompany", "refdate"]).to_table().to_pandas()
     df = df.groupby(["issuingCompany"], sort=True).last().reset_index()
 
-    comp_det = get_dataset(handler.companies_dataset)\
+    sc = pyarrow.schema([
+        ("issuingCompany", pyarrow.string()), ("companyName", pyarrow.string()), ("tradingName", pyarrow.string()),
+        ("cnpj", pyarrow.string()), ("industryClassification", pyarrow.string()),
+        ("industryClassificationEng", pyarrow.string()), ("activity", pyarrow.string()), ("website", pyarrow.string()),
+        ("hasQuotation", pyarrow.bool_()), ("status", pyarrow.string()), ("marketIndicator", pyarrow.string()),
+        ("market", pyarrow.string()), ("institutionCommon", pyarrow.string()),
+        ("institutionPreferred", pyarrow.string()), ("code", pyarrow.string()), ("codeCVM", pyarrow.string()),
+        ("lastDate", pyarrow.string()), ("hasEmissions", pyarrow.bool_()), ("hasBDR", pyarrow.bool_()),
+        ("typeBDR", pyarrow.string()), ("describleCategoryBVMF", pyarrow.string()), ("isin", pyarrow.string()),
+        ("refdate", pyarrow.timestamp("us")),
+    ])
+    comp_det = get_dataset(handler.companies_dataset, schema=sc)\
         .to_table()\
         .to_pandas()
 
