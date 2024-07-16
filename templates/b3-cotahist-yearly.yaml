@@ -4,7 +4,7 @@ filetype: MFWF
 description: Cotações Históricas do Pregão de Ações - Arquivo Anual
 locale: en
 downloader:
-  verifyssl: false
+  verify_ssl: false
   function: brasa.downloaders.datetime_download
   url: https://bvmf.bmfbovespa.com.br/InstDados/SerHist/COTAHIST_A%Y.ZIP
   format: zip

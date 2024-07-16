@@ -4,7 +4,7 @@ filetype: CUSTOM
 description: Preços de Ajustes Diários de Contratos Futuros
 locale: pt
 downloader:
-  verifyssl: false
+  verify_ssl: false
   function: brasa.downloaders.settlement_prices_download
   url: https://www2.bmf.com.br/pages/portal/bmfbovespa/lumis/lum-ajustes-do-pregao-ptBR.asp
   format: html
