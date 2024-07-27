@@ -10,6 +10,18 @@ import json
 import bizdays
 import pytz
 import requests
+from contextlib import contextmanager
+
+
+@contextmanager
+def disable_ssl_warnings():
+    import warnings
+    import urllib3
+
+    with warnings.catch_warnings():
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        yield None
+
 
 class SimpleDownloader:
     def __init__(self, url, verify_ssl, **kwargs):
@@ -26,16 +38,17 @@ class SimpleDownloader:
         return self.response.status_code
 
     def download(self) -> IO | None:
-        res = requests.get(self.url, verify=self.verify_ssl)
-        self.response = res
-        
+        with disable_ssl_warnings():
+            res = requests.get(self.url, verify=self.verify_ssl)
+            self.response = res
+
         msg = "status_code = {} url = {}".format(res.status_code, self.url)
         logg = logging.warn if res.status_code != 200 else logging.info
         logg(msg)
-        
+
         if res.status_code != 200:
             return None
-        
+
         temp = tempfile.TemporaryFile()
         temp.write(res.content)
         temp.seek(0)
@@ -106,14 +119,17 @@ class SettlementPricesDownloader(DatetimeDownloader):
         return self._url
 
     def download(self) -> IO | None:
-        body = {"dData1": self.refdate.strftime("%d/%m/%Y"),}
-        res = requests.post(self.url, params=body, verify=self.verify_ssl)
-        self.response = res
+        body = {
+            "dData1": self.refdate.strftime("%d/%m/%Y"),
+        }
+        with disable_ssl_warnings():
+            res = requests.post(self.url, params=body, verify=self.verify_ssl)
+            self.response = res
 
         msg = "status_code = {} url = {}".format(res.status_code, self.url)
         logg = logging.warn if res.status_code != 200 else logging.info
         logg(msg)
-        
+
         if res.status_code != 200:
             return None
 
@@ -133,6 +149,7 @@ class B3FilesURLDownloader(DatetimeDownloader):
 
     def download(self) -> IO | None:
         res = requests.get(self.refdate.strftime(self._url))
+        self.response = res
         if res.status_code != 200:
             return None
         self._response1 = res.json()
@@ -229,9 +246,7 @@ def download_by_config(config_data, save_func, refdate=None):
     downloader = downloader_factory(**config)
     download_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f%z")
     logging.info("Download weekdays %s", config.get("download_weekdays"))
-    if config.get("download_weekdays") and downloader.now.weekday() not in config.get(
-        "download_weekdays"
-    ):
+    if config.get("download_weekdays") and downloader.now.weekday() not in config.get("download_weekdays"):
         logging.info(
             "Not a date to download. Weekday %s Download Weekdays %s",
             downloader.now.weekday(),
@@ -291,5 +306,3 @@ def save_file_to_temp_folder(attrs, fname, tfile):
     os.makedirs(os.path.dirname(fname), exist_ok=True)
     with open(fname, "wb") as f:
         f.write(tfile.read())
-
-
