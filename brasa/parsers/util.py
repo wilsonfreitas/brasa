@@ -4,7 +4,6 @@ import io
 from regexparser import PortugueseRulesParser, GenericParser
 
 
-
 class Parser:
     mode = "r"
     encoding = None
@@ -63,11 +62,7 @@ def read_fwf(con, widths, colnames=None, skip=0, parse_fun=lambda x: x):
         colpositions.append((x, x + w))
         x = x + w
 
-    colnames = (
-        ["V{}".format(ix + 1) for ix in range(len(widths))]
-        if colnames is None
-        else colnames
-    )
+    colnames = ["V{}".format(ix + 1) for ix in range(len(widths))] if colnames is None else colnames
 
     terms = []
     for ix, line in enumerate(con):
@@ -76,7 +71,7 @@ def read_fwf(con, widths, colnames=None, skip=0, parse_fun=lambda x: x):
         line = line.strip()
         if len(line) != line_len:
             continue
-        fields = [line[dx[0]: dx[1]].strip() for dx in colpositions]
+        fields = [line[dx[0] : dx[1]].strip() for dx in colpositions]
         obj = dict((k, v) for k, v in zip(colnames, fields))
         terms.append(parse_fun(obj))
 
@@ -93,4 +88,3 @@ def float_or_none(val):
 
 def str_or_none(val):
     return str(val) if val else None
-

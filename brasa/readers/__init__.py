@@ -1,4 +1,3 @@
-
 from .helpers import (
     read_json,
     read_b3_lending_trades,
@@ -20,6 +19,7 @@ from .helpers import (
     read_b3_indexes_composition,
     read_b3_listed_funds,
 )
+
 
 def null_reader(*args, **kwargs):
     return None

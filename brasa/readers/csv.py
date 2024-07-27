@@ -72,15 +72,11 @@ class CSVFile(metaclass=CSVFileMeta):
         self.rows = []
         fields_names = [f for f in self._fields.keys()]
 
-        _drop_first_n = dropwhile(
-            lambda x: x[0] < self._skip_row, enumerate(fp))
+        _drop_first_n = dropwhile(lambda x: x[0] < self._skip_row, enumerate(fp))
         _drop_empy = filter(lambda x: x[1].strip() != "", _drop_first_n)
         for _, line in _drop_empy:
             row = line.split(self._separator)
-            parsed_row = {
-                fields_names[ix]: self._fields[fields_names[ix]].parse(field)
-                for ix, field in enumerate(row)
-            }
+            parsed_row = {fields_names[ix]: self._fields[fields_names[ix]].parse(field) for ix, field in enumerate(row)}
             self.rows.append(parsed_row)
 
         if isinstance(fname, str):

@@ -20,12 +20,12 @@ set_option("mode.datetype", "datetime")
 class SuppressUserWarnings:
     def __enter__(self):
         warnings.filterwarnings("ignore", category=UserWarning)
-    
+
     def __exit__(self, exc_type, exc_value, traceback):
         warnings.filterwarnings("default", category=UserWarning)
 
-    
-def generate_checksum_for_template(template: str, args: dict, extra_key: str="") -> str:
+
+def generate_checksum_for_template(template: str, args: dict, extra_key: str = "") -> str:
     """Generates a hash for a template and its arguments.
 
     The hash is used to identify a template and its arguments.
@@ -106,13 +106,14 @@ class KwargsIterator:
 
 
 class DateRange:
-    def __init__(self,
-                 start: datetime | None=None,
-                 end: datetime | None=None,
-                 year: int | None=None,
-                 month: int | None=None,
-                 calendar: str | None=None
-                 ) -> None:
+    def __init__(
+        self,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        year: int | None = None,
+        month: int | None = None,
+        calendar: str | None = None,
+    ) -> None:
         if start is None and year is None:
             raise ValueError("Either start or year must be specified")
 
@@ -120,7 +121,7 @@ class DateRange:
         if start is not None:
             start = self.calendar.following(start)
         if start is not None and end is None:
-                end = self.calendar.offset(datetime.today(), -1)
+            end = self.calendar.offset(datetime.today(), -1)
         else:
             end = min(self.calendar.preceding(end), self.calendar.offset(datetime.today(), -1))
         if year is not None:
@@ -178,16 +179,16 @@ class DateRangeParser(TextParser):
 
     def parse_month(self, text, match):
         r"^(\d{4})-(\d{2})$"
-        year=int(match.group(1))
-        month=int(match.group(2))
+        year = int(match.group(1))
+        month = int(match.group(2))
         start = self.calendar.getdate("first day", year, month)
         end = self.calendar.getdate("last day", year, month)
         return DateRange(start=start, end=end, calendar=self.calendar_name)
 
     def parse_month_open_range(self, text, match):
         r"^(\d{4})-(\d{2}):$"
-        year=int(match.group(1))
-        month=int(match.group(2))
+        year = int(match.group(1))
+        month = int(match.group(2))
         start = self.calendar.getdate("first day", year, month)
         return DateRange(start=start, calendar=self.calendar_name)
 

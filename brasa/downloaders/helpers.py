@@ -42,7 +42,7 @@ def b3_files_download(md_downloader: MarketDataDownloader, **kwargs) -> tuple[IO
     return downloader.download(), dict(downloader.response.headers)
 
 
-def validate_empty_file(fname:  str) -> None:
+def validate_empty_file(fname: str) -> None:
     fp = open(fname, "rb")
     fp.seek(0, io.SEEK_END)
     size = fp.tell()
@@ -61,4 +61,3 @@ def validate_json_empty_file(fname: str) -> None:
     fp.close()
     if len(obj) == 0:
         raise Exception("JSON file is empty")
-

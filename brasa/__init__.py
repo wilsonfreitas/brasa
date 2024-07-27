@@ -1,4 +1,3 @@
-
 from datetime import datetime
 
 import pandas as pd
@@ -8,5 +7,6 @@ from .engine import (
     process_marketdata,
     CacheManager,
     process_etl,
-    retrieve_template)
+    retrieve_template,
+)
 from .queries import *

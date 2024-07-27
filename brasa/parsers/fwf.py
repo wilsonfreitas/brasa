@@ -14,11 +14,7 @@ def read_fwf(con, widths, colnames=None, skip=0, parse_fun=lambda x: x):
         colpositions.append((x, x + w))
         x = x + w
 
-    colnames = (
-        ["V{}".format(ix + 1) for ix in range(len(widths))]
-        if colnames is None
-        else colnames
-    )
+    colnames = ["V{}".format(ix + 1) for ix in range(len(widths))] if colnames is None else colnames
 
     terms = []
     for ix, line in enumerate(con):
@@ -27,7 +23,7 @@ def read_fwf(con, widths, colnames=None, skip=0, parse_fun=lambda x: x):
         line = line.strip()
         if len(line) != line_len:
             continue
-        fields = [line[dx[0]: dx[1]].strip() for dx in colpositions]
+        fields = [line[dx[0] : dx[1]].strip() for dx in colpositions]
         obj = dict((k, v) for k, v in zip(colnames, fields))
         terms.append(parse_fun(obj))
 
@@ -147,13 +143,10 @@ class FWFFile(metaclass=FWFFileMeta):
             #     dx[2](line[dx[0]: dx[1]].strip())
             #     for dx in row_template.colpositions
             # ]
-            fields = [
-                line[dx[0]: dx[1]].strip()
-                for dx in row_template.colpositions
-            ]
+            fields = [line[dx[0] : dx[1]].strip() for dx in row_template.colpositions]
             obj = dict((k, v) for k, v in zip(row_template.names, fields))
             self._buckets[row_name].append(obj)
-        self._tables = {n:pd.DataFrame(b) for n, b in self._buckets.items()}
+        self._tables = {n: pd.DataFrame(b) for n, b in self._buckets.items()}
         for row_name, row_template in self._rows:
             for fn, f in row_template._fields.items():
                 self._tables[row_name][fn] = f.parse(self._tables[row_name][fn])
