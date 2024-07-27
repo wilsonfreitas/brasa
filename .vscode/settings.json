@@ -3,5 +3,9 @@
         "tests"
     ],
     "python.testing.unittestEnabled": false,
-    "python.testing.pytestEnabled": true
+    "python.testing.pytestEnabled": true,
+    "cSpell.enableFiletypes": [
+        "!python"
+    ],
+    "cSpell.language": "en,pt,pt-BR"
 }
