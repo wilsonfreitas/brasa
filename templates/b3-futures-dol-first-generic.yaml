@@ -3,5 +3,5 @@ description: Primeiro Futuro de Dólar
 etl:
   function: brasa.etl.create_b3_futures_first_generic
   futures_dataset: b3-futures-dol
-  business_days_to_ignore: [0, 1]
+  business_days_to_ignore: [0]
   first_generic_symbol: DOLT01
