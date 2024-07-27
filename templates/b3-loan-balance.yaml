@@ -1,0 +1,34 @@
+id: b3-loan-balance
+filename: ~
+filetype: CSV
+description: Posições de aluguel
+downloader:
+  function: brasa.downloaders.b3_files_download
+  url: https://arquivos.b3.com.br/api/download/requestname?fileName=LoanBalance&date=%Y-%m-%d&recaptchaToken=
+  format: csv
+  args:
+    refdate: ~
+reader:
+  function: brasa.readers.read_b3_economic_indicators_price
+  encoding: latin1
+  locale: en
+  separator: ";"
+  skip: 2
+  comment: ""
+fields:
+  - name: refdate
+    description: Data de referência
+    handler:
+      type: Date
+      format: "%d/%m/%Y"
+  - name: commodity
+    description: Ativo relacionado ao indicador econômico
+  - name: symbol
+    description: Símbolo que identifica o indicador econômico
+  - name: description
+    description: Descrição do indicador econômico
+  - name: price
+    description: Valor do indicador econômico
+    handler:
+      type: numeric
+      format: pt-br

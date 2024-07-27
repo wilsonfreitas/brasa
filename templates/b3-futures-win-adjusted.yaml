@@ -1,0 +1,7 @@
+id: b3-futures-win-adjusted
+description: Futuro de Índice Ajustado
+etl:
+  function: brasa.etl.create_b3_price_futures_adjusted
+  futures_dataset: b3-futures-win
+  business_days_to_ignore: [0]
+  first_generic_symbol: WINADJ

@@ -1,0 +1,7 @@
+id: b3-futures-wdo-adjusted-returns
+description: >
+  | Retornos de preços futuros WDO ajustados
+etl:
+  function: brasa.etl.create_returns_for_long_datasets
+  dataset_name: b3-futures-wdo-adjusted
+  dataset_columns: [refdate, symbol, price]

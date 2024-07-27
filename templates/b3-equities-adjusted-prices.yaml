@@ -1,0 +1,8 @@
+id: b3-equities-adjusted-prices
+description: All prices dataset
+etl:
+  function: brasa.etl.create_adjusted_prices
+  quotes_dataset: b3-bvbg086
+  dataset_names: [symbol, refdate, open, high, low, close]
+  candle_names: [open, high, low, close]
+  returns_dataset: brasa-returns

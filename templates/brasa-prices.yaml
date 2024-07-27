@@ -1,0 +1,16 @@
+id: brasa-prices
+description: All closing prices dataset
+etl:
+  function: brasa.etl.concat_datasets
+  dataset_names: [refdate, symbol, close]
+  datasets:
+    - name: b3-equities-adjusted-prices
+      columns: [refdate, symbol, close]
+    - name: b3-indexes-adjusted-prices
+      columns: [refdate, symbol, close]
+    - name: bcb-currency-data
+      columns: [refdate, symbol, close]
+    - name: b3-futures-win-adjusted
+      columns: [refdate, symbol, price]
+    - name: b3-futures-wdo-adjusted
+      columns: [refdate, symbol, price]

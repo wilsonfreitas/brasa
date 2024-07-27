@@ -1,0 +1,7 @@
+id: bcb-currencies-returns
+description: >
+  | Dataset com retornos de moedas do BCB/PTAX
+etl:
+  function: brasa.etl.create_returns_for_long_datasets
+  dataset_name: bcb-currency-data
+  dataset_columns: [refdate, symbol, close]

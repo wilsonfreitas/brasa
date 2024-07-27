@@ -1,0 +1,12 @@
+id: brasa-ohlc-prices
+description: All prices dataset
+etl:
+  function: brasa.etl.concat_datasets
+  dataset_names: [refdate, symbol, open, high, low, close]
+  datasets:
+    - name: b3-equities-adjusted-prices
+      columns: [refdate, symbol, open, high, low, close]
+    - name: b3-indexes-adjusted-prices
+      columns: [refdate, symbol, open, high, low, close]
+    - name: bcb-currency-data
+      columns: [refdate, symbol, open, high, low, close]

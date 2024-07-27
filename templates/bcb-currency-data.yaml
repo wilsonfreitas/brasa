@@ -1,0 +1,5 @@
+id: bcb-currency-data
+description: >
+  | Dataset com dados de moedas do BCB/PTAX
+etl:
+  function: brasa.etl.create_bcb_currency_data

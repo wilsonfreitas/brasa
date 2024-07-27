@@ -1,0 +1,7 @@
+id: b3-futures-win-adjusted-returns
+description: >
+  | Retornos de preços futuros WIN ajustados
+etl:
+  function: brasa.etl.create_returns_for_long_datasets
+  dataset_name: b3-futures-win-adjusted
+  dataset_columns: [refdate, symbol, price]
