@@ -3,7 +3,7 @@ filename: ~
 filetype: CUSTOM
 description: Tesouro Direto preços e taxas históricas
 downloader:
-  verifyssl: false
+  verify_ssl: false
   function: brasa.downloaders.multi_download
   url: https://cdn.tesouro.gov.br/sistemas-internos/apex/producao/sistemas/sistd/{year}/{contract}_{year}.xls
   format: xls
