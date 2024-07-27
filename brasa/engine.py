@@ -1,4 +1,3 @@
-
 import abc
 import base64
 from datetime import datetime
@@ -54,8 +53,7 @@ class Singleton(abc.ABC):
         return it
 
     @abc.abstractmethod
-    def init(self, *args, **kwds):
-        ...
+    def init(self, *args, **kwds): ...
 
 
 class TemplatePart:
@@ -69,18 +67,18 @@ class NumericParser(regexparser.NumberParser):
 
 class PtBRNumericParser(regexparser.TextParser):
     def parseInteger(self, text: str, match: re.Match) -> int:
-        r'^-?\s*\d+$'
+        r"^-?\s*\d+$"
         return eval(text)
 
     def parse_number_with_thousands_ptBR(self, text: str, match: re.Match) -> float:
-        r'^-?\s*(\d+\.)+\d+,\d+?$'
-        text = text.replace('.', '')
-        text = text.replace(',', '.')
+        r"^-?\s*(\d+\.)+\d+,\d+?$"
+        text = text.replace(".", "")
+        text = text.replace(",", ".")
         return eval(text)
 
     def parse_number_decimal_ptBR(self, text: str, match: re.Match) -> float:
-        r'^-?\s*\d+,\d+?$'
-        text = text.replace(',', '.')
+        r"^-?\s*\d+,\d+?$"
+        text = text.replace(",", ".")
         return eval(text)
 
     def parseText(self, text: str) -> str | None:
@@ -132,6 +130,7 @@ class DateFieldHandler(FieldHandler):
                 return datetime.strptime(value, self.format)
             except ValueError:
                 return None
+
         if isinstance(value, str):
             return func(value)
         else:
@@ -166,7 +165,7 @@ class TemplateField:
 
 class TemplateFields:
     def __init__(self, fields: list) -> None:
-        self.__fields = {f["name"]:TemplateField(**f) for f in fields}
+        self.__fields = {f["name"]: TemplateField(**f) for f in fields}
         self.names = list(self.__fields.keys())
 
     def __len__(self) -> int:
@@ -265,8 +264,11 @@ class MarketDataDownloader:
         self.encoding = downloader.get("encoding", "utf-8")
         self.verify_ssl = downloader.get("verify_ssl", True)
         self.download_function = load_function_by_name(downloader["function"])
-        validator = "brasa.downloaders.validate_empty_file" if downloader.get("validator") is None else \
-            downloader.get("validator")
+        validator = (
+            "brasa.downloaders.validate_empty_file"
+            if downloader.get("validator") is None
+            else downloader.get("validator")
+        )
         self.validate_function = load_function_by_name(validator)
         self._extra_key = downloader.get("extra-key", None)
         if self._extra_key == "date":
@@ -310,7 +312,7 @@ class MarketDataTemplate:
         self.template = self.load_template()
 
     def load_template(self) -> dict:
-        with open(self.template_path, 'r', encoding="utf-8") as f:
+        with open(self.template_path, "r", encoding="utf-8") as f:
             template = yaml.safe_load(f)
         for n in template.keys():
             self.__dict__[n] = template[n]
@@ -353,7 +355,7 @@ class CacheManager(Singleton):
     @property
     def cache_folder(self) -> str:
         return self._cache_folder
-    
+
     def cache_path(self, fname: str) -> str:
         if "\\" in fname:
             parts = fname.split("\\")
@@ -377,7 +379,7 @@ class CacheManager(Singleton):
     def meta_db_connection(self) -> sqlite3.Connection:
         return sqlite3.connect(database=self.cache_path(self.meta_db_filename))
 
-    def db_folder(self, template: MarketDataTemplate | None=None) -> str | dict[str, str]:
+    def db_folder(self, template: MarketDataTemplate | None = None) -> str | dict[str, str]:
         if template is None:
             folder = self._db_folder
         elif template.reader.multi == {}:
@@ -385,14 +387,14 @@ class CacheManager(Singleton):
             os.makedirs(self.cache_path(folder), exist_ok=True)
         else:
             db_folders = {}
-            for name,val in template.reader.multi.items():
+            for name, val in template.reader.multi.items():
                 folder = os.path.join(self._db_folder, f"{template.id}-{val}")
                 os.makedirs(self.cache_path(folder), exist_ok=True)
                 db_folders[name] = folder
             folder = db_folders
         return folder
 
-    def create_download_folder(self, meta: CacheMetadata) -> str:
+    def create_download_folder(self, meta: CacheMetadata):
         os.makedirs(self.cache_path(meta.download_folder), exist_ok=True)
 
     @property
@@ -403,7 +405,7 @@ class CacheManager(Singleton):
     def meta_folder(self) -> str:
         os.makedirs(self.cache_path(self._meta_folder), exist_ok=True)
         return self._meta_folder
-    
+
     def meta_file_path(self, meta: CacheMetadata) -> str:
         return os.path.join(self.cache_folder, self.meta_folder, f"{meta.id}.yaml")
 
@@ -435,6 +437,7 @@ class CacheManager(Singleton):
                     "processing_errors": meta_row[9],
                 }
                 return _meta
+        return None
 
     def save_meta(self, meta: CacheMetadata) -> None:
         with self.meta_db_connection as conn:
@@ -453,7 +456,10 @@ class CacheManager(Singleton):
                     meta.processing_errors,
                     meta.id,
                 )
-                c.execute("update cache_metadata set download_checksum = ?, timestamp = ?, response = ?, download_args = ?, template = ?, downloaded_files = ?, processed_files = ?, extra_key = ?, processing_errors = ? where id = ?", params)
+                c.execute(
+                    "update cache_metadata set download_checksum = ?, timestamp = ?, response = ?, download_args = ?, template = ?, downloaded_files = ?, processed_files = ?, extra_key = ?, processing_errors = ? where id = ?",
+                    params,
+                )
             else:
                 params = (
                     meta.id,
@@ -501,16 +507,18 @@ class CacheManager(Singleton):
         else:
             fname = f"part-{fname_part}.parquet"
         return fname
-    
-    def read_marketdata(self, meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
+
+    def read_marketdata(self, meta: CacheMetadata):
         _read_marketdata(meta)
         self.save_meta(meta)
 
-    def load_marketdata(self, meta: CacheMetadata, reprocess: bool=False) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
+    def load_marketdata(
+        self, meta: CacheMetadata, reprocess: bool = False
+    ) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
         if reprocess:
             self.read_marketdata(meta)
         if len(meta.processed_files) > 0:
-            dfs = {key:pd.read_parquet(self.cache_path(fname)) for key,fname in meta.processed_files.items()}
+            dfs = {key: pd.read_parquet(self.cache_path(fname)) for key, fname in meta.processed_files.items()}
             if len(dfs) == 1:
                 return dfs["data"]
             else:
@@ -553,7 +561,7 @@ def retrieve_template(template_name) -> MarketDataTemplate:
         return MarketDataTemplate(template_path)
 
 
-def _download_marketdata(meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
+def _download_marketdata(meta: CacheMetadata, **kwargs):
     template = retrieve_template(meta.template)
     meta.download_args = kwargs
     meta.extra_key = template.downloader.extra_key
@@ -619,7 +627,6 @@ def _download_marketdata(meta: CacheMetadata, **kwargs) -> CacheMetadata | None:
         meta.downloaded_files.remove(fname)
 
 
-
 def get_fname_part(meta: CacheMetadata, df: pd.DataFrame) -> str:
     template = retrieve_template(meta.template)
     fmt = template.reader.output_filename_format
@@ -654,14 +661,16 @@ def _read_marketdata(meta: CacheMetadata) -> None:
     man = CacheManager()
     db_folder = man.db_folder(template)
     if isinstance(df, dict) and isinstance(db_folder, dict):
-        for name,dx in df.items():
+        for name, dx in df.items():
             if dx.shape[0] > 0:
                 save_parquet_file(meta, db_folder[name], template.reader.multi[name], dx)
     elif isinstance(df, pd.DataFrame) and isinstance(db_folder, str):
         save_parquet_file(meta, db_folder, "data", df)
 
 
-def get_marketdata(template_name: str, reprocess: bool=False, **kwargs) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
+def get_marketdata(
+    template_name: str, reprocess: bool = False, **kwargs
+) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
     # reprocess: true
     #   download: download files and read data from downloaded files
     # reprocess: false
@@ -688,7 +697,7 @@ def get_marketdata(template_name: str, reprocess: bool=False, **kwargs) -> pd.Da
             return get_marketdata(template_name, reprocess=True, **kwargs)
 
 
-def download_marketdata(template_name: str, reprocess: bool=False, **kwargs) -> None:
+def download_marketdata(template_name: str, reprocess: bool = False, **kwargs) -> None:
     template = retrieve_template(template_name)
     cache = CacheManager()
     kwargs_iter = KwargsIterator(kwargs)
@@ -699,9 +708,7 @@ def download_marketdata(template_name: str, reprocess: bool=False, **kwargs) -> 
         " ",
         progressbar.Timer(),
     ]
-    for args in progressbar.progressbar(kwargs_iter,
-                                        max_value=len(kwargs_iter),
-                                        widgets=widgets):
+    for args in progressbar.progressbar(kwargs_iter, max_value=len(kwargs_iter), widgets=widgets):
         meta = CacheMetadata(template.id)
         meta.extra_key = template.downloader.extra_key
         meta.download_args = args
@@ -722,7 +729,7 @@ def download_marketdata(template_name: str, reprocess: bool=False, **kwargs) -> 
                 cache.download_marketdata(meta)
 
 
-def process_marketdata(template_name: str, reprocess: bool=False) -> None:
+def process_marketdata(template_name: str, reprocess: bool = False) -> None:
     template = retrieve_template(template_name)
     cache = CacheManager()
     with cache.meta_db_connection as conn:
@@ -769,7 +776,7 @@ def process_etl(template_name: str) -> None:
         " ",
         progressbar.Timer(),
     ]
-    
+
     with progressbar.ProgressBar(max_value=1, widgets=widgets) as bar:
         bar.update(1)
         template = retrieve_template(template_name)

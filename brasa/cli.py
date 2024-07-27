@@ -1,4 +1,3 @@
-
 import argparse
 from datetime import datetime
 
@@ -14,9 +13,15 @@ subparsers = parser.add_subparsers(dest="command", title="Commands")
 parser_setup = subparsers.add_parser("setup", help="setup brasa: create cache directories and metadata.db")
 
 parser_download = subparsers.add_parser("download", help="download market data")
-parser_download.add_argument("-d", "--date", "--date-range", nargs="+", help="specify date or date range to download and process market data")
-parser_download.add_argument("--calendar", help="specify calendar to be used for creating date range", default="B3",
-                             choices=["B3", "ANBIMA", "actual"])
+parser_download.add_argument(
+    "-d", "--date", "--date-range", nargs="+", help="specify date or date range to download and process market data"
+)
+parser_download.add_argument(
+    "--calendar",
+    help="specify calendar to be used for creating date range",
+    default="B3",
+    choices=["B3", "ANBIMA", "actual"],
+)
 parser_download.add_argument("template", nargs="+", help="template names")
 
 parser_process = subparsers.add_parser("process", help="process market data - transform raw data to parquet files")
