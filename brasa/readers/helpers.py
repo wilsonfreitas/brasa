@@ -11,6 +11,7 @@ from ..parsers.b3.bvbg086 import BVBG086Parser
 from ..parsers.b3.bvbg087 import BVBG087Parser
 from ..parsers.b3.cdi import CDIParser
 from ..parsers.b3.cotahist import COTAHISTParser
+from ..parsers.b3.indic import IndicParser
 from ..parsers.b3.futures_settlement_prices import future_settlement_prices_parser
 from ..util import SuppressUserWarnings
 
@@ -30,18 +31,25 @@ def read_b3_trades_intraday(meta: CacheMetadata) -> pd.DataFrame:
     fname = man.cache_path(fname)
     template = retrieve_template(meta.template)
     reader = template.reader
-    converters = {"trade_time": str,}
-    df = pd.read_csv(fname,
-                     encoding=reader.encoding,
-                     header=None,
-                     skiprows=reader.skip,
-                     sep=reader.separator,
-                     converters=converters,
-                     names=reader.fields.names, dtype_backend="pyarrow")
-    
+    converters = {
+        "trade_time": str,
+    }
+    df = pd.read_csv(
+        fname,
+        encoding=reader.encoding,
+        header=None,
+        skiprows=reader.skip,
+        sep=reader.separator,
+        converters=converters,
+        names=reader.fields.names,
+        dtype_backend="pyarrow",
+    )
+
     df["traded_quantity"] = pd.to_numeric(df["traded_quantity"], errors="coerce")
     df["traded_price"] = pd.to_numeric(df["traded_price"].str.replace(",", "."), errors="coerce")
-    df["trade_date"] = pd.to_datetime(df["trade_date"] + " " + df["trade_time"], format="%Y-%m-%d %H%M%S%f", errors="coerce")
+    df["trade_date"] = pd.to_datetime(
+        df["trade_date"] + " " + df["trade_time"], format="%Y-%m-%d %H%M%S%f", errors="coerce"
+    )
     df["refdate"] = pd.to_datetime(df["refdate"])
 
     return df
@@ -53,12 +61,15 @@ def read_b3_otc_trade_information(meta: CacheMetadata) -> pd.DataFrame:
     fname = man.cache_path(fname)
     template = retrieve_template(meta.template)
     reader = template.reader
-    df = pd.read_csv(fname,
-                     encoding=reader.encoding,
-                     header=None,
-                     skiprows=reader.skip,
-                     sep=reader.separator,
-                     names=reader.fields.names, dtype_backend="pyarrow")
+    df = pd.read_csv(
+        fname,
+        encoding=reader.encoding,
+        header=None,
+        skiprows=reader.skip,
+        sep=reader.separator,
+        names=reader.fields.names,
+        dtype_backend="pyarrow",
+    )
     df["traded_quantity"] = pd.to_numeric(df["traded_quantity"], errors="coerce")
     df["traded_price"] = pd.to_numeric(df["traded_price"].str.replace(",", "."), errors="coerce")
     df["volume"] = pd.to_numeric(df["volume"].str.replace(",", "."), errors="coerce")
@@ -66,7 +77,7 @@ def read_b3_otc_trade_information(meta: CacheMetadata) -> pd.DataFrame:
     df["trade_date"] = pd.to_datetime(df["trade_date"], errors="coerce", dayfirst=True)
     df["settlement_date"] = pd.to_datetime(df["settlement_date"], errors="coerce", dayfirst=True)
     df["refdate"] = df["trade_date"]
-    
+
     return df
 
 
@@ -77,14 +88,19 @@ def read_b3_lending_trades(meta: CacheMetadata) -> pd.DataFrame:
     template = retrieve_template(meta.template)
     reader = template.reader
     # converters = {n:str for n in reader.fields.names}
-    df = pd.read_csv(fname,
-                     encoding=reader.encoding,
-                     header=None,
-                     skiprows=reader.skip,
-                     sep=reader.separator,
-                     #    converters=converters,
-                     names=reader.fields.names, dtype_backend="pyarrow")
-    df["interest_rate_term_trade"] = pd.to_numeric(df["interest_rate_term_trade"].str.replace(",", "."), errors="coerce")
+    df = pd.read_csv(
+        fname,
+        encoding=reader.encoding,
+        header=None,
+        skiprows=reader.skip,
+        sep=reader.separator,
+        #    converters=converters,
+        names=reader.fields.names,
+        dtype_backend="pyarrow",
+    )
+    df["interest_rate_term_trade"] = pd.to_numeric(
+        df["interest_rate_term_trade"].str.replace(",", "."), errors="coerce"
+    )
     df["trade_date"] = pd.to_datetime(df["trade_date"], errors="coerce")
     df["refdate"] = pd.to_datetime(df["refdate"], errors="coerce")
     return df
@@ -96,6 +112,16 @@ def read_b3_cotahist(meta: CacheMetadata) -> pd.DataFrame:
     with gzip.open(man.cache_path(fname)) as f:
         parser = COTAHISTParser(f)
     return parser._data._tables["data"]
+
+
+def read_b3_economic_indicators_fwf(meta: CacheMetadata) -> pd.DataFrame:
+    fname = meta.downloaded_files[0]
+    man = CacheManager()
+    with gzip.open(man.cache_path(fname)) as f:
+        parser = IndicParser(f)
+    df = parser._tables["data"]
+    df["valor_indicador"] = df.valor_indicador / (10**df.num_casas_decimais)
+    return df
 
 
 def read_b3_bvbg028(meta: CacheMetadata) -> dict[str, pd.DataFrame]:
@@ -128,7 +154,9 @@ def read_b3_bvbg028(meta: CacheMetadata) -> dict[str, pd.DataFrame]:
     with SuppressUserWarnings():
         df_equities["trading_start_date"] = pd.to_datetime(df_equities["trading_start_date"], errors="coerce")
         df_equities["trading_end_date"] = pd.to_datetime(df_equities["trading_end_date"], errors="coerce")
-        df_equities["corporate_action_start_date"] = pd.to_datetime(df_equities["corporate_action_start_date"], errors="coerce")
+        df_equities["corporate_action_start_date"] = pd.to_datetime(
+            df_equities["corporate_action_start_date"], errors="coerce"
+        )
 
     df_futures = parser.data["FutrCtrctsInf"]
     df_futures["creation_date"] = pd.to_datetime(df_futures["creation_date"])
@@ -164,7 +192,9 @@ def read_b3_bvbg028(meta: CacheMetadata) -> dict[str, pd.DataFrame]:
     df_eq_options["security_category"] = pd.to_numeric(df_eq_options["security_category"])
     df_eq_options["exercise_price"] = pd.to_numeric(df_eq_options["exercise_price"])
     df_eq_options["underlying_security_id"] = pd.to_numeric(df_eq_options["underlying_security_id"], errors="coerce")
-    df_eq_options["underlying_security_proprietary"] = pd.to_numeric(df_eq_options["underlying_security_proprietary"], errors="coerce")
+    df_eq_options["underlying_security_proprietary"] = pd.to_numeric(
+        df_eq_options["underlying_security_proprietary"], errors="coerce"
+    )
     df_eq_options["payment_type"] = pd.to_numeric(df_eq_options["payment_type"])
     df_eq_options["allocation_lot_size"] = pd.to_numeric(df_eq_options["allocation_lot_size"])
     df_eq_options["price_factor"] = pd.to_numeric(df_eq_options["price_factor"])
@@ -289,15 +319,20 @@ def read_b3_economic_indicators_price(meta: CacheMetadata) -> pd.DataFrame:
     fname = man.cache_path(fname)
     template = retrieve_template(meta.template)
     reader = template.reader
-    converters = {"refdate": str,}
-    df = pd.read_csv(fname,
-                     encoding=reader.encoding,
-                     header=None,
-                     skiprows=reader.skip,
-                     sep=reader.separator,
-                     converters=converters,
-                     names=reader.fields.names, dtype_backend="pyarrow")
-    
+    converters = {
+        "refdate": str,
+    }
+    df = pd.read_csv(
+        fname,
+        encoding=reader.encoding,
+        header=None,
+        skiprows=reader.skip,
+        sep=reader.separator,
+        converters=converters,
+        names=reader.fields.names,
+        dtype_backend="pyarrow",
+    )
+
     df["price"] = pd.to_numeric(df["price"].str.replace(",", "."), errors="coerce")
     df["refdate"] = pd.to_datetime(df["refdate"], errors="coerce")
 
@@ -310,12 +345,15 @@ def _read_b3_equity_options_files(meta: CacheMetadata) -> pd.DataFrame:
     fname = man.cache_path(fname)
     template = retrieve_template(meta.template)
     reader = template.reader
-    df = pd.read_csv(fname,
-                     encoding=reader.encoding,
-                     header=None,
-                     skiprows=reader.skip,
-                     sep=reader.separator,
-                     names=reader.fields.names, dtype_backend="pyarrow")
+    df = pd.read_csv(
+        fname,
+        encoding=reader.encoding,
+        header=None,
+        skiprows=reader.skip,
+        sep=reader.separator,
+        names=reader.fields.names,
+        dtype_backend="pyarrow",
+    )
     df["maturity_date"] = pd.to_datetime(df["maturity_date"], format="%Y%m%d", errors="coerce")
     df["refdate"] = pd.to_datetime(meta.download_args["refdate"])
     return df
@@ -392,7 +430,7 @@ def read_b3_company_details(meta: CacheMetadata) -> pd.DataFrame:
         df = pd.concat([df] * len(codes), ignore_index=True)
         df["code"] = codes
         df["isin"] = isins
-    else:    
+    else:
         df["code"] = np.nan
         df["isin"] = np.nan
     df.drop(columns=["otherCodes"], inplace=True)
@@ -410,12 +448,18 @@ def read_b3_cash_dividends(meta: CacheMetadata) -> pd.DataFrame:
     df["valueCash"] = pd.to_numeric(df["valueCash"].str.replace(".", "").str.replace(",", "."))
     df["ratio"] = pd.to_numeric(df["ratio"].str.replace(".", "").str.replace(",", "."))
     df["quotedPerShares"] = pd.to_numeric(df["quotedPerShares"].str.replace(".", "").str.replace(",", "."))
-    df["closingPricePriorExDate"] = pd.to_numeric(df["closingPricePriorExDate"].str.replace(".", "").str.replace(",", "."))
+    df["closingPricePriorExDate"] = pd.to_numeric(
+        df["closingPricePriorExDate"].str.replace(".", "").str.replace(",", ".")
+    )
     df["corporateActionPrice"] = pd.to_numeric(df["corporateActionPrice"].str.replace(".", "").str.replace(",", "."))
     with SuppressUserWarnings():
         df["dateApproval"] = pd.to_datetime(df["dateApproval"], format="%d/%m/%Y", errors="coerce")
-        df["dateClosingPricePriorExDate"] = pd.to_datetime(df["dateClosingPricePriorExDate"], format="%d/%m/%Y", errors="coerce")
-        df["lastDateTimePriorEx"] = pd.to_datetime(df["lastDateTimePriorEx"], format="%Y-%m-%dT%H:%M:%S", errors="coerce")
+        df["dateClosingPricePriorExDate"] = pd.to_datetime(
+            df["dateClosingPricePriorExDate"], format="%d/%m/%Y", errors="coerce"
+        )
+        df["lastDateTimePriorEx"] = pd.to_datetime(
+            df["lastDateTimePriorEx"], format="%Y-%m-%dT%H:%M:%S", errors="coerce"
+        )
         df["lastDatePriorEx"] = pd.to_datetime(df["lastDatePriorEx"], format="%d/%m/%Y", errors="coerce")
     df["tradingName"] = meta.download_args["tradingName"]
     df["refdate"] = pd.to_datetime(meta.timestamp.date())
@@ -450,10 +494,9 @@ def read_b3_indexes_composition(meta: CacheMetadata) -> pd.DataFrame:
         obj = json.load(f)
 
     df = pd.DataFrame(obj["results"])
-    df_stock_indexes = df\
-        .groupby(["company", "spotlight", "code"])\
-        .apply(lambda x: x.indexes.str.split(",").explode())\
-        .reset_index()
+    df_stock_indexes = (
+        df.groupby(["company", "spotlight", "code"]).apply(lambda x: x.indexes.str.split(",").explode()).reset_index()
+    )
     header = obj["header"]
     df_stock_indexes["start_month"] = f"{header['year']}-{str.zfill(str(header['startMonth']), 2)}"
     df_stock_indexes["end_month"] = f"{header['year']}-{str.zfill(str(header['endMonth']), 2)}"

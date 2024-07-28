@@ -88,7 +88,10 @@ class FWFRowMeta(type):
 
 class FWFRow(metaclass=FWFRowMeta):
     def __init__(self):
-        self.pattern = re.compile(self._pattern)
+        try:
+            self.pattern = re.compile(self._pattern)
+        except AttributeError:
+            self.pattern = re.compile(".*")
         self.names = list(self._fields.keys())
         self.widths = [self._fields[n].width for n in self._fields]
         self.row_len = sum(self.widths)
