@@ -60,6 +60,9 @@ brasa.process_marketdata("b3-otc-trade-information")
 brasa.download_marketdata("b3-economic-indicators-price", refdate=period)
 brasa.process_marketdata("b3-economic-indicators-price")
 
+brasa.download_marketdata("b3-economic-indicators-fwf", refdate=period)
+brasa.process_marketdata("b3-economic-indicators-fwf")
+
 brasa.download_marketdata("b3-equities-volatility-surface", refdate=period)
 brasa.process_marketdata("b3-equities-volatility-surface")
 

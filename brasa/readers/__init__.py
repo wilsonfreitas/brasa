@@ -18,6 +18,7 @@ from .helpers import (
     read_b3_index_theoretical_portfolio,
     read_b3_indexes_composition,
     read_b3_listed_funds,
+    read_b3_economic_indicators_fwf,
 )
 
 

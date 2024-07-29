@@ -1,7 +1,7 @@
-id: b3-equities-volatility-surface
+id: b3-economic-indicators-fwf
 filename: ~
 filetype: CUSTOM
-description: Arquivo de Superfície de Volatilidade de Ações
+description: Arquivo de Indicadores Econômicos
 calendar: Brazil/B3
 downloader:
   function: brasa.downloaders.datetime_download
