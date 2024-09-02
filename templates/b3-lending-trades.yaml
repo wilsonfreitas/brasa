@@ -4,7 +4,7 @@ filetype: CSV
 description: Negócios BTB Aluguel de Ações
 downloader:
   function: brasa.downloaders.datetime_download
-  url: https://arquivos.b3.com.br/apinegocios/tickercsvbtb/%Y-%m-%d
+  url: https://arquivos.b3.com.br/rapinegocios/tickercsvbtb/%Y-%m-%d
   format: zip
   args:
     refdate: ~

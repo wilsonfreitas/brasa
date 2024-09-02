@@ -4,7 +4,7 @@ filetype: CSV
 description: Negócios Intraday
 downloader:
   function: brasa.downloaders.datetime_download
-  url: https://arquivos.b3.com.br/apinegocios/tickercsv/%Y-%m-%d
+  url: https://arquivos.b3.com.br/rapinegocios/tickercsv/%Y-%m-%d
   format: zip
   args:
     refdate: ~
