@@ -10,8 +10,9 @@ include = [{ path = "brasa" }, { path = "templates" }]
 [tool.poetry.dependencies]
 python = "^3.10"
 lxml = "^4.9.2"
-bizdays = "^1.0.8"
+bizdays = "^1.0.15"
 pandas = "^2.0.0"
+numpy = "<2.0.0"
 xlrd = "^2.0.1"
 regexparser = "^0.1.0"
 pyyaml = "^6.0"
