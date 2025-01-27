@@ -10,3 +10,9 @@ create table if not exists cache_metadata (
     extra_key TEXT,
     processing_errors TEXT
 );
+
+create table if not exists download_trials (
+    cache_id TEXT,
+    timestamp TEXT,
+    downloaded TEXT
+);
