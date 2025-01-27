@@ -6,7 +6,7 @@ from regexparser import PortugueseRulesParser, GenericParser
 
 class Parser:
     mode = "r"
-    encoding = None
+    encoding: str = "utf-8"
 
     def _open(self, fp, func):
         if isinstance(fp, io.IOBase):

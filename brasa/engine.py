@@ -180,15 +180,15 @@ class TemplateFields:
 
 class CacheMetadata:
     def __init__(self, template: str) -> None:
-        self.template = template
-        self.timestamp = datetime.now()
-        self.response = None
-        self.download_checksum = ""
-        self.download_args = {}
-        self.downloaded_files = []
-        self.processed_files = {}
-        self.extra_key = ""
-        self.processing_errors = ""
+        self.template: str = template
+        self.timestamp: datetime = datetime.now()
+        self.response: Any = None
+        self.download_checksum: str = ""
+        self.download_args: dict[str, Any] = {}
+        self.downloaded_files: list[str] = []
+        self.processed_files: dict[str, str] = {}
+        self.extra_key: str = ""
+        self.processing_errors: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -212,9 +212,9 @@ class CacheMetadata:
         return generate_checksum_for_template(self.template, self.download_args, self.extra_key)
 
     @property
-    def download_folder(self) -> str | None:
+    def download_folder(self) -> str:
         if self.download_checksum == "":
-            return None
+            return ""
         else:
             return os.path.join(CacheManager._raw_folder, self.template, self.download_checksum)
 
@@ -234,8 +234,8 @@ class MarketDataReader:
         self.encoding = reader.get("encoding", "utf-8")
         self.read_function = load_function_by_name(reader["function"])
         self.multi = reader.get("multi", {})
-        self.parts = None
-        self.fields = None
+        self.parts: list | None = None
+        self.fields: TemplateFields | None = None
         self.output_filename_format = reader.get("output-filename-format", "%Y-%m-%d")
 
     def set_parts(self, parts: list) -> None:
@@ -268,11 +268,7 @@ class MarketDataDownloader:
         self.encoding = downloader.get("encoding", "utf-8")
         self.verify_ssl = downloader.get("verify_ssl", True)
         self.download_function = load_function_by_name(downloader["function"])
-        validator = (
-            "brasa.downloaders.validate_empty_file"
-            if downloader.get("validator") is None
-            else downloader.get("validator")
-        )
+        validator: str = downloader.get("validator", "brasa.downloaders.validate_empty_file")
         self.validate_function = load_function_by_name(validator)
         self._extra_key = downloader.get("extra-key", None)
         if self._extra_key == "date":
@@ -369,7 +365,7 @@ class CacheManager(Singleton):
         return str(path)
 
     def db_path(self, name: str) -> str:
-        return os.path.join(self.cache_path(self.db_folder()), name)
+        return os.path.join(self.cache_path(self._db_folder), name)
 
     def create_meta_db(self) -> None:
         db_conn = sqlite3.connect(database=self.cache_path(self.meta_db_filename))
@@ -383,20 +379,18 @@ class CacheManager(Singleton):
     def meta_db_connection(self) -> sqlite3.Connection:
         return sqlite3.connect(database=self.cache_path(self.meta_db_filename))
 
-    def db_folder(self, template: MarketDataTemplate | None = None) -> str | dict[str, str]:
-        if template is None:
-            folder = self._db_folder
-        elif template.reader.multi == {}:
-            folder = os.path.join(self._db_folder, template.id)
-            os.makedirs(self.cache_path(folder), exist_ok=True)
-        else:
-            db_folders = {}
-            for name, val in template.reader.multi.items():
-                folder = os.path.join(self._db_folder, f"{template.id}-{val}")
-                os.makedirs(self.cache_path(folder), exist_ok=True)
-                db_folders[name] = folder
-            folder = db_folders
+    def db_folder(self, template: MarketDataTemplate) -> str:
+        folder = os.path.join(self._db_folder, template.id)
+        os.makedirs(self.cache_path(folder), exist_ok=True)
         return folder
+
+    def db_folders(self, template: MarketDataTemplate) -> dict:
+        db_folders = {}
+        for name, val in template.reader.multi.items():
+            folder = os.path.join(self._db_folder, f"{template.id}-{val}")
+            os.makedirs(self.cache_path(folder), exist_ok=True)
+            db_folders[name] = folder
+        return db_folders
 
     def create_download_folder(self, meta: CacheMetadata):
         os.makedirs(self.cache_path(meta.download_folder), exist_ok=True)
@@ -482,7 +476,7 @@ class CacheManager(Singleton):
 
     def clean_meta_raw_folder(self, meta: CacheMetadata) -> None:
         warn(f"Cleaning meta download {meta.download_args}")
-        if meta.download_folder == "" or meta.download_folder is None:
+        if meta.download_folder == "":
             raise Exception("No download folder")
         folder = self.cache_path(meta.download_folder)
         shutil.rmtree(folder, ignore_errors=False)
@@ -690,13 +684,13 @@ def _read_marketdata(meta: CacheMetadata) -> None:
     template = retrieve_template(meta.template)
     df = template.reader.read(meta)
     man = CacheManager()
-    db_folder = man.db_folder(template)
-    if isinstance(df, dict) and isinstance(db_folder, dict):
+    if isinstance(df, dict) and bool(template.reader.multi):
+        db_folder: dict = man.db_folders(template)
         for name, dx in df.items():
             if dx.shape[0] > 0:
                 save_parquet_file(meta, db_folder[name], template.reader.multi[name], dx)
-    elif isinstance(df, pd.DataFrame) and isinstance(db_folder, str):
-        save_parquet_file(meta, db_folder, "data", df)
+    elif isinstance(df, pd.DataFrame) and not template.reader.multi:
+        save_parquet_file(meta, man.db_folder(template), "data", df)
 
 
 def get_marketdata(
@@ -768,7 +762,7 @@ def process_marketdata(template_name: str, reprocess: bool = False) -> None:
         c = conn.cursor()
         c.execute("select id from cache_metadata where template = ?", (template_name,))
         rows = c.fetchall()
-        widgets = [
+        widgets: list[Any] = [
             f"P {template_name} ",
             progressbar.SimpleProgress(format="%(value_s)3s/%(max_value_s)-3s"),
             progressbar.Bar(),
@@ -801,7 +795,7 @@ def process_marketdata(template_name: str, reprocess: bool = False) -> None:
 
 
 def process_etl(template_name: str) -> None:
-    widgets = [
+    widgets: list[Any] = [
         f"ETL {template_name} ",
         progressbar.SimpleProgress(format="%(value_s)3s/%(max_value_s)-3s"),
         progressbar.Bar(),

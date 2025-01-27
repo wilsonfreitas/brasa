@@ -7,7 +7,7 @@ import pickle
 import warnings
 import zipfile
 from tempfile import gettempdir
-from typing import IO
+from typing import IO, Any
 
 from bizdays import Calendar
 from bizdays import set_option
@@ -31,7 +31,7 @@ def generate_checksum_for_template(template: str, args: dict, extra_key: str = "
     The hash is used to identify a template and its arguments.
     """
     t = tuple(sorted(args.items(), key=lambda x: x[0]))
-    obj = (template, t)
+    obj: Any = (template, t)
     if extra_key:
         obj = (template, t, extra_key)
     return hashlib.md5(pickle.dumps(obj)).hexdigest()
@@ -95,7 +95,7 @@ class KwargsIterator:
             self.names = []
         else:
             self.__len = max(len(x) for x in self.elements)
-            self.names = kwargs.keys()
+            self.names = list(kwargs.keys())
 
     def __len__(self) -> int:
         return self.__len
@@ -171,11 +171,6 @@ class DateRangeParser(TextParser):
         start = datetime(int(match.group(1)), 1, 1)
         end = datetime(int(match.group(2)), 12, 31)
         return DateRange(start=start, end=end, calendar=self.calendar_name)
-
-    def parse_year_open_range(self, text, match):
-        r"^(\d{4}):$"
-        start = datetime(int(match.group(1)), 1, 1)
-        return DateRange(start=start, calendar=self.calendar_name)
 
     def parse_month(self, text, match):
         r"^(\d{4})-(\d{2})$"

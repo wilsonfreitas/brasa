@@ -156,46 +156,6 @@ class B3FilesURLDownloader(DatetimeDownloader):
         return super().download()
 
 
-class PreparedURLDownloader(SimpleDownloader):
-    def download(self, refdate=None):
-        url = self.attrs["url"]
-        refdate = refdate or self.now + timedelta(self.attrs.get("timedelta", 0))
-        params = {}
-        for param in self.attrs["parameters"]:
-            param_value = self.attrs["parameters"][param]
-            if isinstance(param_value, dict):
-                if param_value["type"] == "datetime":
-                    params[param] = refdate.strftime(param_value["value"])
-            else:
-                params[param] = param_value
-
-        self._url = url.format(**params)
-        fname, temp_file, status_code = self._download_unzip_historical_data(self._url)
-        if status_code != 200:
-            return None, None, status_code, refdate
-        f_fname = self.get_fname(fname, refdate)
-        return f_fname, temp_file, status_code, refdate
-
-    def _download_unzip_historical_data(self, url):
-        verify_ssl = self.attrs.get("verify_ssl", True)
-        _, temp, status_code, res = download_url(url, verify_ssl=verify_ssl)
-        if status_code != 200:
-            return None, None, status_code
-        zf = zipfile.ZipFile(temp)
-        nl = zf.namelist()
-        if len(nl) == 0:
-            logging.error("zip file is empty url = {}".format(url))
-            return None, None, 204
-        name = nl[0]
-        content = zf.read(name)  # bytes
-        zf.close()
-        temp.close()
-        temp = tempfile.TemporaryFile()
-        temp.write(content)
-        temp.seek(0)
-        return name, temp, status_code
-
-
 class VnaAnbimaURLDownloader(SimpleDownloader):
     calendar = bizdays.Calendar.load("ANBIMA")
 
@@ -237,67 +197,6 @@ class VnaAnbimaURLDownloader(SimpleDownloader):
         refdate = datetime(refdate.year, refdate.month, refdate.day)
         refdate = pytz.timezone("America/Sao_Paulo").localize(refdate)
         return refdate
-
-
-def download_by_config(config_data, save_func, refdate=None):
-    logging.info("content size = %d", len(config_data))
-    config = json.loads(config_data)
-    logging.info("content = %s", config)
-    downloader = downloader_factory(**config)
-    download_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f%z")
-    logging.info("Download weekdays %s", config.get("download_weekdays"))
-    if config.get("download_weekdays") and downloader.now.weekday() not in config.get("download_weekdays"):
-        logging.info(
-            "Not a date to download. Weekday %s Download Weekdays %s",
-            downloader.now.weekday(),
-            config.get("download_weekdays"),
-        )
-        msg = "Not a date to download. Weekday {} Download Weekdays {}".format(
-            downloader.now.weekday(), config.get("download_weekdays")
-        )
-        return {
-            "message": msg,
-            "download_status": -1,
-            "status": -1,
-            "refdate": None,
-            "filename": None,
-            "bucket": config["output_bucket"],
-            "name": config["name"],
-            "time": download_time,
-        }
-    try:
-        fname, tfile, status_code, refdate = downloader.download(refdate=refdate)
-        logging.info("Download time (UTC) %s", download_time)
-        logging.info("Refdate %s", refdate)
-        if status_code == 200:
-            save_func(config, fname, tfile)
-            msg = "File saved"
-            status = 0
-        else:
-            msg = "File not saved"
-            status = 1
-        return {
-            "message": msg,
-            "download_status": status_code,
-            "status": status,
-            "refdate": refdate and refdate.strftime("%Y-%m-%dT%H:%M:%S.%f%z"),
-            "filename": fname,
-            "bucket": config["output_bucket"],
-            "name": config["name"],
-            "time": download_time,
-        }
-    except Exception as ex:
-        logging.error(str(ex))
-        return {
-            "message": str(ex),
-            "download_status": -1,
-            "status": 2,
-            "refdate": None,
-            "filename": None,
-            "bucket": config["output_bucket"],
-            "name": config["name"],
-            "time": download_time,
-        }
 
 
 def save_file_to_temp_folder(attrs, fname, tfile):

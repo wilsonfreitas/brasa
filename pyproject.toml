@@ -27,6 +27,10 @@ python-bcb = "0.1.9"
 ipykernel = "^6.15.3"
 matplotlib = "^3.7.1"
 mypy = "^1.9.0"
+types-pyyaml = "^6.0.12.20241230"
+types-pytz = "^2024.2.0.20241221"
+types-requests = "^2.32.0.20241016"
+types-lxml = "^2024.12.13"
 
 
 [tool.poetry.group.docs.dependencies]
@@ -42,3 +46,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+
+[[tool.mypy.overrides]]
+module = ["pandas.*", "regexparser.*", "bcb.*", "pyarrow.*", "bizdays.*"]
+ignore_missing_imports = true
