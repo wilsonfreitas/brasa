@@ -505,6 +505,23 @@ class CacheManager(Singleton):
         self.clean_meta_db_folder(meta)
         self.clean_meta_db(meta)
 
+    def save_trial(self, meta: CacheMetadata, downloaded: bool) -> None:
+        with self.meta_db_connection as conn:
+            c = conn.cursor()
+            params = (
+                meta.id,
+                meta.timestamp.isoformat(),
+                downloaded,
+            )
+            c.execute("insert into download_trials values (?, ?, ?)", params)
+        conn.commit()
+
+    def has_successful_trial(self, meta: CacheMetadata) -> bool:
+        with self.meta_db_connection as conn:
+            c = conn.cursor()
+            c.execute("select * from download_trials where cache_id = ? and downloaded == 1", (meta.id,))
+            return len(c.fetchall()) > 0
+
     def parquet_file_name(self, fname_part: str) -> str:
         if re.fullmatch(r"\d{4}(-\d{2}(-\d{2})?)?", fname_part):
             fname = f"{fname_part}.parquet"
@@ -534,11 +551,15 @@ class CacheManager(Singleton):
     def download_marketdata(self, meta: CacheMetadata) -> None:
         try:
             _download_marketdata(meta, **meta.download_args)
+            self.save_trial(meta, True)
         except DuplicatedFolderException as ex:
+            self.save_trial(meta, True)
             return
         except DownloadException as ex:
+            self.save_trial(meta, False)
             return
         except Exception as ex:
+            self.save_trial(meta, False)
             self.clean_meta_raw_folder(meta)
             return
         try:
@@ -730,13 +751,14 @@ def download_marketdata(template_name: str, reprocess: bool = False, **kwargs) -
                 cache.remove_meta(meta)
             cache.download_marketdata(meta)
         else:
-            if cache.has_meta(meta):
-                cache.load_meta(meta)
-                check = all([os.path.exists(cache.cache_path(f)) for f in meta.downloaded_files])
-                if not check:
+            if not cache.has_successful_trial(meta):
+                if cache.has_meta(meta):
+                    cache.load_meta(meta)
+                    check = all([os.path.exists(cache.cache_path(f)) for f in meta.downloaded_files])
+                    if not check:
+                        cache.download_marketdata(meta)
+                else:
                     cache.download_marketdata(meta)
-            else:
-                cache.download_marketdata(meta)
 
 
 def process_marketdata(template_name: str, reprocess: bool = False) -> None:
