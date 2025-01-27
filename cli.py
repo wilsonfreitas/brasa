@@ -7,6 +7,7 @@ from brasa.util import DateRange
 
 period = DateRange(start=datetime(2024, 1, 1), end=datetime.today(), calendar="B3")
 
+brasa.process_etl("bcb-data")
 brasa.download_marketdata("b3-bvbg087", refdate=period)
 brasa.process_marketdata("b3-bvbg087")
 brasa.process_etl("b3-indexes-returns")
@@ -38,7 +39,6 @@ brasa.process_etl("b3-futures-win")
 brasa.process_etl("b3-futures-win-first-generic")
 brasa.process_etl("b3-futures-win-adjusted")
 brasa.process_etl("b3-futures-win-adjusted-returns")
-brasa.process_etl("bcb-data")
 brasa.process_etl("b3-curves-di1")
 brasa.process_etl("b3-curves-di1-standard")
 brasa.process_etl("b3-curves-di1-standard-returns")
