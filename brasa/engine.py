@@ -618,8 +618,10 @@ def _download_marketdata(meta: CacheMetadata, **kwargs):
 
     meta.downloaded_files = downloaded_files
     for fname in downloaded_files:
+        # this call can raise an Exception
         template.downloader.validate(man.cache_path(fname))
 
+    # gzip all downloaded files - it saves space
     gz_downloaded_files = []
     removed_downloaded_files = []
     for fname in meta.downloaded_files:
