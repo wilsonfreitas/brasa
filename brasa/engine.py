@@ -253,6 +253,10 @@ class DownloadException(Exception):
     pass
 
 
+class DuplicatedFolderException(Exception):
+    pass
+
+
 class MarketDataDownloader:
     def __init__(self, downloader: dict) -> None:
         self.url = None
