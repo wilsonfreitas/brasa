@@ -534,6 +534,8 @@ class CacheManager(Singleton):
     def download_marketdata(self, meta: CacheMetadata) -> None:
         try:
             _download_marketdata(meta, **meta.download_args)
+        except DuplicatedFolderException as ex:
+            return
         except DownloadException as ex:
             return
         except Exception as ex:
@@ -578,7 +580,9 @@ def _download_marketdata(meta: CacheMetadata, **kwargs):
     meta.download_checksum = checksum
     man = CacheManager()
     if os.path.exists(man.cache_path(meta.download_folder)):
-        raise DownloadException(f"Market data download failed: download folder {meta.download_folder} already exists")
+        raise DuplicatedFolderException(
+            f"Market data download failed: download folder {meta.download_folder} already exists"
+        )
     # DownloadException must be raised before creating download folder
     # after this any exception can be raised and it will clean up the download folder
     man.create_download_folder(meta)
