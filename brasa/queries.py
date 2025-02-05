@@ -163,9 +163,12 @@ def show(name: str, n: int = 10):
     return ds.head(n).to_pandas().style.format(thousands=",", precision=2)
 
 
-def write_dataset(df: pd.DataFrame, name: str, format: str = "parquet") -> None:
+def write_dataset(df: pd.DataFrame, name: str, format: str = "parquet", schema: pyarrow.Schema = None) -> None:
     man = CacheManager()
-    tb = pyarrow.Table.from_pandas(df)
+    if schema:
+        tb = pyarrow.Table.from_pandas(df, schema=schema)
+    else:
+        tb = pyarrow.Table.from_pandas(df)
     ds.write_dataset(tb, man.db_path(name), format=format, existing_data_behavior="overwrite_or_ignore")
 
 
