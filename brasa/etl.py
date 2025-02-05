@@ -125,7 +125,15 @@ def create_bcb_data(handler: MarketDataETL):
 
     df_bcb = pd.concat([dd_cdi, dd_selic, dd_seta, dd_ipca, dd_igpm])
 
-    write_dataset(df_bcb, handler.template_id)
+    fields = [
+        pyarrow.field("refdate", pyarrow.timestamp("us")),
+        pyarrow.field("value", pyarrow.float64()),
+        pyarrow.field("symbol", pyarrow.string()),
+    ]
+
+    my_schema = pyarrow.schema(fields)
+
+    write_dataset(df_bcb, handler.template_id, schema=my_schema)
 
 
 def _create_currency_candle(df: pd.DataFrame) -> pd.DataFrame:
@@ -176,7 +184,19 @@ def create_bcb_currency_data(handler: MarketDataETL):
     dsb = [_get_currency_data(ep, moeda, "B") for moeda in moedas.query("tipoMoeda == 'B'")["simbolo"]]
 
     dd_dol = pd.concat(dsa + dsb)
-    write_dataset(dd_dol, handler.template_id)
+
+    fields = [
+        pyarrow.field("refdate", pyarrow.timestamp("us")),
+        pyarrow.field("symbol", pyarrow.string()),
+        pyarrow.field("open", pyarrow.float64()),
+        pyarrow.field("high", pyarrow.float64()),
+        pyarrow.field("low", pyarrow.float64()),
+        pyarrow.field("close", pyarrow.float64()),
+    ]
+
+    my_schema = pyarrow.schema(fields)
+
+    write_dataset(dd_dol, handler.template_id, schema=my_schema)
 
 
 def create_b3_curves_di1(handler: MarketDataETL):
@@ -190,15 +210,28 @@ def create_b3_curves_di1(handler: MarketDataETL):
     cal = Calendar.load(handler.calendar)
     tb_v1 = (
         tb_cdi.set_column(1, "adjusted_tax", pc.divide(tb_cdi.column("value"), 100))
-        .append_column("maturity_date", pyarrow.array(cal.offset(tb_cdi.column("refdate").to_pylist(), 1)))
-        .append_column("business_days", pyarrow.array([1] * tb_cdi.shape[0]))
+        .append_column(
+            "maturity_date",
+            pyarrow.array(cal.offset(tb_cdi.column("refdate").to_pylist(), 1), type=pyarrow.timestamp("ns")),
+        )
+        .append_column("business_days", pyarrow.array([1] * tb_cdi.shape[0], type=pyarrow.int64()))
         .select(["refdate", "symbol", "maturity_date", "business_days", "adjusted_tax"])
     )
     tb_di1_curve = pyarrow.concat_tables(
         [tb_v1, tb_di1.select(["refdate", "symbol", "maturity_date", "business_days", "adjusted_tax"])]
     ).sort_by([("refdate", "ascending"), ("business_days", "ascending")])
 
-    write_dataset(tb_di1_curve.to_pandas(), handler.template_id)
+    fields = [
+        pyarrow.field("refdate", pyarrow.timestamp("us")),
+        pyarrow.field("symbol", pyarrow.string()),
+        pyarrow.field("maturity_date", pyarrow.timestamp("ns")),
+        pyarrow.field("business_days", pyarrow.int64()),
+        pyarrow.field("adjusted_tax", pyarrow.float64()),
+    ]
+
+    my_schema = pyarrow.schema(fields)
+
+    write_dataset(tb_di1_curve.to_pandas(), handler.template_id, schema=my_schema)
 
 
 def create_b3_curves(handler: MarketDataETL):
@@ -218,20 +251,22 @@ def interp_ff(term, rates, terms):
 def create_b3_curves_standard_terms(handler: MarketDataETL):
     tb_curve = get_dataset(handler.curves_dataset).to_table()
     business_days_standard = np.array(handler.standard_terms)
-    symbols_standard = pyarrow.array([f"{handler.symbol_prefix}{d}" for d in business_days_standard])
+    symbols_standard = pyarrow.array(
+        [f"{handler.symbol_prefix}{d}" for d in business_days_standard], type=pyarrow.string()
+    )
     cal = Calendar.load(handler.calendar)
     tables = []
     for date in tb_curve.column("refdate").unique():
         rates = tb_curve.filter(pc.field("refdate") == date).column("adjusted_tax").to_numpy()
         terms = tb_curve.filter(pc.field("refdate") == date).column("business_days").to_numpy()
-        interp_rates = pyarrow.array(interp_ff(business_days_standard, rates, terms))
-        mat_dates = pyarrow.array(cal.offset(date.as_py(), business_days_standard))
+        interp_rates = pyarrow.array(interp_ff(business_days_standard, rates, terms), type=pyarrow.float64())
+        mat_dates = pyarrow.array(cal.offset(date.as_py(), business_days_standard), type=pyarrow.timestamp("ns"))
         ta = pyarrow.table(
             [
-                pyarrow.array([date.as_py()] * len(interp_rates)),
+                pyarrow.array([date.as_py()] * len(interp_rates), type=pyarrow.timestamp("us")),
                 symbols_standard,
                 mat_dates,
-                pyarrow.array(business_days_standard),
+                pyarrow.array(business_days_standard, type=pyarrow.int64()),
                 interp_rates,
             ],
             names=["refdate", "symbol", "maturity_date", "business_days", "adjusted_tax"],
@@ -240,7 +275,17 @@ def create_b3_curves_standard_terms(handler: MarketDataETL):
     tb_curve_standard = pyarrow.concat_tables(tables).sort_by(
         [("refdate", "ascending"), ("business_days", "ascending")]
     )
-    write_dataset(tb_curve_standard.to_pandas(), handler.template_id)
+    fields = [
+        pyarrow.field("refdate", pyarrow.timestamp("us")),
+        pyarrow.field("symbol", pyarrow.string()),
+        pyarrow.field("maturity_date", pyarrow.timestamp("ns")),
+        pyarrow.field("business_days", pyarrow.int64()),
+        pyarrow.field("adjusted_tax", pyarrow.float64()),
+    ]
+
+    my_schema = pyarrow.schema(fields)
+
+    write_dataset(tb_curve_standard.to_pandas(), handler.template_id, schema=my_schema)
 
 
 def create_rate_returns(handler: MarketDataETL):
@@ -251,7 +296,9 @@ def create_rate_returns(handler: MarketDataETL):
         dates = tb_curve_standard.filter(pc.field("symbol") == symbol).column("refdate")
         symbols = tb_curve_standard.filter(pc.field("symbol") == symbol).column("symbol")
         returns = np.concatenate([np.array([np.nan]), np.diff(rates)])
-        ta = pyarrow.table([dates, symbols, pyarrow.array(returns)], names=["refdate", "symbol", "returns"])
+        ta = pyarrow.table(
+            [dates, symbols, pyarrow.array(returns, type=pyarrow.float64())], names=["refdate", "symbol", "returns"]
+        )
         tables.append(ta)
 
     tb_curve_standard_returns = pyarrow.concat_tables(tables).sort_by(
@@ -358,7 +405,17 @@ def create_equities_returns(handler: MarketDataETL):
     # ----
     df_returns = pd.concat([df_returns, df_final])
     df_returns.sort_values(["refdate", "symbol"], inplace=True)
-    write_dataset(df_returns[["refdate", "symbol", "pct_return", "log_return"]], handler.template_id)
+
+    fields = [
+        pyarrow.field("refdate", pyarrow.timestamp("us")),
+        pyarrow.field("symbol", pyarrow.string()),
+        pyarrow.field("pct_return", pyarrow.float64()),
+        pyarrow.field("log_return", pyarrow.float64()),
+    ]
+
+    my_schema = pyarrow.schema(fields)
+
+    write_dataset(df_returns[["refdate", "symbol", "pct_return", "log_return"]], handler.template_id, schema=my_schema)
 
 
 def create_etf_returns_before_20180101(handler: MarketDataETL):
