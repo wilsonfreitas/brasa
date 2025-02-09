@@ -3,6 +3,7 @@ description: All prices dataset
 etl:
   function: brasa.etl.create_adjusted_prices
   quotes_dataset: b3-bvbg086
+  calendar: B3
   dataset_names: [symbol, refdate, open, high, low, close]
   candle_names: [open, high, low, close]
   returns_dataset: brasa-returns

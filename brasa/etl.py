@@ -7,7 +7,7 @@ import numpy as np
 import pyarrow
 import pyarrow.acero as ac
 import pyarrow.compute as pc
-from bizdays import Calendar
+from bizdays import Calendar, set_option, get_option
 
 from .queries import get_dataset, write_dataset
 from .engine import MarketDataETL
@@ -927,9 +927,16 @@ def create_adjusted_prices(handler: MarketDataETL):
     rets = get_dataset(handler.returns_dataset).filter(pc.field("symbol").isin(symbols)).to_table().to_pandas()
     all_data = rets.set_index(["refdate", "symbol"]).join(ohlc).reset_index()
 
+    bizdays_mode = get_option("mode")
+    set_option("mode", "pandas")
+    cal = Calendar.load(handler.calendar)
+    set_option("mode", bizdays_mode)
+
     def _(all_data):
         all_data = all_data.set_index("refdate").sort_index(ascending=False)
         rets = all_data["returns"]
+        idx = cal.seq(rets.index[0], rets.index[-1])
+        rets = rets.reindex(idx, fill_value=0.0)
         f = np.exp(rets).cumprod().shift()
         f.iloc[0] = 1
         close = all_data[handler.candle_names[-1]].iloc[0].item()
@@ -946,6 +953,21 @@ def create_adjusted_prices(handler: MarketDataETL):
     names = ["refdate", "symbol"]
     names.extend(handler.candle_names)
     adj = all_data.groupby("symbol").apply(_).reset_index()[names]
+
+    fields = [
+        pyarrow.field("refdate", pyarrow.timestamp("us")),
+        pyarrow.field("symbol", pyarrow.string()),
+        pyarrow.field("open", pyarrow.float64()),
+        pyarrow.field("high", pyarrow.float64()),
+        pyarrow.field("low", pyarrow.float64()),
+        pyarrow.field("close", pyarrow.float64()),
+    ]
+
+    my_schema = pyarrow.schema(fields)
+
+    write_dataset(adj, handler.template_id, schema=my_schema)
+
+
 def rename_symbols_in_equities_returns(handler: MarketDataETL):
     _ds = get_dataset(handler.source_dataset_name)
     tables = []
