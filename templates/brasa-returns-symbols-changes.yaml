@@ -1,0 +1,37 @@
+id: brasa-returns-symbols-changes
+description: Rename the past of some equities that have changed their symbol
+etl:
+  function: brasa.etl.rename_symbols_in_equities_returns
+  source_dataset_name: b3-equities-returns
+  symbols:
+    - src: LLIS3
+      dest: VSTE3
+    - src: ARZZ3
+      dest: AZZA3
+    - src: VVAR3
+      dest: BHIA3
+    - src: VIIA3
+      dest: BHIA3
+    - src: WIZS3
+      dest: WIZC3
+    - src: KROT3
+      dest: COGN3
+    - src: BVMF3
+      dest: B3SA3
+    - src: FJTA3
+      dest: TASA3
+    - src: FJTA4
+      dest: TASA4
+    - src: NATU3
+      dest: NTCO3
+    - src: TIMP3
+      dest: TIMS3
+    - src: CNTO3
+      dest: SBFG3
+    - src: BTOW3
+      dest: AMER3
+    - src: CARD3
+      dest: CSUD3
+    - src: BRDT3
+      dest: VBBR3
+
