@@ -474,7 +474,16 @@ def _calc_returns(df: pd.DataFrame, value_column: str) -> pd.DataFrame:
 def create_returns_for_long_datasets(handler: MarketDataETL):
     df = get_dataset(handler.dataset_name).to_table(columns=handler.dataset_columns).to_pandas()
     df = df.groupby("symbol").apply(_calc_returns, handler.dataset_columns[-1]).dropna(axis=0).reset_index(drop=True)
-    write_dataset(df[["refdate", "symbol", "pct_return", "log_return"]], handler.template_id)
+    fields = [
+        pyarrow.field("symbol", pyarrow.string()),
+        pyarrow.field("refdate", pyarrow.timestamp("us")),
+        pyarrow.field("pct_return", pyarrow.float64()),
+        pyarrow.field("log_return", pyarrow.float64()),
+    ]
+
+    my_schema = pyarrow.schema(fields)
+
+    write_dataset(df[["refdate", "symbol", "pct_return", "log_return"]], handler.template_id, schema=my_schema)
 
 
 def concat_datasets(handler: MarketDataETL):
