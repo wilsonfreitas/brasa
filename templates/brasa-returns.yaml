@@ -12,6 +12,8 @@ etl:
       columns: [refdate, symbol, log_return]
     - name: brasa-returns-missing-data
       columns: [refdate, symbol, log_return]
+    - name: brasa-returns-symbols-changes
+      columns: [refdate, symbol, log_return]
     - name: b3-curves-di1-standard-returns
       columns: [refdate, symbol, returns]
     - name: b3-curves-dap-standard-returns
