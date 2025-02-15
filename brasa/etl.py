@@ -9,7 +9,7 @@ import pyarrow.acero as ac
 import pyarrow.compute as pc
 from bizdays import Calendar, set_option, get_option
 
-from .queries import get_dataset, write_dataset
+from .queries import get_dataset, write_dataset, BrasaDB
 from .engine import MarketDataETL
 from .parsers.b3.futures_settlement_prices import maturity2date
 
@@ -977,3 +977,10 @@ def rename_symbols_in_equities_returns(handler: MarketDataETL):
         tables.append(tb)
     rets = pyarrow.concat_tables(tables)
     write_dataset(rets.to_pandas(), handler.template_id)
+
+
+def execute_query(handler: MarketDataETL):
+    con = BrasaDB.get_connection()
+    df = con.execute(handler.query).df()
+    write_dataset(df, handler.template_id)
+    BrasaDB.create_view(handler.template_id)
