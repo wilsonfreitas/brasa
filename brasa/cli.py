@@ -1,7 +1,6 @@
 import argparse
 from datetime import datetime
 
-
 from . import download_marketdata, process_marketdata, process_etl, retrieve_template
 from .util import DateRangeParser
 from .engine import CacheManager
@@ -28,14 +27,14 @@ parser_download.add_argument("template", nargs="+", help="template names")
 parser_process = subparsers.add_parser("process", help="process market data - transform raw data to parquet files")
 parser_process.add_argument("template", nargs="+", help="template names")
 
-parser_show = subparsers.add_parser("list", help="list available templates")
-parser_show.add_argument("choice", choices=["templates"])
-
 parser_create_views = subparsers.add_parser("create-views", help="create all views in brasa database")
 
 parser_create_view = subparsers.add_parser("create-view", help="create specific view in brasa database")
 parser_create_view.add_argument("template", nargs="+", help="template names")
 
+parser_query = subparsers.add_parser("query", help="execute read-only SQL queries on brasa database")
+parser_query.add_argument("sql_query", nargs=1, help="SQL query to be executed")
+parser_query.add_argument("-o", "--output", nargs=1, help="SQL query to be executed", default="display")
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -60,3 +59,18 @@ if __name__ == "__main__":
     elif args.command == "create-view":
         for template in args.template:
             BrasaDB.create_view(template)
+    elif args.command == "query":
+        q = BrasaDB.get_connection().sql(args.sql_query[0])
+        output = args.output[0]
+        if output == "display":
+            print(q)
+        elif output.endswith(".csv"):
+            q.df().to_csv(output, sep=",", encoding="utf-8", index=False)
+        elif output.endswith(".json"):
+            q.df().to_json(output, index=False)
+        elif output.endswith(".parquet"):
+            q.df().to_parquet(output, index=False)
+        elif output.endswith(".orc"):
+            q.df().to_orc(output, index=False)
+        elif output.endswith(".xls") or output.endswith(".xlsx"):
+            q.df().to_excel(output, index=False)
