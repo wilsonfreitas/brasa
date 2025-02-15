@@ -1,3 +1,4 @@
+import os
 import json
 from datetime import datetime
 import pandas as pd
@@ -5,6 +6,7 @@ import pyarrow
 import pyarrow.dataset as ds
 import pyarrow.compute as pc
 from bizdays import Calendar, set_option, get_option
+import duckdb
 
 from .engine import CacheManager
 
@@ -17,28 +19,44 @@ __all__ = [
     "get_industry_sectors",
     "describe",
     "show",
+    "BrasaDB",
 ]
 
 
-# class BrasaDB:
-#     connection: duckdb.DuckDBPyConnection | None = None
+class BrasaDB:
+    connection: duckdb.DuckDBPyConnection | None = None
 
-#     @classmethod
-#     def path(cls) -> str:
-#         man = CacheManager()
-#         return man.cache_path(man.db_filename)
+    @classmethod
+    def path(cls) -> str:
+        man = CacheManager()
+        return man.cache_path(man.duckdb_filename)
 
-#     @classmethod
-#     def get_connection(cls) -> duckdb.DuckDBPyConnection:
-#         if cls.connection is None:
-#             cls.connection = duckdb.connect(database=cls.path(), read_only=True)
-#         else:
-#             try:
-#                 cls.connection.sql("SELECT 42")
-#             except duckdb.ConnectionException:
-#                 cls.connection.close()
-#                 cls.connection = duckdb.connect(database=cls.path(), read_only=True)
-#         return cls.connection
+    @classmethod
+    def get_connection(cls) -> duckdb.DuckDBPyConnection:
+        if cls.connection is None:
+            cls.connection = duckdb.connect(database=cls.path(), read_only=False)
+        else:
+            try:
+                cls.connection.sql("SELECT 42")
+            except duckdb.ConnectionException:
+                cls.connection.close()
+                cls.connection = duckdb.connect(database=cls.path(), read_only=False)
+        return cls.connection
+
+    @classmethod
+    def create_view(cls, template: str) -> None:
+        man = CacheManager()
+        con = cls.get_connection()
+        con.read_parquet(man.db_path(f"{template}/*.parquet")).create_view(template)
+
+    @classmethod
+    def create_views(cls) -> None:
+        man = CacheManager()
+        for p in os.listdir(man.db_path("")):
+            try:
+                p.index(".")
+            except:
+                cls.create_view(p)
 
 
 # def get_timeseries(symbol: str, start: datetime, end: datetime) -> pd.DataFrame:
