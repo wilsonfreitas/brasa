@@ -341,6 +341,7 @@ class MarketDataTemplate:
 class CacheManager(Singleton):
     _meta_db_filename = "meta.db"
     _meta_folder = "meta"
+    _duckdb_filename = "brasa.duckdb"
     _db_folder = "db"
     _raw_folder = "raw"
 
@@ -366,6 +367,10 @@ class CacheManager(Singleton):
 
     def db_path(self, name: str) -> str:
         return os.path.join(self.cache_path(self._db_folder), name)
+
+    @property
+    def duckdb_filename(self) -> str:
+        return os.path.join(self._db_folder, self._duckdb_filename)
 
     def create_meta_db(self) -> None:
         db_conn = sqlite3.connect(database=self.cache_path(self.meta_db_filename))
