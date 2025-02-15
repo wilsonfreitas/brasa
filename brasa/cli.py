@@ -1,10 +1,11 @@
 import argparse
 from datetime import datetime
 
-from brasa.engine import CacheManager
 
 from . import download_marketdata, process_marketdata, process_etl, retrieve_template
 from .util import DateRangeParser
+from .engine import CacheManager
+from .queries import BrasaDB
 
 parser = argparse.ArgumentParser()
 
@@ -30,6 +31,11 @@ parser_process.add_argument("template", nargs="+", help="template names")
 parser_show = subparsers.add_parser("list", help="list available templates")
 parser_show.add_argument("choice", choices=["templates"])
 
+parser_create_views = subparsers.add_parser("create-views", help="create all views in brasa database")
+
+parser_create_view = subparsers.add_parser("create-view", help="create specific view in brasa database")
+parser_create_view.add_argument("template", nargs="+", help="template names")
+
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -49,3 +55,8 @@ if __name__ == "__main__":
                 process_etl(template)
             else:
                 process_marketdata(template)
+    elif args.command == "create-views":
+        BrasaDB.create_views()
+    elif args.command == "create-view":
+        for template in args.template:
+            BrasaDB.create_view(template)
