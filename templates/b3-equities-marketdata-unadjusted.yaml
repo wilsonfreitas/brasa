@@ -1,0 +1,17 @@
+id: b3-equities-marketdata-unadjusted
+description: Tabela com dados de negócios de ações
+etl:
+  function: brasa.etl.execute_query
+  query: |+
+    SELECT refdate, symbol, trade_quantity, traded_contracts, volume, open, low, high, close, average
+    FROM 'b3-bvbg086'
+    WHERE symbol in (SELECT distinct symbol FROM 'b3-equities-spot-market')
+
+    UNION ALL
+
+    SELECT refdate, symbol, trade_quantity, traded_contracts, volume, open, low, high, close, average
+    FROM 'b3-cotahist'
+    WHERE symbol in (SELECT distinct symbol FROM 'b3-equities-spot-market') and refdate = '2021-06-10'
+
+    order by refdate, symbol
+
