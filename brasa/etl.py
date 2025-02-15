@@ -934,9 +934,10 @@ def create_adjusted_prices(handler: MarketDataETL):
 
     def _(all_data):
         all_data = all_data.set_index("refdate").sort_index(ascending=False)
-        rets = all_data["returns"]
+        rets = all_data["returns"].copy()
         idx = cal.seq(rets.index[0], rets.index[-1])
         rets = rets.reindex(idx, fill_value=0.0)
+        all_data = all_data.reindex(idx, method="bfill")
         f = np.exp(rets).cumprod().shift()
         f.iloc[0] = 1
         close = all_data[handler.candle_names[-1]].iloc[0].item()
