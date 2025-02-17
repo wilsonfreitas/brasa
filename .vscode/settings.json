@@ -3,9 +3,11 @@
         "tests"
     ],
     "python.testing.unittestEnabled": false,
-    "python.testing.pytestEnabled": true,
+    "python.testing.pytestEnabled": false,
     "cSpell.enableFiletypes": [
         "!python"
     ],
-    "cSpell.language": "en,pt,pt-BR"
+    "cSpell.language": "en,pt,pt-BR",
+    "python.analysis.enablePytestSupport": false,
+    "python.testing.autoTestDiscoverOnSaveEnabled": false
 }
