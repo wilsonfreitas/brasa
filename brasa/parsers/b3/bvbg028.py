@@ -1,4 +1,3 @@
-
 from lxml import etree
 import pandas as pd
 from ..util import Parser
@@ -109,13 +108,11 @@ class BVBG028Parser(Parser):
         else:
             raise Exception("Invalid XML: tag BizGrpDtls not found")
 
-        xs = exchange.findall(
-            "{urn:bvmf.052.01.xsd}BizGrp/{urn:bvmf.100.02.xsd}Document/{urn:bvmf.100.02.xsd}Instrm"
-        )
+        xs = exchange.findall("{urn:bvmf.052.01.xsd}BizGrp/{urn:bvmf.100.02.xsd}Document/{urn:bvmf.100.02.xsd}Instrm")
         for node in xs:
             self.parse_instrument_node(node)
         for instr in self.__all_instrs:
-            typo = instr['instrument_type']
+            typo = instr["instrument_type"]
             try:
                 self.__instrs_dict[typo].append(instr)
             except:

@@ -83,13 +83,12 @@ class BVBG087Parser(Parser):
                     data[k] = smart_find(node, fields[k], ns)
                 self.indexes.append(data)
         for instr in self.indexes:
-            typo = instr['index_type']
+            typo = instr["index_type"]
             try:
                 self.instrs[typo].append(instr)
             except:
                 self.instrs[typo] = [instr]
         self.__data = {k: pd.DataFrame(self.instrs[k]) for k in self.instrs.keys()}
-
 
     @property
     def data(self):
