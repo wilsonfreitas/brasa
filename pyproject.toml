@@ -20,7 +20,7 @@ pyarrow = "^19.0.0"
 progressbar2 = "^4.3.2"
 html5lib = "^1.1"
 beautifulsoup4 = "^4.12.2"
-python-bcb = "0.1.9"
+python-bcb = "0.3.2"
 duckdb = "^1.2.0"
 
 
