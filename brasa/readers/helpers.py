@@ -11,8 +11,8 @@ from ..parsers.b3.bvbg086 import BVBG086Parser
 from ..parsers.b3.bvbg087 import BVBG087Parser
 from ..parsers.b3.cdi import CDIParser
 from ..parsers.b3.cotahist import COTAHISTParser
-from ..parsers.b3.indic import IndicParser
 from ..parsers.b3.futures_settlement_prices import future_settlement_prices_parser
+from ..parsers.b3.indic import IndicParser
 from ..util import SuppressUserWarnings
 
 
