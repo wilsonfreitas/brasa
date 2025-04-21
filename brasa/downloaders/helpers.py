@@ -1,13 +1,14 @@
-import json
 import io
+import json
 from typing import IO
+
 from brasa.downloaders.downloaders import (
+    B3FilesURLDownloader,
+    B3PagedURLEncodedDownloader,
     B3URLEncodedDownloader,
     DatetimeDownloader,
     SettlementPricesDownloader,
     SimpleDownloader,
-    B3FilesURLDownloader,
-    B3PagedURLEncodedDownloader,
 )
 from brasa.engine import MarketDataDownloader
 
