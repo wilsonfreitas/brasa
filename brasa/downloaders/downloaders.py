@@ -1,12 +1,13 @@
 import binascii
+import json
+import logging
 import os
 import os.path
-import logging
 import tempfile
+from contextlib import contextmanager
+from datetime import datetime
 from typing import IO
-import zipfile
-from datetime import datetime, timedelta, date, timezone
-import json
+
 import bizdays
 import pytz
 import requests
@@ -16,6 +17,7 @@ from contextlib import contextmanager
 @contextmanager
 def disable_ssl_warnings():
     import warnings
+
     import urllib3
 
     with warnings.catch_warnings():
