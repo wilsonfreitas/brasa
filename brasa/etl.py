@@ -164,8 +164,8 @@ def _get_currency_data(
     dd_cur = dd.copy()
     dd_cur = dd_cur.rename(columns={"dataHoraCotacao": "refdate", "paridadeVenda": "value", "cotacaoVenda": "value"})
     dd_cur["symbol"] = symbol
-    dd_cur["trade_date"] = pd.to_datetime(dd_cur["refdate"])
-    dd_cur["refdate"] = pd.to_datetime(dd_cur["refdate"].str[:10])
+    dd_cur["trade_date"] = dd_cur["refdate"]
+    dd_cur["refdate"] = dd_cur["refdate"]
     dd_cur = dd_cur.sort_values("trade_date")
     dd_cur = dd_cur.groupby("refdate").apply(_create_currency_candle).reset_index(drop=True)
     dd_cur = dd_cur.loc[:, ["refdate", "symbol", "open", "high", "low", "close"]]
