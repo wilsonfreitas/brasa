@@ -6,6 +6,7 @@ from brasa.downloaders.downloaders import (
     B3FilesURLDownloader,
     B3PagedURLEncodedDownloader,
     B3URLEncodedDownloader,
+    BCBSGSDownloader,
     DatetimeDownloader,
     SettlementPricesDownloader,
     SimpleDownloader,
@@ -41,6 +42,11 @@ def settlement_prices_download(md_downloader: MarketDataDownloader, **kwargs) ->
 def b3_files_download(md_downloader: MarketDataDownloader, **kwargs) -> tuple[IO | None, dict[str, str]]:
     downloader = B3FilesURLDownloader(md_downloader.url, md_downloader.verify_ssl, **kwargs)
     return downloader.download(), dict(downloader.response.headers)
+
+
+def bcb_sgs_download(md_downloader: MarketDataDownloader, **kwargs) -> tuple[IO | None, dict[str, str]]:
+    downloader = BCBSGSDownloader(**kwargs)
+    return downloader.download(), dict()
 
 
 def validate_empty_file(fname: str) -> None:

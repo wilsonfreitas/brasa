@@ -1,24 +1,32 @@
 import abc
 import base64
-from datetime import datetime
 import gzip
-import io
 import json
 import os
-from pathlib import Path
 import re
 import shutil
 import sqlite3
+from datetime import datetime
+from pathlib import Path
 from typing import IO, Any, Callable
 from warnings import warn
-from numpy import empty
 
 import pandas as pd
 import progressbar
-import yaml
+import pyarrow as pa
+import pyarrow.parquet as pq
 import regexparser
+import yaml
 
-from .util import KwargsIterator, generate_checksum_for_template, generate_checksum_from_file, unzip_recursive
+from brasa.fieldset_schema.field import Field
+
+from .fieldset_schema import Fieldset
+from .util import (
+    KwargsIterator,
+    generate_checksum_for_template,
+    generate_checksum_from_file,
+    unzip_recursive,
+)
 
 
 def json_convert_from_object(obj):
@@ -185,8 +193,8 @@ class CacheMetadata:
         self.response: Any = None
         self.download_checksum: str = ""
         self.download_args: dict[str, Any] = {}
-        self.downloaded_files: list[str] = []
-        self.processed_files: dict[str, str] = {}
+        self._downloaded_files: list[str] = []
+        self._processed_files: dict[str, str] = {}
         self.extra_key: str = ""
         self.processing_errors: str = ""
 
@@ -204,8 +212,46 @@ class CacheMetadata:
         }
 
     def from_dict(self, kwargs) -> None:
-        for k in kwargs.keys():
-            self.__dict__[k] = kwargs[k]
+        for k,v in kwargs.items():
+            setattr(self, k, v)
+
+    def normalize_path(self, path: str) -> str:
+        normalized = path.replace("\\", "/")
+        return str(Path(normalized))
+
+    @property
+    def downloaded_files(self) -> list[str]:
+        return [self.normalize_path(f) for f in self._downloaded_files]
+
+    @downloaded_files.setter
+    def downloaded_files(self, value: list[str]) -> None:
+        self._downloaded_files = value
+
+    @property
+    def processed_files(self) -> dict[str, str]:
+        # return {key: self.normalize_path(val) for key, val in self._processed_files.items()}
+        return self._processed_files
+
+    @processed_files.setter
+    def processed_files(self, value: dict[str, str]) -> None:
+        self._processed_files = value
+
+    def add_processed_file(self, key: str, path: str) -> None:
+        """Add a processed file."""
+        self._processed_files[key] = path
+    
+    def add_downloaded_file(self, path: str) -> None:
+        """Add a downloaded file."""
+        self._downloaded_files.append(path)
+    
+    def remove_downloaded_file(self, path: str) -> None:
+        """Remove a downloaded file."""
+        if path in self._downloaded_files:
+            self._downloaded_files.remove(path)
+    
+    def remove_processed_file(self, key: str) -> None:
+        """Remove a processed file."""
+        self._processed_files.pop(key, None)
 
     @property
     def id(self) -> str:
@@ -235,18 +281,25 @@ class MarketDataReader:
         self.read_function = load_function_by_name(reader["function"])
         self.multi = reader.get("multi", {})
         self.parts: list | None = None
-        self.fields: TemplateFields | None = None
+        self.fields: Fieldset | None = None
         self.output_filename_format = reader.get("output-filename-format", "%Y-%m-%d")
 
     def set_parts(self, parts: list) -> None:
         self.parts = parts
 
-    def set_fields(self, fields: TemplateFields) -> None:
+    def set_fields(self, fields: Fieldset) -> None:
         self.fields = fields
 
     def read(self, meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFrame]:
         df = self.read_function(meta)
         return df
+
+
+class MarketDataWriter:
+    def __init__(self, writer: dict):
+        for n in writer.keys():
+            self.__dict__[n] = writer[n]
+        self.partitioning = writer.get("partitioning", [])
 
 
 class DownloadException(Exception):
@@ -322,8 +375,13 @@ class MarketDataTemplate:
             elif n == "reader":
                 self.has_reader = True
                 self.reader = MarketDataReader(template[n])
+            elif n == "writer":
+                self.writer = MarketDataWriter(template[n])
             elif n == "fields":
-                self.fields = TemplateFields(template[n])
+                flds = [Field.from_dict(f) for f in template[n]]
+                fs = Fieldset()
+                fs.add_fields(*flds)
+                self.fields = fs
             elif n == "parts":
                 self.has_parts = True
                 self.parts = template[n]
@@ -482,9 +540,10 @@ class CacheManager(Singleton):
     def clean_meta_raw_folder(self, meta: CacheMetadata) -> None:
         warn(f"Cleaning meta download {meta.download_args}")
         if meta.download_folder == "":
-            raise Exception("No download folder")
+            return
         folder = self.cache_path(meta.download_folder)
-        shutil.rmtree(folder, ignore_errors=False)
+        if os.path.exists(folder):
+            shutil.rmtree(folder, ignore_errors=False)
 
     def clean_meta_db_folder(self, meta: CacheMetadata) -> None:
         warn(f"Cleaning meta db {meta.download_args}")
@@ -642,19 +701,16 @@ def _download_marketdata(meta: CacheMetadata, **kwargs):
         template.downloader.validate(man.cache_path(fname))
 
     # gzip all downloaded files - it saves space
-    gz_downloaded_files = []
-    removed_downloaded_files = []
-    for fname in meta.downloaded_files:
+    files_to_gzip = list(meta._downloaded_files)  # Work with a copy of the actual list
+    for fname in files_to_gzip:
         _fname = man.cache_path(fname)
         with open(_fname, "rb") as f_in:
             with gzip.open(_fname + ".gz", "wb") as f_out:
                 shutil.copyfileobj(f_in, f_out)
-        gz_downloaded_files.append(fname + ".gz")
-        removed_downloaded_files.append(fname)
+        # Add gzipped version and remove original using helper methods
+        meta.add_downloaded_file(fname + ".gz")
+        meta.remove_downloaded_file(fname)
         os.remove(_fname)
-    meta.downloaded_files += gz_downloaded_files
-    for fname in removed_downloaded_files:
-        meta.downloaded_files.remove(fname)
 
 
 def get_fname_part(meta: CacheMetadata, df: pd.DataFrame) -> str:
@@ -681,21 +737,71 @@ def save_parquet_file(meta: CacheMetadata, folder: str, processed_files_name: st
     man = CacheManager()
     fname_part = get_fname_part(meta, df)
     fname = os.path.join(folder, man.parquet_file_name(fname_part))
-    meta.processed_files[processed_files_name] = fname
+    meta.add_processed_file(processed_files_name, fname)
     df.to_parquet(man.cache_path(fname))
 
+
+def save_partitioned_parquet_file(
+    meta: CacheMetadata, 
+    folder: str, 
+    processed_files_name: str, 
+    df: pd.DataFrame, 
+    partition_cols: list[str],
+    schema: pa.Schema = None
+) -> None:
+    """Save DataFrame as partitioned parquet dataset with optional schema.
+    
+    Args:
+        meta: Cache metadata
+        folder: Target folder for parquet files
+        processed_files_name: Name for processed file tracking
+        df: DataFrame to save
+        partition_cols: Columns to use for partitioning
+        schema: Optional PyArrow schema for type enforcement
+    """
+    if schema:
+        tb = pa.Table.from_pandas(df, schema=schema)
+        pq.write_to_dataset(tb, root_path=folder, partition_cols=partition_cols, schema=schema)
+    else:
+        tb = pa.Table.from_pandas(df)
+        pq.write_to_dataset(tb, root_path=folder, partition_cols=partition_cols)
+    meta.add_processed_file(processed_files_name, folder)
 
 def _read_marketdata(meta: CacheMetadata) -> None:
     template = retrieve_template(meta.template)
     df = template.reader.read(meta)
     man = CacheManager()
+    
+    # Generate schema from template fields if available
+    schema = None
+    if hasattr(template, 'fields') and template.fields:
+        try:
+            from .fieldset_schema.adapters import PyArrowAdapter
+            adapter = PyArrowAdapter(template.fields, verbose_warnings=False)
+            schema = adapter.get_target_schema()
+        except Exception:
+            # Fall back to inferred schema if conversion fails
+            schema = None
+    
     if isinstance(df, dict) and bool(template.reader.multi):
         db_folder: dict = man.db_folders(template)
         for name, dx in df.items():
             if dx.shape[0] > 0:
-                save_parquet_file(meta, db_folder[name], template.reader.multi[name], dx)
+                # save_parquet_file(meta, db_folder[name], template.reader.multi[name], dx)
+                pfn = template.reader.multi[name]
+                save_partitioned_parquet_file(
+                    meta, db_folder[name], pfn, dx, 
+                    template.writer.partitioning,
+                    schema=schema
+                )
     elif isinstance(df, pd.DataFrame) and not template.reader.multi:
-        save_parquet_file(meta, man.db_folder(template), "data", df)
+        # save_parquet_file(meta, man.db_folder(template), "data", df)
+        folder = man.cache_path(man.db_folder(template))
+        save_partitioned_parquet_file(
+            meta, folder, "data", df, 
+            template.writer.partitioning,
+            schema=schema
+        )
 
 
 def get_marketdata(

@@ -11,7 +11,7 @@ from typing import IO
 import bizdays
 import pytz
 import requests
-from contextlib import contextmanager
+from bcb import sgs
 
 
 @contextmanager
@@ -156,6 +156,21 @@ class B3FilesURLDownloader(DatetimeDownloader):
             return None
         self._response1 = res.json()
         return super().download()
+
+
+class BCBSGSDownloader:
+    def __init__(self, **kwargs):
+        self.args = kwargs
+
+    def download(self) -> IO | None:
+        try:
+            text = sgs.get_json(self.args["code"], start=self.args["refdate"], end=self.args["refdate"])
+        except Exception as e:
+            return None
+        temp = tempfile.TemporaryFile()
+        temp.write(bytes(text, "utf8"))
+        temp.seek(0)
+        return temp
 
 
 class VnaAnbimaURLDownloader(SimpleDownloader):

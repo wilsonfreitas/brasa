@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 
 from ..engine import CacheManager, CacheMetadata, MarketDataReader, retrieve_template
+from ..fieldset_schema import Fieldset
+from ..fieldset_schema.adapters import PandasAdapter
 from ..parsers.b3.bvbg028 import BVBG028Parser
 from ..parsers.b3.bvbg086 import BVBG086Parser
 from ..parsers.b3.bvbg087 import BVBG087Parser
@@ -216,39 +218,24 @@ def read_b3_bvbg086(meta: CacheMetadata) -> pd.DataFrame:
     paths.sort()
     fname = paths[-1]
     man = CacheManager()
+    template = retrieve_template(meta.template)
+    fields = template.fields
     with gzip.open(man.cache_path(fname)) as f:
         parser = BVBG086Parser(f)
+        parser.parse(tags={field.name: field.get_attribute("tag") for field in fields})
     df = parser.data
-    df["refdate"] = pd.to_datetime(df["refdate"])
-    df["creation_date"] = pd.to_datetime(df["creation_date"])
-    df["security_id"] = pd.to_numeric(df["security_id"])
-    df["security_proprietary"] = pd.to_numeric(df["security_proprietary"])
-    df["open_interest"] = pd.to_numeric(df["open_interest"])
-    df["trade_quantity"] = pd.to_numeric(df["trade_quantity"])
-    df["volume"] = pd.to_numeric(df["volume"])
-    df["traded_contracts"] = pd.to_numeric(df["traded_contracts"])
-    df["best_ask_price"] = pd.to_numeric(df["best_ask_price"])
-    df["best_bid_price"] = pd.to_numeric(df["best_bid_price"])
-    df["open"] = pd.to_numeric(df["open"])
-    df["low"] = pd.to_numeric(df["low"])
-    df["high"] = pd.to_numeric(df["high"])
-    df["average"] = pd.to_numeric(df["average"])
-    df["close"] = pd.to_numeric(df["close"])
-    df["regular_transactions_quantity"] = pd.to_numeric(df["regular_transactions_quantity"])
-    df["regular_traded_contracts"] = pd.to_numeric(df["regular_traded_contracts"])
-    df["regular_volume"] = pd.to_numeric(df["regular_volume"])
-    df["oscillation_percentage"] = pd.to_numeric(df["oscillation_percentage"])
-    df["adjusted_quote"] = pd.to_numeric(df["adjusted_quote"])
-    df["adjusted_tax"] = pd.to_numeric(df["adjusted_tax"])
-    df["previous_adjusted_quote"] = pd.to_numeric(df["previous_adjusted_quote"])
-    df["previous_adjusted_tax"] = pd.to_numeric(df["previous_adjusted_tax"])
-    df["variation_points"] = pd.to_numeric(df["variation_points"])
-    df["adjusted_value_contract"] = pd.to_numeric(df["adjusted_value_contract"].str.replace(",", "."))
-    df["nonregular_transactions_quantity"] = pd.to_numeric(df["nonregular_transactions_quantity"])
-    df["nonregular_traded_contracts"] = pd.to_numeric(df["nonregular_traded_contracts"])
-    df["nonregular_volume"] = pd.to_numeric(df["nonregular_volume"])
+    
+    # Get template and create fieldset from template fields
+    fieldset = Fieldset.from_template_fields(
+        template.fields,
+        raw_fields=template.template.get('fields')
+    )
+    
+    # Apply type conversions using fieldset_schema
+    adapter = PandasAdapter(fieldset, errors='coerce')
+    df = adapter.apply_types(df)
 
-    return parser.data
+    return df
 
 
 def read_b3_bvbg087(meta: CacheMetadata) -> dict[str, pd.DataFrame]:
@@ -518,4 +505,16 @@ def read_b3_listed_funds(meta: CacheMetadata) -> pd.DataFrame:
     df["typeFund"] = template.downloader.args["typeFund"]
     df["refdate"] = pd.to_datetime(meta.timestamp.date())
 
+    return df
+
+
+def read_bcb_sgs_data(meta: CacheMetadata) -> pd.DataFrame:
+    fname = meta.downloaded_files[0]
+    man = CacheManager()
+    fname = man.cache_path(fname)
+    df = pd.read_json(fname, dtype_backend="pyarrow")
+    df["code"] = meta.download_args["code"]
+    template = retrieve_template(meta.template)
+    df.columns = template.fields.names
+    df["refdate"] = pd.to_datetime(df["refdate"], format="%d/%m/%Y", errors="coerce")
     return df

@@ -5,7 +5,8 @@ description: Arquivo de Indicadores Econômicos
 calendar: Brazil/B3
 downloader:
   function: brasa.downloaders.datetime_download
-  url: http://www.bmf.com.br/Ftp/IndicadoresEconomicos/ID%y%m%d.ex_
+  url: https://www.b3.com.br/pesquisapregao/download?filelist=ID%y%m%d.ex_
+  # url: http://www.bmf.com.br/Ftp/IndicadoresEconomicos/ID%y%m%d.ex_
   format: zip
   args:
     refdate: ~

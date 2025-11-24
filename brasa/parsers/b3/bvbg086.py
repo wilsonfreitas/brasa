@@ -10,10 +10,10 @@ class BVBG086Parser(Parser):
         self.fname = fname
         self.instruments = []
         self.missing = set()
-        self.parse()
-        self.__instrs_table = pd.DataFrame(self.instruments)
+        # self.parse()
+        # self.__instrs_table = pd.DataFrame(self.instruments)
 
-    def parse(self):
+    def parse(self, tags=None):
         tree = self._open(self.fname, etree.parse)
         exchange = tree.getroot()[0][0]
         ns = {None: "urn:bvmf.052.01.xsd"}
@@ -26,9 +26,10 @@ class BVBG086Parser(Parser):
 
         xs = exchange.findall("{urn:bvmf.052.01.xsd}BizGrp/{urn:bvmf.217.01.xsd}Document/{urn:bvmf.217.01.xsd}PricRpt")
         for node in xs:
-            self.parse_price_report_node(node)
+            self.parse_price_report_node(node, tags)
+        self.__instrs_table = pd.DataFrame(self.instruments)
 
-    def parse_price_report_node(self, node):
+    def parse_price_report_node(self, node, tags=None):
         attrs = {
             "refdate": "TradDt/Dt",
             "symbol": "SctyId/TckrSymb",
@@ -68,8 +69,9 @@ class BVBG086Parser(Parser):
         }
         ns = {None: "urn:bvmf.217.01.xsd"}
         data = {"creation_date": self.creation_date}
-        for attr in attrs:
-            els = node.findall(attrs[attr], ns)
+        _attrs = tags if tags is not None else attrs
+        for attr in _attrs:
+            els = node.findall(_attrs[attr], ns)
             if len(els):
                 data[attr] = els[0].text
             else:
