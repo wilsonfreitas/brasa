@@ -55,7 +55,7 @@ class SimpleDownloader:
 
 class DatetimeDownloader(SimpleDownloader):
     def __init__(self, url, verify_ssl, **kwargs):
-        super().__init__(url, verify_ssl, **kwargs)
+        super().__init__(url, verify_ssl)
         self.refdate = kwargs["refdate"]
 
     @property
@@ -65,7 +65,7 @@ class DatetimeDownloader(SimpleDownloader):
 
 class B3URLEncodedDownloader(SimpleDownloader):
     def __init__(self, url, verify_ssl, **kwargs):
-        super().__init__(url, verify_ssl, **kwargs)
+        super().__init__(url, verify_ssl)
         self.args = kwargs
 
     @property
@@ -81,7 +81,8 @@ class B3URLEncodedDownloader(SimpleDownloader):
 
 class B3PagedURLEncodedDownloader(B3URLEncodedDownloader):
     def __init__(self, url, verify_ssl, **kwargs):
-        super().__init__(url, verify_ssl, **kwargs)
+        super().__init__(url, verify_ssl)
+        self.args = kwargs
         self.page = 1
 
     @property
@@ -112,7 +113,7 @@ class B3PagedURLEncodedDownloader(B3URLEncodedDownloader):
 
 class SettlementPricesDownloader(DatetimeDownloader):
     def __init__(self, url, verify_ssl, **kwargs):
-        super().__init__(url, verify_ssl, **kwargs)
+        super().__init__(url, verify_ssl, refdate=kwargs["refdate"])
 
     @property
     def url(self) -> str:

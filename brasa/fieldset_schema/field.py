@@ -251,7 +251,7 @@ class Field:
         Create a Field instance from a dictionary.
 
         Args:
-            data: Dictionary with 'name', 'description', 'type', and optional attributes
+            data: Dictionary with 'name', 'description', and optional 'type' and other attributes
 
         Returns:
             Field instance
@@ -259,7 +259,7 @@ class Field:
         Raises:
             FieldError: If required keys are missing
         """
-        required_keys = {"name", "description", "type"}
+        required_keys = {"name", "description"}
         missing_keys = required_keys - set(data.keys())
 
         if missing_keys:
@@ -268,10 +268,26 @@ class Field:
         # Extract core attributes
         name = data["name"]
         description = data["description"]
-        type_definition = data["type"]
 
-        # Extract extra attributes
-        extra_attrs = {k: v for k, v in data.items() if k not in required_keys}
+        # Determine type definition
+        # Priority: 1) top-level 'type', 2) handler.type with format, 3) default 'string'
+        if "type" in data:
+            type_definition = data["type"]
+        elif "handler" in data and isinstance(data["handler"], dict):
+            handler = data["handler"]
+            handler_type = handler.get("type", "string")
+            handler_format = handler.get("format")
+            # Build type definition from handler
+            if handler_format:
+                type_definition = f"{handler_type}(format='{handler_format}')"
+            else:
+                type_definition = handler_type
+        else:
+            type_definition = "string"
+
+        # Extract extra attributes (exclude core keys)
+        core_keys = {"name", "description", "type", "handler"}
+        extra_attrs = {k: v for k, v in data.items() if k not in core_keys}
 
         return cls(name, description, type_definition, **extra_attrs)
 

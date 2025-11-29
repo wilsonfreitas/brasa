@@ -394,7 +394,9 @@ class MarketDataTemplate:
             elif n == "writer":
                 self.writer = MarketDataWriter(template[n])
             elif n == "fields":
-                flds = [Field.from_dict(f) for f in template[n]]
+                # Filter out null fields (where name is None/null)
+                valid_fields = [f for f in template[n] if f.get("name") is not None]
+                flds = [Field.from_dict(f) for f in valid_fields]
                 fs = Fieldset()
                 fs.add_fields(*flds)
                 self.fields = fs

@@ -430,6 +430,9 @@ class TypeParserFactory:
         "char": StringParser,  # Alias for string
         "boolean": BooleanParser,
         "bool": BooleanParser,  # Alias for boolean
+        # R-style type aliases
+        "posixct": DateTimeParser,  # R datetime type
+        "posixlt": DateTimeParser,  # R datetime type
     }
 
     @classmethod
