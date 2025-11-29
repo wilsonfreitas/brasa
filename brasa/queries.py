@@ -1,25 +1,26 @@
-import os
 import json
 from datetime import datetime
+from pathlib import Path
+
+import duckdb
 import pandas as pd
 import pyarrow
-import pyarrow.dataset as ds
 import pyarrow.compute as pc
-from bizdays import Calendar, set_option, get_option
-import duckdb
+import pyarrow.dataset as ds
+from bizdays import Calendar, get_option, set_option
 
 from .engine import CacheManager
 
 __all__ = [
-    "get_returns",
-    "get_prices",
-    "get_dataset",
-    "write_dataset",
-    "get_symbols",
-    "get_industry_sectors",
-    "describe",
-    "show",
     "BrasaDB",
+    "describe",
+    "get_dataset",
+    "get_industry_sectors",
+    "get_prices",
+    "get_returns",
+    "get_symbols",
+    "show",
+    "write_dataset",
 ]
 
 
@@ -52,10 +53,11 @@ class BrasaDB:
     @classmethod
     def create_views(cls) -> None:
         man = CacheManager()
-        for p in os.listdir(man.db_path("")):
+        for p in Path(man.db_path("")).iterdir():
             try:
-                p.index(".")
-            except:
+                p.name.index(".")
+            except ValueError:
+                cls.create_view(p.name)
                 cls.create_view(p)
 
 
@@ -90,7 +92,9 @@ class BrasaDB:
 #     return res.fetchdf().pivot(index="refdate", columns="symbol", values="close")
 
 
-def get_returns(symbols: str | list[str], start=None, end=None, calendar="B3") -> pd.DataFrame:
+def get_returns(
+    symbols: str | list[str], start=None, end=None, calendar="B3"
+) -> pd.DataFrame:
     if isinstance(symbols, str):
         symbols = [symbols]
     if start is None:
@@ -173,7 +177,6 @@ def describe(name: str) -> None:
     cols = json.loads(sc.metadata[b"pandas"].decode("utf-8"))["columns"]
     for k in cols:
         print(k["field_name"] + ":", k["pandas_type"])
-    return None
 
 
 def show(name: str, n: int = 10):
@@ -181,17 +184,29 @@ def show(name: str, n: int = 10):
     return ds.head(n).to_pandas().style.format(thousands=",", precision=2)
 
 
-def write_dataset(df: pd.DataFrame, name: str, format: str = "parquet", schema: pyarrow.Schema = None) -> None:
+def write_dataset(
+    df: pd.DataFrame, name: str, format: str = "parquet", schema: pyarrow.Schema = None
+) -> None:
     man = CacheManager()
     if schema:
         tb = pyarrow.Table.from_pandas(df, schema=schema)
     else:
         tb = pyarrow.Table.from_pandas(df)
-    ds.write_dataset(tb, man.db_path(name), format=format, existing_data_behavior="overwrite_or_ignore")
+    ds.write_dataset(
+        tb,
+        man.db_path(name),
+        format=format,
+        existing_data_behavior="overwrite_or_ignore",
+    )
 
 
 def _get_equity_symbols(sector=None) -> list[str]:
-    df = get_dataset("b3-equity-symbols-properties").scanner(columns=["symbol", "sector"]).to_table().to_pandas()
+    df = (
+        get_dataset("b3-equity-symbols-properties")
+        .scanner(columns=["symbol", "sector"])
+        .to_table()
+        .to_pandas()
+    )
     if sector is not None:
         df = df[df.sector == sector]
     return list(df.symbol.unique())
@@ -215,7 +230,12 @@ def _get_companies_industry_sectors(column) -> list[str]:
 
 
 def _get_companies_trading_names() -> list[str]:
-    df = get_dataset("b3-companies-details").scanner(columns=["refdate", "trading_name"]).to_table().to_pandas()
+    df = (
+        get_dataset("b3-companies-details")
+        .scanner(columns=["refdate", "trading_name"])
+        .to_table()
+        .to_pandas()
+    )
     df = df.groupby(["trading_name"], sort=True).last().reset_index()
     return list(df.trading_name.unique())
 
@@ -294,35 +314,34 @@ def _get_funds_symbols(type: str) -> list[str]:
 
 def get_symbols(type: str, **kwargs) -> list:
     type = type.lower()
-    if type == "etf":
-        return _get_funds_symbols("ETF")
-    elif type == "fii":
-        return _get_funds_symbols("FII")
-    elif type == "fixed-income-etf" or type == "fietf":
-        return _get_funds_symbols("Fixed Income ETF")
-    elif type == "index":
-        return _get_indexes_names()
-    elif type == "company":
-        return _get_companies_names()
-    elif type == "company-cvm-code":
-        return _get_companies_cvm_codes()
-    elif type == "company-trading-name":
-        return _get_companies_trading_names()
-    elif type == "industry-sector":
-        return _get_companies_industry_sectors("sector")
-    elif type == "industry-subsector":
-        return _get_companies_industry_sectors("subsector")
-    elif type == "industry-segment":
-        return _get_companies_industry_sectors("segment")
-    elif type == "equity":
+
+    type_handlers = {
+        "etf": lambda: _get_funds_symbols("ETF"),
+        "fii": lambda: _get_funds_symbols("FII"),
+        "fixed-income-etf": lambda: _get_funds_symbols("Fixed Income ETF"),
+        "fietf": lambda: _get_funds_symbols("Fixed Income ETF"),
+        "index": _get_indexes_names,
+        "company": _get_companies_names,
+        "company-cvm-code": _get_companies_cvm_codes,
+        "company-trading-name": _get_companies_trading_names,
+        "industry-sector": lambda: _get_companies_industry_sectors("sector"),
+        "industry-subsector": lambda: _get_companies_industry_sectors("subsector"),
+        "industry-segment": lambda: _get_companies_industry_sectors("segment"),
+    }
+
+    if type in type_handlers:
+        return type_handlers[type]()
+
+    if type == "equity":
         if "sector" in kwargs:
             return _get_equity_symbols(kwargs["sector"])
-        elif "index" in kwargs:
-            if "end_month" in kwargs:
-                return _get_symbols_by_index(kwargs["index"], kwargs["end_month"])
-            else:
-                return _get_symbols_by_index(kwargs["index"])
-        else:
-            return _get_equity_symbols()
-    else:
-        return []
+        if "index" in kwargs:
+            end_month = kwargs.get("end_month")
+            return (
+                _get_symbols_by_index(kwargs["index"], end_month)
+                if end_month
+                else _get_symbols_by_index(kwargs["index"])
+            )
+        return _get_equity_symbols()
+
+    return []

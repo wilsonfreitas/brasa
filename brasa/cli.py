@@ -1,20 +1,26 @@
 import argparse
 from datetime import datetime
 
-from . import download_marketdata, process_marketdata, process_etl, retrieve_template
-from .util import DateRangeParser
+from . import download_marketdata, process_etl, process_marketdata, retrieve_template
 from .engine import CacheManager
 from .queries import BrasaDB
+from .util import DateRangeParser
 
 parser = argparse.ArgumentParser()
 
 subparsers = parser.add_subparsers(dest="command", title="Commands")
 
-parser_setup = subparsers.add_parser("setup", help="setup brasa: create cache directories and metadata.db")
+parser_setup = subparsers.add_parser(
+    "setup", help="setup brasa: create cache directories and metadata.db"
+)
 
 parser_download = subparsers.add_parser("download", help="download market data")
 parser_download.add_argument(
-    "-d", "--date", "--date-range", nargs="+", help="specify date or date range to download and process market data"
+    "-d",
+    "--date",
+    "--date-range",
+    nargs="+",
+    help="specify date or date range to download and process market data",
 )
 parser_download.add_argument(
     "--calendar",
@@ -24,17 +30,27 @@ parser_download.add_argument(
 )
 parser_download.add_argument("template", nargs="+", help="template names")
 
-parser_process = subparsers.add_parser("process", help="process market data - transform raw data to parquet files")
+parser_process = subparsers.add_parser(
+    "process", help="process market data - transform raw data to parquet files"
+)
 parser_process.add_argument("template", nargs="+", help="template names")
 
-parser_create_views = subparsers.add_parser("create-views", help="create all views in brasa database")
+parser_create_views = subparsers.add_parser(
+    "create-views", help="create all views in brasa database"
+)
 
-parser_create_view = subparsers.add_parser("create-view", help="create specific view in brasa database")
+parser_create_view = subparsers.add_parser(
+    "create-view", help="create specific view in brasa database"
+)
 parser_create_view.add_argument("template", nargs="+", help="template names")
 
-parser_query = subparsers.add_parser("query", help="execute read-only SQL queries on brasa database")
+parser_query = subparsers.add_parser(
+    "query", help="execute read-only SQL queries on brasa database"
+)
 parser_query.add_argument("sql_query", nargs=1, help="SQL query to be executed")
-parser_query.add_argument("-o", "--output", nargs=1, help="SQL query to be executed", default="display")
+parser_query.add_argument(
+    "-o", "--output", nargs=1, help="SQL query to be executed", default="display"
+)
 
 if __name__ == "__main__":
     args = parser.parse_args()

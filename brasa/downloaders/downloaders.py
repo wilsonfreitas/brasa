@@ -1,9 +1,7 @@
 import binascii
+import io
 import json
 import logging
-import os
-import os.path
-import tempfile
 from contextlib import contextmanager
 from datetime import datetime
 from typing import IO
@@ -26,7 +24,7 @@ def disable_ssl_warnings():
 
 
 class SimpleDownloader:
-    def __init__(self, url, verify_ssl, **kwargs):
+    def __init__(self, url, verify_ssl):
         self.verify_ssl = verify_ssl
         self._url = url
         self.response = None
@@ -44,16 +42,14 @@ class SimpleDownloader:
             res = requests.get(self.url, verify=self.verify_ssl)
             self.response = res
 
-        msg = "status_code = {} url = {}".format(res.status_code, self.url)
+        msg = f"status_code = {res.status_code} url = {self.url}"
         logg = logging.warn if res.status_code != 200 else logging.info
         logg(msg)
 
         if res.status_code != 200:
             return None
 
-        temp = tempfile.TemporaryFile()
-        temp.write(res.content)
-        temp.seek(0)
+        temp = io.BytesIO(res.content)
         return temp
 
 
@@ -75,7 +71,11 @@ class B3URLEncodedDownloader(SimpleDownloader):
     @property
     def url(self) -> str:
         params = json.dumps(self.args)
-        params_enc = binascii.b2a_base64(bytes(params, "utf8"), newline=False).decode("utf8").strip()
+        params_enc = (
+            binascii.b2a_base64(bytes(params, "utf8"), newline=False)
+            .decode("utf8")
+            .strip()
+        )
         return f"{self._url}/{params_enc}"
 
 
@@ -106,9 +106,7 @@ class B3PagedURLEncodedDownloader(B3URLEncodedDownloader):
         if "header" in obj:
             data["header"] = obj["header"]
         content = json.dumps(data)
-        temp = tempfile.TemporaryFile()
-        temp.write(bytes(content, "utf8"))
-        temp.seek(0)
+        temp = io.BytesIO(bytes(content, "utf8"))
         return temp
 
 
@@ -128,16 +126,14 @@ class SettlementPricesDownloader(DatetimeDownloader):
             res = requests.post(self.url, params=body, verify=self.verify_ssl)
             self.response = res
 
-        msg = "status_code = {} url = {}".format(res.status_code, self.url)
+        msg = f"status_code = {res.status_code} url = {self.url}"
         logg = logging.warn if res.status_code != 200 else logging.info
         logg(msg)
 
         if res.status_code != 200:
             return None
 
-        temp = tempfile.TemporaryFile()
-        temp.write(res.content)
-        temp.seek(0)
+        temp = io.BytesIO(res.content)
         return temp
 
 
@@ -147,7 +143,9 @@ class B3FilesURLDownloader(DatetimeDownloader):
 
     @property
     def url(self) -> str:
-        return f'https://arquivos.b3.com.br/api/download/?token={self._response1["token"]}'
+        return (
+            f"https://arquivos.b3.com.br/api/download/?token={self._response1['token']}"
+        )
 
     def download(self) -> IO | None:
         res = requests.get(self.refdate.strftime(self._url))
@@ -164,12 +162,12 @@ class BCBSGSDownloader:
 
     def download(self) -> IO | None:
         try:
-            text = sgs.get_json(self.args["code"], start=self.args["refdate"], end=self.args["refdate"])
-        except Exception as e:
+            text = sgs.get_json(
+                self.args["code"], start=self.args["refdate"], end=self.args["refdate"]
+            )
+        except Exception:
             return None
-        temp = tempfile.TemporaryFile()
-        temp.write(bytes(text, "utf8"))
-        temp.seek(0)
+        temp = io.BytesIO(bytes(text, "utf8"))
         return temp
 
 
@@ -189,15 +187,13 @@ class VnaAnbimaURLDownloader(SimpleDownloader):
             "Inicio": refdate.strftime("%d/%m/%Y"),
         }
         res = requests.post(url, params=body)
-        msg = "status_code = {} url = {}".format(res.status_code, url)
+        msg = f"status_code = {res.status_code} url = {url}"
         logg = logging.warn if res.status_code != 200 else logging.info
         logg(msg)
         if res.status_code != 200:
             return None, None, res.status_code, refdate
         status_code = res.status_code
-        temp_file = tempfile.TemporaryFile()
-        temp_file.write(res.content)
-        temp_file.seek(0)
+        temp_file = io.BytesIO(res.content)
         f_fname = self.get_fname(None, refdate)
         logging.info(
             "Returned from download %s %s %s %s",
@@ -214,11 +210,3 @@ class VnaAnbimaURLDownloader(SimpleDownloader):
         refdate = datetime(refdate.year, refdate.month, refdate.day)
         refdate = pytz.timezone("America/Sao_Paulo").localize(refdate)
         return refdate
-
-
-def save_file_to_temp_folder(attrs, fname, tfile):
-    fname = "/tmp/{}".format(fname)
-    logging.info("saving file %s", fname)
-    os.makedirs(os.path.dirname(fname), exist_ok=True)
-    with open(fname, "wb") as f:
-        f.write(tfile.read())

@@ -1,10 +1,13 @@
-from lxml import etree
+from typing import ClassVar
+
 import pandas as pd
+from lxml import etree
+
 from ..util import Parser
 
 
 class BVBG028Parser(Parser):
-    ATTRS = {
+    ATTRS: ClassVar[dict[str, dict[str, str]]] = {
         "header": {
             "refdate": "RptParams/RptDtAndTm/Dt",
             "security_id": "FinInstrmId/OthrId/Id",
@@ -108,16 +111,20 @@ class BVBG028Parser(Parser):
         else:
             raise Exception("Invalid XML: tag BizGrpDtls not found")
 
-        xs = exchange.findall("{urn:bvmf.052.01.xsd}BizGrp/{urn:bvmf.100.02.xsd}Document/{urn:bvmf.100.02.xsd}Instrm")
+        xs = exchange.findall(
+            "{urn:bvmf.052.01.xsd}BizGrp/{urn:bvmf.100.02.xsd}Document/{urn:bvmf.100.02.xsd}Instrm"
+        )
         for node in xs:
             self.parse_instrument_node(node)
         for instr in self.__all_instrs:
             typo = instr["instrument_type"]
             try:
                 self.__instrs_dict[typo].append(instr)
-            except:
+            except KeyError:
                 self.__instrs_dict[typo] = [instr]
-        self.__instrs_dict = {k: pd.DataFrame(self.__instrs_dict[k]) for k in self.__instrs_dict.keys()}
+        self.__instrs_dict = {
+            k: pd.DataFrame(self.__instrs_dict[k]) for k in self.__instrs_dict
+        }
 
     def parse_instrument_node(self, node):
         data = {"creation_date": self.creation_date}

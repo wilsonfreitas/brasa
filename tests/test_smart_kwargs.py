@@ -1,9 +1,7 @@
-
 from brasa.util import DateRange, KwargsIterator
 
 
 def test_smart_kwargs() -> None:
-
     kwargs = {
         "name": "test",
         "color": ["red", "blue", "green"],
@@ -15,7 +13,6 @@ def test_smart_kwargs() -> None:
 
 
 def test_smart_kwargs2() -> None:
-
     kwargs = {
         "refdate": DateRange(year=2020),
     }

@@ -1,17 +1,17 @@
 import re
 from datetime import datetime
 
-from bcb import sgs, PTAX
-import pandas as pd
 import numpy as np
+import pandas as pd
 import pyarrow
 import pyarrow.acero as ac
 import pyarrow.compute as pc
-from bizdays import Calendar, set_option, get_option
+from bcb import PTAX, sgs
+from bizdays import Calendar, get_option, set_option
 
-from .queries import get_dataset, write_dataset, BrasaDB
 from .engine import MarketDataETL
 from .parsers.b3.futures_settlement_prices import maturity2date
+from .queries import BrasaDB, get_dataset, write_dataset
 
 
 def create_b3_rate_futures(handler: MarketDataETL):
@@ -19,23 +19,39 @@ def create_b3_rate_futures(handler: MarketDataETL):
     cal = Calendar()
     bcal = Calendar.load("ANBIMA")
 
-    df_contracts = df.to_table().filter(pc.field("commodity") == handler.commodity).to_pandas()
+    df_contracts = (
+        df.to_table().filter(pc.field("commodity") == handler.commodity).to_pandas()
+    )
     day = handler.maturity_day
-    df_contracts["maturity_date"] = df_contracts["maturity_code"].apply(lambda x: maturity2date(x, cal, day))
+    df_contracts["maturity_date"] = df_contracts["maturity_code"].apply(
+        lambda x: maturity2date(x, cal, day)
+    )
     adj_maturity = bcal.following(df_contracts["maturity_date"])
     df_contracts["business_days"] = bcal.bizdays(df_contracts["refdate"], adj_maturity)
     df_contracts["calendar_days"] = cal.bizdays(df_contracts["refdate"], adj_maturity)
 
     if handler.compounding == "simple":
         t = df_contracts["calendar_days"] / 360
-        df_contracts["adjusted_tax"] = (100_000 / df_contracts["settlement_price"] - 1) * (1 / t)
+        df_contracts["adjusted_tax"] = (
+            100_000 / df_contracts["settlement_price"] - 1
+        ) * (1 / t)
     elif handler.compounding == "discrete":
         t = df_contracts["business_days"] / 252
-        df_contracts["adjusted_tax"] = (100_000 / df_contracts["settlement_price"]) ** (1 / t) - 1
+        df_contracts["adjusted_tax"] = (100_000 / df_contracts["settlement_price"]) ** (
+            1 / t
+        ) - 1
 
     df_contracts.sort_values(["refdate", "maturity_date"], inplace=True)
     df_contracts = df_contracts[
-        ["refdate", "symbol", "maturity_date", "settlement_price", "adjusted_tax", "business_days", "calendar_days"]
+        [
+            "refdate",
+            "symbol",
+            "maturity_date",
+            "settlement_price",
+            "adjusted_tax",
+            "business_days",
+            "calendar_days",
+        ]
     ]
 
     write_dataset(df_contracts, handler.template_id)
@@ -47,15 +63,26 @@ def create_b3_price_futures(handler: MarketDataETL):
     cal = Calendar()
     bcal = Calendar.load("ANBIMA")
 
-    df_contracts = df.filter(pc.field("commodity") == handler.commodity).to_table().to_pandas()
+    df_contracts = (
+        df.filter(pc.field("commodity") == handler.commodity).to_table().to_pandas()
+    )
     day = handler.maturity_day
-    df_contracts["maturity_date"] = df_contracts["maturity_code"].apply(lambda x: maturity2date(x, cal, day))
+    df_contracts["maturity_date"] = df_contracts["maturity_code"].apply(
+        lambda x: maturity2date(x, cal, day)
+    )
     adj_maturity = bcal.following(df_contracts["maturity_date"])
     df_contracts["business_days"] = bcal.bizdays(df_contracts["refdate"], adj_maturity)
     df_contracts["calendar_days"] = cal.bizdays(df_contracts["refdate"], adj_maturity)
     df_contracts.sort_values(["refdate", "maturity_date"], inplace=True)
     df_contracts = df_contracts[
-        ["refdate", "symbol", "maturity_date", "settlement_price", "business_days", "calendar_days"]
+        [
+            "refdate",
+            "symbol",
+            "maturity_date",
+            "settlement_price",
+            "business_days",
+            "calendar_days",
+        ]
     ]
 
     write_dataset(df_contracts, handler.template_id)
@@ -66,7 +93,9 @@ def create_b3_price_futures_adjusted(handler: MarketDataETL):
 
     first = df_contracts.groupby("refdate").nth(0)
     second = df_contracts.groupby("refdate").nth(1)
-    merged = first.merge(second, on="refdate", how="left", suffixes=("_1", "_2")).set_index("refdate")
+    merged = first.merge(
+        second, on="refdate", how="left", suffixes=("_1", "_2")
+    ).set_index("refdate")
     idx = merged.index[merged["business_days_1"] == 0]
     roll = merged.loc[idx, :]
     roll["ratio"] = roll.settlement_price_2 / roll.settlement_price_1
@@ -149,8 +178,14 @@ def _create_currency_candle(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _get_currency_data(
-    ep: PTAX, currency: str, parity: str, start=datetime(2000, 1, 1), end=datetime.today()
+    ep: PTAX,
+    currency: str,
+    parity: str,
+    start=datetime(2000, 1, 1),
+    end=None,
 ) -> pd.DataFrame:
+    if end is None:
+        end = datetime.today()
     if currency == "USD":
         dd = ep.query().select(ep.dataHoraCotacao, ep.cotacaoVenda, ep.tipoBoletim)
         symbol = "BRLUSD"
@@ -158,19 +193,31 @@ def _get_currency_data(
         dd = ep.query().select(ep.dataHoraCotacao, ep.paridadeVenda, ep.tipoBoletim)
         symbol = f"{currency}USD"
     dd = dd.parameters(
-        moeda=currency, dataInicial=start.strftime("%m/%d/%Y"), dataFinalCotacao=end.strftime("%m/%d/%Y")
+        moeda=currency,
+        dataInicial=start.strftime("%m/%d/%Y"),
+        dataFinalCotacao=end.strftime("%m/%d/%Y"),
     ).collect()
 
     dd_cur = dd.copy()
-    dd_cur = dd_cur.rename(columns={"dataHoraCotacao": "refdate", "paridadeVenda": "value", "cotacaoVenda": "value"})
+    dd_cur = dd_cur.rename(
+        columns={
+            "dataHoraCotacao": "refdate",
+            "paridadeVenda": "value",
+            "cotacaoVenda": "value",
+        }
+    )
     dd_cur["symbol"] = symbol
     dd_cur["trade_date"] = dd_cur["refdate"]
     dd_cur["refdate"] = dd_cur["refdate"]
     dd_cur = dd_cur.sort_values("trade_date")
-    dd_cur = dd_cur.groupby("refdate").apply(_create_currency_candle).reset_index(drop=True)
+    dd_cur = (
+        dd_cur.groupby("refdate").apply(_create_currency_candle).reset_index(drop=True)
+    )
     dd_cur = dd_cur.loc[:, ["refdate", "symbol", "open", "high", "low", "close"]]
     if parity == "B" or currency == "USD":
-        dd_cur[["open", "high", "low", "close"]] = 1 / dd_cur[["open", "high", "low", "close"]]
+        dd_cur[["open", "high", "low", "close"]] = (
+            1 / dd_cur[["open", "high", "low", "close"]]
+        )
     return dd_cur
 
 
@@ -179,9 +226,15 @@ def create_bcb_currency_data(handler: MarketDataETL):
     moedas = ptax.get_endpoint("Moedas").query().collect()
     ep = ptax.get_endpoint("CotacaoMoedaPeriodo")
     # tipo A
-    dsa = [_get_currency_data(ep, moeda, "A") for moeda in moedas.query("tipoMoeda == 'A'")["simbolo"]]
+    dsa = [
+        _get_currency_data(ep, moeda, "A")
+        for moeda in moedas.query("tipoMoeda == 'A'")["simbolo"]
+    ]
     # tipo B
-    dsb = [_get_currency_data(ep, moeda, "B") for moeda in moedas.query("tipoMoeda == 'B'")["simbolo"]]
+    dsb = [
+        _get_currency_data(ep, moeda, "B")
+        for moeda in moedas.query("tipoMoeda == 'B'")["simbolo"]
+    ]
 
     dd_dol = pd.concat(dsa + dsb)
 
@@ -200,7 +253,11 @@ def create_bcb_currency_data(handler: MarketDataETL):
 
 
 def create_b3_curves_di1(handler: MarketDataETL):
-    tb_di1 = get_dataset(handler.futures_dataset).filter(pc.field("business_days") > 0).to_table()
+    tb_di1 = (
+        get_dataset(handler.futures_dataset)
+        .filter(pc.field("business_days") > 0)
+        .to_table()
+    )
     tb_cdi = (
         get_dataset(handler.bcb_dataset)
         .filter(pc.field("symbol") == "CDI")
@@ -212,13 +269,23 @@ def create_b3_curves_di1(handler: MarketDataETL):
         tb_cdi.set_column(1, "adjusted_tax", pc.divide(tb_cdi.column("value"), 100))
         .append_column(
             "maturity_date",
-            pyarrow.array(cal.offset(tb_cdi.column("refdate").to_pylist(), 1), type=pyarrow.timestamp("ns")),
+            pyarrow.array(
+                cal.offset(tb_cdi.column("refdate").to_pylist(), 1),
+                type=pyarrow.timestamp("ns"),
+            ),
         )
-        .append_column("business_days", pyarrow.array([1] * tb_cdi.shape[0], type=pyarrow.int64()))
+        .append_column(
+            "business_days", pyarrow.array([1] * tb_cdi.shape[0], type=pyarrow.int64())
+        )
         .select(["refdate", "symbol", "maturity_date", "business_days", "adjusted_tax"])
     )
     tb_di1_curve = pyarrow.concat_tables(
-        [tb_v1, tb_di1.select(["refdate", "symbol", "maturity_date", "business_days", "adjusted_tax"])]
+        [
+            tb_v1,
+            tb_di1.select(
+                ["refdate", "symbol", "maturity_date", "business_days", "adjusted_tax"]
+            ),
+        ]
     ).sort_by([("refdate", "ascending"), ("business_days", "ascending")])
 
     fields = [
@@ -235,10 +302,14 @@ def create_b3_curves_di1(handler: MarketDataETL):
 
 
 def create_b3_curves(handler: MarketDataETL):
-    tb = get_dataset(handler.futures_dataset).filter(pc.field("business_days") > 0).to_table()
-    tb_curve = tb.select(["refdate", "symbol", "maturity_date", "business_days", "adjusted_tax"]).sort_by(
-        [("refdate", "ascending"), ("business_days", "ascending")]
+    tb = (
+        get_dataset(handler.futures_dataset)
+        .filter(pc.field("business_days") > 0)
+        .to_table()
     )
+    tb_curve = tb.select(
+        ["refdate", "symbol", "maturity_date", "business_days", "adjusted_tax"]
+    ).sort_by([("refdate", "ascending"), ("business_days", "ascending")])
     write_dataset(tb_curve.to_pandas(), handler.template_id)
 
 
@@ -252,24 +323,46 @@ def create_b3_curves_standard_terms(handler: MarketDataETL):
     tb_curve = get_dataset(handler.curves_dataset).to_table()
     business_days_standard = np.array(handler.standard_terms)
     symbols_standard = pyarrow.array(
-        [f"{handler.symbol_prefix}{d}" for d in business_days_standard], type=pyarrow.string()
+        [f"{handler.symbol_prefix}{d}" for d in business_days_standard],
+        type=pyarrow.string(),
     )
     cal = Calendar.load(handler.calendar)
     tables = []
     for date in tb_curve.column("refdate").unique():
-        rates = tb_curve.filter(pc.field("refdate") == date).column("adjusted_tax").to_numpy()
-        terms = tb_curve.filter(pc.field("refdate") == date).column("business_days").to_numpy()
-        interp_rates = pyarrow.array(interp_ff(business_days_standard, rates, terms), type=pyarrow.float64())
-        mat_dates = pyarrow.array(cal.offset(date.as_py(), business_days_standard), type=pyarrow.timestamp("ns"))
+        rates = (
+            tb_curve.filter(pc.field("refdate") == date)
+            .column("adjusted_tax")
+            .to_numpy()
+        )
+        terms = (
+            tb_curve.filter(pc.field("refdate") == date)
+            .column("business_days")
+            .to_numpy()
+        )
+        interp_rates = pyarrow.array(
+            interp_ff(business_days_standard, rates, terms), type=pyarrow.float64()
+        )
+        mat_dates = pyarrow.array(
+            cal.offset(date.as_py(), business_days_standard),
+            type=pyarrow.timestamp("ns"),
+        )
         ta = pyarrow.table(
             [
-                pyarrow.array([date.as_py()] * len(interp_rates), type=pyarrow.timestamp("us")),
+                pyarrow.array(
+                    [date.as_py()] * len(interp_rates), type=pyarrow.timestamp("us")
+                ),
                 symbols_standard,
                 mat_dates,
                 pyarrow.array(business_days_standard, type=pyarrow.int64()),
                 interp_rates,
             ],
-            names=["refdate", "symbol", "maturity_date", "business_days", "adjusted_tax"],
+            names=[
+                "refdate",
+                "symbol",
+                "maturity_date",
+                "business_days",
+                "adjusted_tax",
+            ],
         )
         tables.append(ta)
     tb_curve_standard = pyarrow.concat_tables(tables).sort_by(
@@ -292,12 +385,19 @@ def create_rate_returns(handler: MarketDataETL):
     tb_curve_standard = get_dataset(handler.curves_dataset).to_table()
     tables = []
     for symbol in tb_curve_standard.column("symbol").unique():
-        rates = tb_curve_standard.filter(pc.field("symbol") == symbol).column("adjusted_tax").to_numpy()
+        rates = (
+            tb_curve_standard.filter(pc.field("symbol") == symbol)
+            .column("adjusted_tax")
+            .to_numpy()
+        )
         dates = tb_curve_standard.filter(pc.field("symbol") == symbol).column("refdate")
-        symbols = tb_curve_standard.filter(pc.field("symbol") == symbol).column("symbol")
+        symbols = tb_curve_standard.filter(pc.field("symbol") == symbol).column(
+            "symbol"
+        )
         returns = np.concatenate([np.array([np.nan]), np.diff(rates)])
         ta = pyarrow.table(
-            [dates, symbols, pyarrow.array(returns, type=pyarrow.float64())], names=["refdate", "symbol", "returns"]
+            [dates, symbols, pyarrow.array(returns, type=pyarrow.float64())],
+            names=["refdate", "symbol", "returns"],
         )
         tables.append(ta)
 
@@ -317,20 +417,30 @@ def create_cotahist_dataset(handler: MarketDataETL):
 
 def copy_dataset_and_drop_duplicates(handler: MarketDataETL):
     ds_register = get_dataset(handler.futures_dataset)
-    df_futures = ds_register.to_table(columns=handler.columns).to_pandas().drop_duplicates()
+    df_futures = (
+        ds_register.to_table(columns=handler.columns).to_pandas().drop_duplicates()
+    )
     write_dataset(df_futures, handler.template_id)
 
 
 def create_b3_price_futures_from_register(handler: MarketDataETL):
     tb = get_dataset(handler.futures_dataset).to_table()
-    symbols = tb.filter(pc.field("instrument_asset") == handler.commodity).column("symbol").unique()
+    symbols = (
+        tb.filter(pc.field("instrument_asset") == handler.commodity)
+        .column("symbol")
+        .unique()
+    )
     df_futures_settl = (
         tb.filter(pc.field("instrument_asset") == handler.commodity)
         .select(["symbol", "maturity_date"])
         .to_pandas()
         .drop_duplicates()
     )
-    tb_futures = get_dataset(handler.futures_settlement_dataset).filter(pc.field("symbol").isin(symbols)).to_table()
+    tb_futures = (
+        get_dataset(handler.futures_settlement_dataset)
+        .filter(pc.field("symbol").isin(symbols))
+        .to_table()
+    )
     df_futures = tb_futures.to_pandas()
     df_futures = df_futures.merge(df_futures_settl, on="symbol", how="left")
     cal = Calendar()
@@ -340,7 +450,14 @@ def create_b3_price_futures_from_register(handler: MarketDataETL):
     df_futures["calendar_days"] = cal.bizdays(df_futures["refdate"], adj_maturity)
     df_futures.sort_values(["refdate", "maturity_date"], inplace=True)
     df_futures = df_futures[
-        ["refdate", "symbol", "maturity_date", "settlement_price", "business_days", "calendar_days"]
+        [
+            "refdate",
+            "symbol",
+            "maturity_date",
+            "settlement_price",
+            "business_days",
+            "calendar_days",
+        ]
     ]
     write_dataset(df_futures, handler.template_id)
 
@@ -352,7 +469,9 @@ def create_equities_spot_market_dataset(handler: MarketDataETL):
         .filter(pc.field("instrument_segment") == 1)
         .filter(pc.field("instrument_asset") != "TAXA")
         .filter(pc.field("trading_start_date") != datetime(9999, 12, 31))
-        .filter(pc.field("security_category").isin(pyarrow.array([1, 11, 6, 21, 3, 13])))
+        .filter(
+            pc.field("security_category").isin(pyarrow.array([1, 11, 6, 21, 3, 13]))
+        )
         .to_table()
     )
     write_dataset(tb.to_pandas(), handler.template_id)
@@ -388,14 +507,17 @@ def create_equities_returns(handler: MarketDataETL):
     symbols = df.groupby(["symbol"]).apply(lambda x: x.shape[0])
     symbols_to_ignore = symbols[symbols == 1].index
     df_clean = df[~df["symbol"].isin(symbols_to_ignore)]
-    symbols = df_clean.groupby(["symbol"]).apply(lambda x: len(x["distribution_id"].unique()))
+    symbols = df_clean.groupby(["symbol"]).apply(
+        lambda x: len(x["distribution_id"].unique())
+    )
     symbols_to_use = symbols[symbols == 1].index
     df_final = df[df["symbol"].isin(symbols_to_use)]
     df_final = (
         df_final.groupby(["symbol"])
         .apply(
             lambda x: pd.DataFrame(
-                [(x.refdate.iloc[1], x.close.iloc[1] / x.close.iloc[0] - 1)], columns=["refdate", "pct_return"]
+                [(x.refdate.iloc[1], x.close.iloc[1] / x.close.iloc[0] - 1)],
+                columns=["refdate", "pct_return"],
             )
         )
         .reset_index()
@@ -415,7 +537,11 @@ def create_equities_returns(handler: MarketDataETL):
 
     my_schema = pyarrow.schema(fields)
 
-    write_dataset(df_returns[["refdate", "symbol", "pct_return", "log_return"]], handler.template_id, schema=my_schema)
+    write_dataset(
+        df_returns[["refdate", "symbol", "pct_return", "log_return"]],
+        handler.template_id,
+        schema=my_schema,
+    )
 
 
 def create_etf_returns_before_20180101(handler: MarketDataETL):
@@ -447,7 +573,9 @@ def create_etf_returns_before_20180101(handler: MarketDataETL):
         dfi["log_return"] = np.log(1 + dfi["pct_return"])
         return dfi
 
-    df_cotahist_etfs_returns = df_cotahist.groupby("symbol").apply(calc_pct_change).reset_index()
+    df_cotahist_etfs_returns = (
+        df_cotahist.groupby("symbol").apply(calc_pct_change).reset_index()
+    )
     ix = df_cotahist_etfs_returns["refdate"] < datetime(2018, 1, 1)
     write_dataset(df_cotahist_etfs_returns[ix], handler.template_id)
 
@@ -461,7 +589,9 @@ def create_indexes_returns(handler: MarketDataETL):
     df_index = get_dataset(handler.indexes_dataset).to_table(columns=cols).to_pandas()
     df_index["pct_return"] = df_index["oscillation_val"]
     df_index["log_return"] = np.log(1 + df_index["pct_return"])
-    write_dataset(df_index[["refdate", "symbol", "pct_return", "log_return"]], handler.template_id)
+    write_dataset(
+        df_index[["refdate", "symbol", "pct_return", "log_return"]], handler.template_id
+    )
 
 
 def _calc_returns(df: pd.DataFrame, value_column: str) -> pd.DataFrame:
@@ -472,8 +602,17 @@ def _calc_returns(df: pd.DataFrame, value_column: str) -> pd.DataFrame:
 
 
 def create_returns_for_long_datasets(handler: MarketDataETL):
-    df = get_dataset(handler.dataset_name).to_table(columns=handler.dataset_columns).to_pandas()
-    df = df.groupby("symbol").apply(_calc_returns, handler.dataset_columns[-1]).dropna(axis=0).reset_index(drop=True)
+    df = (
+        get_dataset(handler.dataset_name)
+        .to_table(columns=handler.dataset_columns)
+        .to_pandas()
+    )
+    df = (
+        df.groupby("symbol")
+        .apply(_calc_returns, handler.dataset_columns[-1])
+        .dropna(axis=0)
+        .reset_index(drop=True)
+    )
     fields = [
         pyarrow.field("symbol", pyarrow.string()),
         pyarrow.field("refdate", pyarrow.timestamp("us")),
@@ -483,21 +622,35 @@ def create_returns_for_long_datasets(handler: MarketDataETL):
 
     my_schema = pyarrow.schema(fields)
 
-    write_dataset(df[["refdate", "symbol", "pct_return", "log_return"]], handler.template_id, schema=my_schema)
+    write_dataset(
+        df[["refdate", "symbol", "pct_return", "log_return"]],
+        handler.template_id,
+        schema=my_schema,
+    )
 
 
 def concat_datasets(handler: MarketDataETL):
     names = handler.dataset_names
     tables = []
     for ds in handler.datasets:
-        tb = get_dataset(ds["name"]).scanner(columns=ds["columns"]).to_table().rename_columns(names)
+        tb = (
+            get_dataset(ds["name"])
+            .scanner(columns=ds["columns"])
+            .to_table()
+            .rename_columns(names)
+        )
         tables.append(tb)
     rets = pyarrow.concat_tables(tables)
     write_dataset(rets.to_pandas(), handler.template_id)
 
 
 def create_b3_companies_details(handler: MarketDataETL):
-    df = get_dataset(handler.companies_dataset).scanner(columns=["issuingCompany", "refdate"]).to_table().to_pandas()
+    df = (
+        get_dataset(handler.companies_dataset)
+        .scanner(columns=["issuingCompany", "refdate"])
+        .to_table()
+        .to_pandas()
+    )
     df = df.groupby(["issuingCompany"], sort=True).last().reset_index()
 
     sc = pyarrow.schema(
@@ -535,23 +688,33 @@ def create_b3_companies_details(handler: MarketDataETL):
     comp_det["companyName"] = comp_det["companyName"].astype(str).str.strip()
     comp_det["tradingName"] = comp_det["tradingName"].astype(str).str.strip()
     comp_det["cnpj"] = comp_det["cnpj"].astype(str).str.strip()
-    comp_det["industryClassification"] = comp_det["industryClassification"].astype(str).str.strip()
-    comp_det["industryClassificationEng"] = comp_det["industryClassificationEng"].astype(str).str.strip()
+    comp_det["industryClassification"] = (
+        comp_det["industryClassification"].astype(str).str.strip()
+    )
+    comp_det["industryClassificationEng"] = (
+        comp_det["industryClassificationEng"].astype(str).str.strip()
+    )
     comp_det["activity"] = comp_det["activity"].astype(str).str.strip()
     comp_det["website"] = comp_det["website"].astype(str).str.strip()
     comp_det["hasQuotation"] = comp_det["hasQuotation"].astype(bool)
     comp_det["status"] = comp_det["status"].astype(str).str.strip()
     comp_det["marketIndicator"] = comp_det["marketIndicator"].astype("int64")
     comp_det["market"] = comp_det["market"].astype(str).str.strip()
-    comp_det["institutionCommon"] = comp_det["institutionCommon"].astype(str).str.strip()
-    comp_det["institutionPreferred"] = comp_det["institutionPreferred"].astype(str).str.strip()
+    comp_det["institutionCommon"] = (
+        comp_det["institutionCommon"].astype(str).str.strip()
+    )
+    comp_det["institutionPreferred"] = (
+        comp_det["institutionPreferred"].astype(str).str.strip()
+    )
     comp_det["code"] = comp_det["code"].astype(str).str.strip()
     comp_det["codeCVM"] = comp_det["codeCVM"].astype("int64")
     comp_det["lastDate"] = pd.to_datetime(comp_det["lastDate"], dayfirst=True)
     comp_det["hasEmissions"] = comp_det["hasEmissions"].astype(bool)
     comp_det["hasBDR"] = comp_det["hasBDR"].astype(bool)
     comp_det["typeBDR"] = comp_det["typeBDR"].astype(str).str.strip()
-    comp_det["describleCategoryBVMF"] = comp_det["describleCategoryBVMF"].astype(str).str.strip()
+    comp_det["describleCategoryBVMF"] = (
+        comp_det["describleCategoryBVMF"].astype(str).str.strip()
+    )
     comp_det["isin"] = comp_det["isin"].astype(str).str.strip()
     comp_det["refdate"] = pd.to_datetime(comp_det["refdate"])
 
@@ -590,7 +753,12 @@ def create_b3_companies_details(handler: MarketDataETL):
 
 
 def create_b3_companies_info(handler: MarketDataETL):
-    df = get_dataset(handler.companies_dataset).scanner(columns=["code", "refdate"]).to_table().to_pandas()
+    df = (
+        get_dataset(handler.companies_dataset)
+        .scanner(columns=["code", "refdate"])
+        .to_table()
+        .to_pandas()
+    )
     df = df.groupby(["code"], sort=True).last().reset_index()
 
     comp_info = get_dataset(handler.companies_dataset).to_table().to_pandas()
@@ -598,14 +766,20 @@ def create_b3_companies_info(handler: MarketDataETL):
     comp_info = pd.merge(df, comp_info, on=["code", "refdate"], how="inner")
 
     comp_info["stockCapital"] = comp_info["stockCapital"].astype("float64")
-    comp_info["commonSharesForm"] = comp_info["commonSharesForm"].astype(str).str.strip()
-    comp_info["preferredSharesForm"] = comp_info["preferredSharesForm"].astype(str).str.strip()
+    comp_info["commonSharesForm"] = (
+        comp_info["commonSharesForm"].astype(str).str.strip()
+    )
+    comp_info["preferredSharesForm"] = (
+        comp_info["preferredSharesForm"].astype(str).str.strip()
+    )
     comp_info["hasCommom"] = comp_info["hasCommom"].astype(bool)
     comp_info["hasPreferred"] = comp_info["hasPreferred"].astype(bool)
     comp_info["roundLot"] = comp_info["roundLot"].astype("int64")
     comp_info["tradingName"] = comp_info["tradingName"].astype(str).str.strip()
     comp_info["numberCommonShares"] = comp_info["numberCommonShares"].astype("int64")
-    comp_info["numberPreferredShares"] = comp_info["numberPreferredShares"].astype("int64")
+    comp_info["numberPreferredShares"] = comp_info["numberPreferredShares"].astype(
+        "int64"
+    )
     comp_info["totalNumberShares"] = comp_info["totalNumberShares"].astype("int64")
     comp_info["code"] = comp_info["code"].astype(str).str.strip()
     comp_info["codeCVM"] = comp_info["codeCVM"].astype("int64")
@@ -684,7 +858,9 @@ def create_b3_companies_properties(handler: MarketDataETL):
         .rename(columns={"segment": "exchange_segment"})
     )
 
-    companies_properties = pd.merge(cd0, ci0, on=["asset_name", "code_cvm", "trading_name"], how="outer")
+    companies_properties = pd.merge(
+        cd0, ci0, on=["asset_name", "code_cvm", "trading_name"], how="outer"
+    )
     write_dataset(companies_properties, handler.template_id)
 
 
@@ -708,7 +884,9 @@ def create_b3_equity_symbols_properties(handler: MarketDataETL):
         .to_pandas()
     )
     companies_symbols["stock_type"] = (
-        companies_symbols["isin"].str[9:11].map({"PR": "PN", "OR": "ON", "PA": "PNA", "PB": "PNB", "M1": "UNT"})
+        companies_symbols["isin"]
+        .str[9:11]
+        .map({"PR": "PN", "OR": "ON", "PA": "PNA", "PB": "PNB", "M1": "UNT"})
     )
     companies_symbols = companies_symbols[~companies_symbols["symbol"].isna()]
 
@@ -724,7 +902,13 @@ def create_b3_listed_funds(handler: MarketDataETL):
     df = pyarrow.concat_tables(tables).to_pandas()
     df["symbol"] = df["acronym"] + "11"
     df["typeFund"] = df["typeFund"].map({7: "FII", 20: "ETF", 19: "Fixed Income ETF"})
-    df = df.rename(columns={"fundName": "fund_name", "acronym": "asset_name", "typeFund": "fund_type"})
+    df = df.rename(
+        columns={
+            "fundName": "fund_name",
+            "acronym": "asset_name",
+            "typeFund": "fund_type",
+        }
+    )
     write_dataset(df, handler.template_id)
 
 
@@ -738,7 +922,12 @@ def create_b3_companies_cash_dividends(handler: MarketDataETL):
     sp["trading_name"] = sp["trading_name"].apply(lambda x: re.sub("[^A-Z0-9]", "", x))
 
     # cash dividends ----
-    df = get_dataset(handler.cash_dividends_dataset).scanner(columns=["tradingName", "refdate"]).to_table().to_pandas()
+    df = (
+        get_dataset(handler.cash_dividends_dataset)
+        .scanner(columns=["tradingName", "refdate"])
+        .to_table()
+        .to_pandas()
+    )
     df["tradingName"] = df["tradingName"].apply(lambda x: re.sub("[^A-Z0-9]", "", x))
     df = df.groupby(["tradingName"], sort=True).last().reset_index()
 
@@ -767,9 +956,11 @@ def create_b3_companies_cash_dividends(handler: MarketDataETL):
         }
     )
     cd_["payment_date"] = pd.NaT
-    cd_ = pd.merge(cd_, sp[["stock_type", "trading_name", "symbol"]], on=["stock_type", "trading_name"]).drop(
-        columns=["stock_type", "trading_name"]
-    )
+    cd_ = pd.merge(
+        cd_,
+        sp[["stock_type", "trading_name", "symbol"]],
+        on=["stock_type", "trading_name"],
+    ).drop(columns=["stock_type", "trading_name"])
 
     # company info cash dividends ----
     df = (
@@ -780,10 +971,22 @@ def create_b3_companies_cash_dividends(handler: MarketDataETL):
     )
     df = df.groupby(["isinCode"], sort=True).last().reset_index()
 
-    cd1 = get_dataset(handler.company_info_cash_dividends_dataset).to_table().to_pandas()
+    cd1 = (
+        get_dataset(handler.company_info_cash_dividends_dataset).to_table().to_pandas()
+    )
     cd1 = pd.merge(df, cd1, on=["isinCode", "refdate"], how="inner")
 
-    cd1_ = cd1[["isinCode", "paymentDate", "approvedOn", "lastDatePrior", "rate", "label", "refdate"]].rename(
+    cd1_ = cd1[
+        [
+            "isinCode",
+            "paymentDate",
+            "approvedOn",
+            "lastDatePrior",
+            "rate",
+            "label",
+            "refdate",
+        ]
+    ].rename(
         columns={
             "approvedOn": "approved_on",
             "lastDatePrior": "last_date_prior_ex",
@@ -811,7 +1014,9 @@ def create_b3_companies_cash_dividends(handler: MarketDataETL):
         return df.iloc[[0], :]
 
     cash_dividends = (
-        cash_dividends.groupby(["symbol", "last_date_prior_ex", "value_cash", "corporate_action_label"])
+        cash_dividends.groupby(
+            ["symbol", "last_date_prior_ex", "value_cash", "corporate_action_label"]
+        )
         .apply(ffill_n_remove_duplicates)
         .reset_index(drop=True)
     )
@@ -820,7 +1025,12 @@ def create_b3_companies_cash_dividends(handler: MarketDataETL):
 
 
 def create_b3_companies_stock_dividends(handler: MarketDataETL):
-    sp = get_dataset(handler.symbols_properties_dataset).scanner(columns=["isin", "symbol"]).to_table().to_pandas()
+    sp = (
+        get_dataset(handler.symbols_properties_dataset)
+        .scanner(columns=["isin", "symbol"])
+        .to_table()
+        .to_pandas()
+    )
 
     # stock dividends ----
     df = (
@@ -831,10 +1041,14 @@ def create_b3_companies_stock_dividends(handler: MarketDataETL):
     )
     df = df.groupby(["isinCode"], sort=True).last().reset_index()
 
-    sd0 = get_dataset(handler.company_info_stock_dividends_dataset).to_table().to_pandas()
+    sd0 = (
+        get_dataset(handler.company_info_stock_dividends_dataset).to_table().to_pandas()
+    )
     sd0 = pd.merge(df, sd0, on=["isinCode", "refdate"], how="inner")
 
-    sd0_ = sd0[["isinCode", "label", "lastDatePrior", "approvedOn", "factor", "refdate"]].rename(
+    sd0_ = sd0[
+        ["isinCode", "label", "lastDatePrior", "approvedOn", "factor", "refdate"]
+    ].rename(
         columns={
             "isinCode": "isin",
             "label": "corporate_action_label",
@@ -843,12 +1057,19 @@ def create_b3_companies_stock_dividends(handler: MarketDataETL):
         }
     )
 
-    sd0_ = pd.merge(sd0_, sp[["isin", "symbol"]], on="isin", how="inner").drop(columns="isin")
+    sd0_ = pd.merge(sd0_, sp[["isin", "symbol"]], on="isin", how="inner").drop(
+        columns="isin"
+    )
     write_dataset(sd0_, handler.template_id)
 
 
 def create_b3_companies_subscriptions(handler: MarketDataETL):
-    sp = get_dataset(handler.symbols_properties_dataset).scanner(columns=["isin", "symbol"]).to_table().to_pandas()
+    sp = (
+        get_dataset(handler.symbols_properties_dataset)
+        .scanner(columns=["isin", "symbol"])
+        .to_table()
+        .to_pandas()
+    )
 
     # stock dividends ----
     df = (
@@ -886,8 +1107,12 @@ def create_b3_companies_subscriptions(handler: MarketDataETL):
         }
     )
 
-    su0_["trading_period_start"] = pd.to_datetime(su0_["trading_period"].str[:10], format="%d/%m/%Y", errors="coerce")
-    su0_["trading_period_end"] = pd.to_datetime(su0_["trading_period"].str[-10:], format="%d/%m/%Y", errors="coerce")
+    su0_["trading_period_start"] = pd.to_datetime(
+        su0_["trading_period"].str[:10], format="%d/%m/%Y", errors="coerce"
+    )
+    su0_["trading_period_end"] = pd.to_datetime(
+        su0_["trading_period"].str[-10:], format="%d/%m/%Y", errors="coerce"
+    )
     su0_ = pd.merge(su0_, sp[["isin", "symbol"]], on="isin").drop(columns="isin")
 
     write_dataset(su0_, handler.template_id)
@@ -898,13 +1123,22 @@ def create_adjusted_prices(handler: MarketDataETL):
     if handler.quotes_dataset == "b3-bvbg086":
         seq = [
             ac.Declaration("scan", ac.ScanNodeOptions(ds_md)),
-            ac.Declaration("filter", ac.FilterNodeOptions(pc.field("refdate") == pc.field("creation_date"))),
-            ac.Declaration("aggregate", ac.AggregateNodeOptions([("refdate", "max", None, "max_refdate")])),
+            ac.Declaration(
+                "filter",
+                ac.FilterNodeOptions(pc.field("refdate") == pc.field("creation_date")),
+            ),
+            ac.Declaration(
+                "aggregate",
+                ac.AggregateNodeOptions([("refdate", "max", None, "max_refdate")]),
+            ),
         ]
     else:
         seq = [
             ac.Declaration("scan", ac.ScanNodeOptions(ds_md)),
-            ac.Declaration("aggregate", ac.AggregateNodeOptions([("refdate", "max", None, "max_refdate")])),
+            ac.Declaration(
+                "aggregate",
+                ac.AggregateNodeOptions([("refdate", "max", None, "max_refdate")]),
+            ),
         ]
     t = ac.Declaration.from_sequence(seq).to_table()
     refdate = t.column("max_refdate")[0].as_py()
@@ -924,7 +1158,12 @@ def create_adjusted_prices(handler: MarketDataETL):
     ohlc = ohlc.set_index(["refdate", "symbol"])
     ohlc.columns = handler.candle_names
     symbols = ohlc.index.get_level_values("symbol").unique()
-    rets = get_dataset(handler.returns_dataset).filter(pc.field("symbol").isin(symbols)).to_table().to_pandas()
+    rets = (
+        get_dataset(handler.returns_dataset)
+        .filter(pc.field("symbol").isin(symbols))
+        .to_table()
+        .to_pandas()
+    )
     all_data = rets.set_index(["refdate", "symbol"]).join(ohlc).reset_index()
 
     bizdays_mode = get_option("mode")
@@ -974,7 +1213,11 @@ def rename_symbols_in_equities_returns(handler: MarketDataETL):
     tables = []
     for s in handler.symbols:
         tb: pyarrow.Table = _ds.filter(pc.field("symbol") == s["src"]).to_table()
-        tb = tb.set_column(tb.schema.get_field_index("symbol"), "symbol", pyarrow.array([s["dest"]] * tb.num_rows))
+        tb = tb.set_column(
+            tb.schema.get_field_index("symbol"),
+            "symbol",
+            pyarrow.array([s["dest"]] * tb.num_rows),
+        )
         tables.append(tb)
     rets = pyarrow.concat_tables(tables)
     write_dataset(rets.to_pandas(), handler.template_id)

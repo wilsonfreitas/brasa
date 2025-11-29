@@ -1,17 +1,20 @@
+from typing import ClassVar
+
 import pandas as pd
-from ..util import Parser
 from lxml import etree
+
+from ..util import Parser
 
 
 def smart_find(node, x, ns):
     try:
         return node.find(x, ns).text
-    except:
+    except Exception:
         return None
 
 
 class BVBG087Parser(Parser):
-    ATTRS = {
+    ATTRS: ClassVar[dict[str, dict[str, str]]] = {
         "IndxInf": {
             "ticker_symbol": "SctyInf/SctyId/TckrSymb",
             "security_id": "SctyInf/FinInstrmId/OthrId/Id",
@@ -76,7 +79,7 @@ class BVBG087Parser(Parser):
 
         for tag in self.ATTRS:
             fields = self.ATTRS[tag]
-            _xpath = etree.ETXPath("//{urn:bvmf.218.01.xsd}%s" % tag)
+            _xpath = etree.ETXPath(f"//{{urn:bvmf.218.01.xsd}}{tag}")
             for node in _xpath(exchange):
                 data = {"trade_date": trade_date, "index_type": tag}
                 for k in fields:
@@ -86,9 +89,9 @@ class BVBG087Parser(Parser):
             typo = instr["index_type"]
             try:
                 self.instrs[typo].append(instr)
-            except:
+            except KeyError:
                 self.instrs[typo] = [instr]
-        self.__data = {k: pd.DataFrame(self.instrs[k]) for k in self.instrs.keys()}
+        self.__data = {k: pd.DataFrame(self.instrs[k]) for k in self.instrs}
 
     @property
     def data(self):

@@ -100,7 +100,7 @@ from datetime import datetime
 
 # Get equity returns
 returns = get_returns(
-    ["PETR4", "VALE3", "ITUB4"], 
+    ["PETR4", "VALE3", "ITUB4"],
     start=datetime(2023, 1, 1),
     end=datetime(2024, 12, 31)
 )
@@ -348,7 +348,7 @@ from mpl_toolkits.mplot3d import Axes3D
 fig = plt.figure(figsize=(12, 8))
 ax = fig.add_subplot(111, projection='3d')
 ax.scatter(
-    vol_surface["days_to_maturity"], 
+    vol_surface["days_to_maturity"],
     vol_surface["moneyness"],
     vol_surface["implied_volatility"]
 )
@@ -520,7 +520,7 @@ con = BrasaDB.get_connection()
 
 # Complex aggregation query
 result = con.execute("""
-    SELECT 
+    SELECT
         symbol,
         AVG(close) as avg_price,
         STDDEV(close) as std_price,
@@ -686,7 +686,7 @@ con = BrasaDB.get_connection()
 # Create temporary table
 con.execute("""
     CREATE TEMP TABLE daily_stats AS
-    SELECT 
+    SELECT
         refdate,
         symbol,
         close,
@@ -698,7 +698,7 @@ con.execute("""
 
 # Query temporary table
 result = con.execute("""
-    SELECT 
+    SELECT
         symbol,
         AVG(daily_return) as mean_return,
         STDDEV(daily_return) as volatility,

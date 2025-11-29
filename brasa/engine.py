@@ -6,9 +6,10 @@ import os
 import re
 import shutil
 import sqlite3
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import IO, Any, Callable
+from typing import IO, Any
 from warnings import warn
 
 import pandas as pd
@@ -21,6 +22,7 @@ import yaml
 from brasa.fieldset_schema.field import Field
 
 from .fieldset_schema import Fieldset
+from .fieldset_schema.adapters import PyArrowAdapter
 from .util import (
     KwargsIterator,
     generate_checksum_for_template,
@@ -69,27 +71,27 @@ class TemplatePart:
 
 
 class NumericParser(regexparser.NumberParser):
-    def parseText(self, text: str) -> str | None:
+    def parseText(self, _text: str) -> str | None:
         return None
 
 
 class PtBRNumericParser(regexparser.TextParser):
-    def parseInteger(self, text: str, match: re.Match) -> int:
+    def parseInteger(self, text: str, _match: re.Match) -> int:
         r"^-?\s*\d+$"
         return eval(text)
 
-    def parse_number_with_thousands_ptBR(self, text: str, match: re.Match) -> float:
+    def parse_number_with_thousands_ptBR(self, text: str, _match: re.Match) -> float:
         r"^-?\s*(\d+\.)+\d+,\d+?$"
         text = text.replace(".", "")
         text = text.replace(",", ".")
         return eval(text)
 
-    def parse_number_decimal_ptBR(self, text: str, match: re.Match) -> float:
+    def parse_number_decimal_ptBR(self, text: str, _match: re.Match) -> float:
         r"^-?\s*\d+,\d+?$"
         text = text.replace(",", ".")
         return eval(text)
 
-    def parseText(self, text: str) -> str | None:
+    def parseText(self, _text: str) -> str | None:
         return None
 
 
@@ -212,7 +214,7 @@ class CacheMetadata:
         }
 
     def from_dict(self, kwargs) -> None:
-        for k,v in kwargs.items():
+        for k, v in kwargs.items():
             setattr(self, k, v)
 
     def normalize_path(self, path: str) -> str:
@@ -239,45 +241,54 @@ class CacheMetadata:
     def add_processed_file(self, key: str, path: str) -> None:
         """Add a processed file."""
         self._processed_files[key] = path
-    
+
     def add_downloaded_file(self, path: str) -> None:
         """Add a downloaded file."""
         self._downloaded_files.append(path)
-    
+
     def remove_downloaded_file(self, path: str) -> None:
         """Remove a downloaded file."""
         if path in self._downloaded_files:
             self._downloaded_files.remove(path)
-    
+
     def remove_processed_file(self, key: str) -> None:
         """Remove a processed file."""
         self._processed_files.pop(key, None)
 
     @property
     def id(self) -> str:
-        return generate_checksum_for_template(self.template, self.download_args, self.extra_key)
+        return generate_checksum_for_template(
+            self.template, self.download_args, self.extra_key
+        )
 
     @property
     def download_folder(self) -> str:
         if self.download_checksum == "":
             return ""
         else:
-            return os.path.join(CacheManager._raw_folder, self.template, self.download_checksum)
+            return str(
+                Path(CacheManager._raw_folder) / self.template / self.download_checksum
+            )
 
 
 class MarketDataETL:
     def __init__(self, etl: dict, template_id: str) -> None:
-        for n in etl.keys():
-            self.__dict__[n] = etl[n]
+        for n, v in etl.items():
+            self.__dict__[n] = v
         self.template_id = template_id
         self.process_function = load_function_by_name(etl["function"])
 
 
 class MarketDataReader:
     def __init__(self, reader: dict):
-        for n in reader.keys():
-            self.__dict__[n] = reader[n]
+        self.attributes = {}
+        for n, v in reader.items():
+            self.attributes[n] = v
+        self.locale = reader.get("locale", "en_US")
         self.encoding = reader.get("encoding", "utf-8")
+        self.decimal = reader.get("decimal", ".")
+        self.thousands = reader.get("thousands", ",")
+        self.separator = reader.get("separator", ",")
         self.read_function = load_function_by_name(reader["function"])
         self.multi = reader.get("multi", {})
         self.parts: list | None = None
@@ -290,6 +301,9 @@ class MarketDataReader:
     def set_fields(self, fields: Fieldset) -> None:
         self.fields = fields
 
+    def get_attribute(self, key: str, default: Any = None) -> Any:
+        return self.attributes.get(key, default)
+
     def read(self, meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFrame]:
         df = self.read_function(meta)
         return df
@@ -297,8 +311,8 @@ class MarketDataReader:
 
 class MarketDataWriter:
     def __init__(self, writer: dict):
-        for n in writer.keys():
-            self.__dict__[n] = writer[n]
+        for n, v in writer.items():
+            self.__dict__[n] = v
         self.partitioning = writer.get("partitioning", [])
 
 
@@ -315,15 +329,17 @@ class MarketDataDownloader:
         self.url = None
         self.format = ""
         self.decoded_format = ""
-        for n in downloader.keys():
-            self.__dict__[n] = downloader[n]
+        for n, v in downloader.items():
+            self.__dict__[n] = v
         self.args = downloader.get("args", {})
         self.encoding = downloader.get("encoding", "utf-8")
         self.verify_ssl = downloader.get("verify_ssl", True)
         self.download_function = load_function_by_name(downloader["function"])
-        validator: str = downloader.get("validator", "brasa.downloaders.validate_empty_file")
+        validator: str = downloader.get(
+            "validator", "brasa.downloaders.validate_empty_file"
+        )
         self.validate_function = load_function_by_name(validator)
-        self._extra_key = downloader.get("extra-key", None)
+        self._extra_key = downloader.get("extra-key")
         if self._extra_key == "date":
             self.extra_key = datetime.now().isoformat()[:10]
         elif self._extra_key == "datetime":
@@ -334,7 +350,7 @@ class MarketDataDownloader:
     def download_args(self, **kwargs) -> dict:
         args = {}
         for key, val in self.args.items():
-            if key in kwargs.keys():
+            if key in kwargs:
                 args[key] = kwargs[key]
             elif val is not None:
                 args[key] = val
@@ -346,8 +362,8 @@ class MarketDataDownloader:
         args = self.download_args(**kwargs)
         try:
             fp, response = self.download_function(self, **args)
-        except Exception as ex:
-            raise DownloadException("Problem downloading data.")
+        except Exception as err:
+            raise DownloadException("Problem downloading data.") from err
         return fp, response
 
     def validate(self, fname: str) -> None:
@@ -365,9 +381,9 @@ class MarketDataTemplate:
         self.template = self.load_template()
 
     def load_template(self) -> dict:
-        with open(self.template_path, "r", encoding="utf-8") as f:
+        with Path(self.template_path).open(encoding="utf-8") as f:
             template = yaml.safe_load(f)
-        for n in template.keys():
+        for n in template:
             self.__dict__[n] = template[n]
             if n == "downloader":
                 self.has_downloader = True
@@ -404,11 +420,13 @@ class CacheManager(Singleton):
     _raw_folder = "raw"
 
     def init(self) -> None:
-        self._cache_folder = os.environ.get("BRASA_DATA_PATH", os.path.join(os.getcwd(), ".brasa-cache"))
-        os.makedirs(self._cache_folder, exist_ok=True)
-        os.makedirs(self.cache_path(self._meta_folder), exist_ok=True)
-        os.makedirs(self.cache_path(self._db_folder), exist_ok=True)
-        if not os.path.exists(self.cache_path(self.meta_db_filename)):
+        self._cache_folder = os.environ.get(
+            "BRASA_DATA_PATH", str(Path.cwd() / ".brasa-cache")
+        )
+        Path(self._cache_folder).mkdir(parents=True, exist_ok=True)
+        Path(self.cache_path(self._meta_folder)).mkdir(parents=True, exist_ok=True)
+        Path(self.cache_path(self._db_folder)).mkdir(parents=True, exist_ok=True)
+        if not Path(self.cache_path(self.meta_db_filename)).exists():
             self.create_meta_db()
 
     @property
@@ -424,16 +442,16 @@ class CacheManager(Singleton):
         return str(path)
 
     def db_path(self, name: str) -> str:
-        return os.path.join(self.cache_path(self._db_folder), name)
+        return str(Path(self.cache_path(self._db_folder)) / name)
 
     @property
     def duckdb_filename(self) -> str:
-        return os.path.join(self._db_folder, self._duckdb_filename)
+        return str(Path(self._db_folder) / self._duckdb_filename)
 
     def create_meta_db(self) -> None:
         db_conn = sqlite3.connect(database=self.cache_path(self.meta_db_filename))
         c = db_conn.cursor()
-        with open(os.path.join(os.path.dirname(__file__), "..", "sql", "create-meta-db.sql")) as f:
+        with (Path(__file__).parent / ".." / "sql" / "create-meta-db.sql").open() as f:
             c.executescript(f.read())
         db_conn.commit()
         db_conn.close()
@@ -443,32 +461,32 @@ class CacheManager(Singleton):
         return sqlite3.connect(database=self.cache_path(self.meta_db_filename))
 
     def db_folder(self, template: MarketDataTemplate) -> str:
-        folder = os.path.join(self._db_folder, template.id)
-        os.makedirs(self.cache_path(folder), exist_ok=True)
+        folder = str(Path(self._db_folder) / template.id)
+        Path(self.cache_path(folder)).mkdir(parents=True, exist_ok=True)
         return folder
 
     def db_folders(self, template: MarketDataTemplate) -> dict:
         db_folders = {}
         for name, val in template.reader.multi.items():
-            folder = os.path.join(self._db_folder, f"{template.id}-{val}")
-            os.makedirs(self.cache_path(folder), exist_ok=True)
+            folder = str(Path(self._db_folder) / f"{template.id}-{val}")
+            Path(self.cache_path(folder)).mkdir(parents=True, exist_ok=True)
             db_folders[name] = folder
         return db_folders
 
     def create_download_folder(self, meta: CacheMetadata):
-        os.makedirs(self.cache_path(meta.download_folder), exist_ok=True)
+        Path(self.cache_path(meta.download_folder)).mkdir(parents=True, exist_ok=True)
 
     @property
     def meta_db_filename(self) -> str:
-        return os.path.join(self._meta_folder, self._meta_db_filename)
+        return str(Path(self._meta_folder) / self._meta_db_filename)
 
     @property
     def meta_folder(self) -> str:
-        os.makedirs(self.cache_path(self._meta_folder), exist_ok=True)
+        Path(self.cache_path(self._meta_folder)).mkdir(parents=True, exist_ok=True)
         return self._meta_folder
 
     def meta_file_path(self, meta: CacheMetadata) -> str:
-        return os.path.join(self.cache_folder, self.meta_folder, f"{meta.id}.yaml")
+        return str(Path(self.cache_folder) / self.meta_folder / f"{meta.id}.yaml")
 
     def has_meta(self, meta: CacheMetadata) -> bool:
         with self.meta_db_connection as conn:
@@ -489,11 +507,19 @@ class CacheManager(Singleton):
                 _meta = {
                     "download_checksum": meta_row[1],
                     "timestamp": datetime.fromisoformat(meta_row[2]),
-                    "response": json.loads(meta_row[3], object_hook=json_convert_to_object),
-                    "download_args": json.loads(meta_row[4], object_hook=json_convert_to_object),
+                    "response": json.loads(
+                        meta_row[3], object_hook=json_convert_to_object
+                    ),
+                    "download_args": json.loads(
+                        meta_row[4], object_hook=json_convert_to_object
+                    ),
                     "template": meta_row[5],
-                    "downloaded_files": json.loads(meta_row[6], object_hook=json_convert_to_object),
-                    "processed_files": json.loads(meta_row[7], object_hook=json_convert_to_object),
+                    "downloaded_files": json.loads(
+                        meta_row[6], object_hook=json_convert_to_object
+                    ),
+                    "processed_files": json.loads(
+                        meta_row[7], object_hook=json_convert_to_object
+                    ),
                     "extra_key": meta_row[8],
                     "processing_errors": meta_row[9],
                 }
@@ -534,23 +560,26 @@ class CacheManager(Singleton):
                     meta.extra_key,
                     meta.processing_errors,
                 )
-                c.execute("insert into cache_metadata values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", params)
+                c.execute(
+                    "insert into cache_metadata values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    params,
+                )
             conn.commit()
 
     def clean_meta_raw_folder(self, meta: CacheMetadata) -> None:
-        warn(f"Cleaning meta download {meta.download_args}")
+        warn(f"Cleaning meta download {meta.download_args}", stacklevel=2)
         if meta.download_folder == "":
             return
         folder = self.cache_path(meta.download_folder)
-        if os.path.exists(folder):
+        if Path(folder).exists():
             shutil.rmtree(folder, ignore_errors=False)
 
     def clean_meta_db_folder(self, meta: CacheMetadata) -> None:
-        warn(f"Cleaning meta db {meta.download_args}")
-        for fname in meta.processed_files.values():
-            fname = self.cache_path(fname)
-            if os.path.isfile(fname):
-                os.remove(fname)
+        warn(f"Cleaning meta db {meta.download_args}", stacklevel=2)
+        for processed_fname in meta.processed_files.values():
+            full_path = Path(self.cache_path(processed_fname))
+            if full_path.is_file():
+                full_path.unlink()
 
     def clean_meta_db(self, meta: CacheMetadata) -> None:
         with self.meta_db_connection as conn:
@@ -577,7 +606,10 @@ class CacheManager(Singleton):
     def has_successful_trial(self, meta: CacheMetadata) -> bool:
         with self.meta_db_connection as conn:
             c = conn.cursor()
-            c.execute("select * from download_trials where cache_id = ? and downloaded == 1", (meta.id,))
+            c.execute(
+                "select * from download_trials where cache_id = ? and downloaded == 1",
+                (meta.id,),
+            )
             return len(c.fetchall()) > 0
 
     def parquet_file_name(self, fname_part: str) -> str:
@@ -597,52 +629,57 @@ class CacheManager(Singleton):
         if reprocess:
             self.read_marketdata(meta)
         if len(meta.processed_files) > 0:
-            dfs = {key: pd.read_parquet(self.cache_path(fname)) for key, fname in meta.processed_files.items()}
+            dfs = {
+                key: pd.read_parquet(self.cache_path(fname))
+                for key, fname in meta.processed_files.items()
+            }
             if len(dfs) == 1:
                 return dfs["data"]
             else:
                 return dfs
         else:
-            warn("No processed files")
+            warn("No processed files", stacklevel=2)
             return None
 
     def download_marketdata(self, meta: CacheMetadata) -> None:
         try:
             _download_marketdata(meta, **meta.download_args)
             self.save_trial(meta, True)
-        except DuplicatedFolderException as ex:
+        except DuplicatedFolderException:
             self.save_trial(meta, True)
             return
-        except DownloadException as ex:
+        except DownloadException:
             self.save_trial(meta, False)
             return
-        except Exception as ex:
+        except Exception:
             self.save_trial(meta, False)
             self.clean_meta_raw_folder(meta)
             return
         try:
             self.save_meta(meta)
-        except Exception as ex:
+        except Exception:
             self.clean_meta_db(meta)
             return
 
-    def process_without_checks(self, meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
+    def process_without_checks(
+        self, meta: CacheMetadata
+    ) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
         _download_marketdata(meta, **meta.download_args)
         self.save_meta(meta)
         if len(meta.downloaded_files) > 0:
             return self.load_marketdata(meta, reprocess=True)
         else:
-            warn("No downloaded files")
+            warn("No downloaded files", stacklevel=2)
             return None
 
 
 def retrieve_template(template_name) -> MarketDataTemplate:
-    dir = os.path.join(os.path.dirname(__file__), "../templates")
-    sel = [f for f in os.listdir(dir) if f"{template_name}.yaml" == f]
+    templates_dir = Path(__file__).parent / ".." / "templates"
+    sel = [f for f in templates_dir.iterdir() if f.name == f"{template_name}.yaml"]
     if len(sel) == 0:
         raise ValueError(f"Invalid template {template_name}")
     else:
-        template_path = os.path.join(dir, sel[0])
+        template_path = sel[0]
         return MarketDataTemplate(template_path)
 
 
@@ -658,7 +695,7 @@ def _download_marketdata(meta: CacheMetadata, **kwargs):
     checksum = generate_checksum_from_file(fp)
     meta.download_checksum = checksum
     man = CacheManager()
-    if os.path.exists(man.cache_path(meta.download_folder)):
+    if Path(man.cache_path(meta.download_folder)).exists():
         raise DuplicatedFolderException(
             f"Market data download failed: download folder {meta.download_folder} already exists"
         )
@@ -667,11 +704,10 @@ def _download_marketdata(meta: CacheMetadata, **kwargs):
     man.create_download_folder(meta)
 
     fname = f"downloaded.{template.downloader.format}"
-    file_rel_path = os.path.join(meta.download_folder, fname)
-    fp_dest = open(man.cache_path(file_rel_path), "wb")
-    shutil.copyfileobj(fp, fp_dest)
+    file_rel_path = str(Path(meta.download_folder) / fname)
+    with Path(man.cache_path(file_rel_path)).open("wb") as fp_dest:
+        shutil.copyfileobj(fp, fp_dest)
     fp.close()
-    fp_dest.close()
 
     downloaded_files = []
     if template.downloader.format == "zip":
@@ -679,19 +715,19 @@ def _download_marketdata(meta: CacheMetadata, **kwargs):
         if len(filenames) == 0:
             raise Exception("Market data download failed: empty zip file")
         for filename in filenames:
-            fname = os.path.basename(filename)
-            _file_rel_path = os.path.join(meta.download_folder, fname)
+            fname = Path(filename).name
+            _file_rel_path = str(Path(meta.download_folder) / fname)
             shutil.move(filename, man.cache_path(_file_rel_path))
             downloaded_files.append(_file_rel_path)
-        os.remove(man.cache_path(file_rel_path))
+        Path(man.cache_path(file_rel_path)).unlink()
     elif template.downloader.format == "base64":
-        with open(man.cache_path(file_rel_path), "rb") as fp:
+        with Path(man.cache_path(file_rel_path)).open("rb") as fp:
             fname = f"decoded.{template.downloader.decoded_format}"
-            _file_rel_path = os.path.join(meta.download_folder, fname)
-            with open(man.cache_path(_file_rel_path), "wb") as fp_dest:
+            _file_rel_path = str(Path(meta.download_folder) / fname)
+            with Path(man.cache_path(_file_rel_path)).open("wb") as fp_dest:
                 base64.decode(fp, fp_dest)
             downloaded_files.append(_file_rel_path)
-        os.remove(man.cache_path(file_rel_path))
+        Path(man.cache_path(file_rel_path)).unlink()
     else:
         downloaded_files.append(file_rel_path)
 
@@ -704,13 +740,12 @@ def _download_marketdata(meta: CacheMetadata, **kwargs):
     files_to_gzip = list(meta._downloaded_files)  # Work with a copy of the actual list
     for fname in files_to_gzip:
         _fname = man.cache_path(fname)
-        with open(_fname, "rb") as f_in:
-            with gzip.open(_fname + ".gz", "wb") as f_out:
-                shutil.copyfileobj(f_in, f_out)
+        with Path(_fname).open("rb") as f_in, gzip.open(_fname + ".gz", "wb") as f_out:
+            shutil.copyfileobj(f_in, f_out)
         # Add gzipped version and remove original using helper methods
         meta.add_downloaded_file(fname + ".gz")
         meta.remove_downloaded_file(fname)
-        os.remove(_fname)
+        Path(_fname).unlink()
 
 
 def get_fname_part(meta: CacheMetadata, df: pd.DataFrame) -> str:
@@ -719,13 +754,19 @@ def get_fname_part(meta: CacheMetadata, df: pd.DataFrame) -> str:
     if "refdate" in meta.download_args:
         fname_part = meta.download_args["refdate"].strftime(fmt)
     elif template.id == "b3-company-info":
-        fname_part = f'{df["refdate"].iloc[0].strftime(fmt)}-{meta.download_args["issuingCompany"]}'
+        fname_part = f"{df['refdate'].iloc[0].strftime(fmt)}-{meta.download_args['issuingCompany']}"
     elif template.id == "b3-company-details":
-        fname_part = f'{df["refdate"].iloc[0].strftime(fmt)}-{meta.download_args["codeCVM"]}'
+        fname_part = (
+            f"{df['refdate'].iloc[0].strftime(fmt)}-{meta.download_args['codeCVM']}"
+        )
     elif template.id == "b3-cash-dividends":
-        fname_part = f'{df["refdate"].iloc[0].strftime(fmt)}-{meta.download_args["tradingName"]}'
+        fname_part = (
+            f"{df['refdate'].iloc[0].strftime(fmt)}-{meta.download_args['tradingName']}"
+        )
     elif template.id == "b3-indexes-theoretical-portfolio":
-        fname_part = f'{df["refdate"].iloc[0].strftime(fmt)}-{meta.download_args["index"]}'
+        fname_part = (
+            f"{df['refdate'].iloc[0].strftime(fmt)}-{meta.download_args['index']}"
+        )
     elif "refdate" in df:
         fname_part = df["refdate"].iloc[0].strftime(fmt)
     else:
@@ -733,24 +774,26 @@ def get_fname_part(meta: CacheMetadata, df: pd.DataFrame) -> str:
     return fname_part
 
 
-def save_parquet_file(meta: CacheMetadata, folder: str, processed_files_name: str, df: pd.DataFrame) -> None:
+def save_parquet_file(
+    meta: CacheMetadata, folder: str, processed_files_name: str, df: pd.DataFrame
+) -> None:
     man = CacheManager()
     fname_part = get_fname_part(meta, df)
-    fname = os.path.join(folder, man.parquet_file_name(fname_part))
+    fname = str(Path(folder) / man.parquet_file_name(fname_part))
     meta.add_processed_file(processed_files_name, fname)
     df.to_parquet(man.cache_path(fname))
 
 
 def save_partitioned_parquet_file(
-    meta: CacheMetadata, 
-    folder: str, 
-    processed_files_name: str, 
-    df: pd.DataFrame, 
+    meta: CacheMetadata,
+    folder: str,
+    processed_files_name: str,
+    df: pd.DataFrame,
     partition_cols: list[str],
-    schema: pa.Schema = None
+    schema: pa.Schema = None,
 ) -> None:
     """Save DataFrame as partitioned parquet dataset with optional schema.
-    
+
     Args:
         meta: Cache metadata
         folder: Target folder for parquet files
@@ -761,28 +804,30 @@ def save_partitioned_parquet_file(
     """
     if schema:
         tb = pa.Table.from_pandas(df, schema=schema)
-        pq.write_to_dataset(tb, root_path=folder, partition_cols=partition_cols, schema=schema)
+        pq.write_to_dataset(
+            tb, root_path=folder, partition_cols=partition_cols, schema=schema
+        )
     else:
         tb = pa.Table.from_pandas(df)
         pq.write_to_dataset(tb, root_path=folder, partition_cols=partition_cols)
     meta.add_processed_file(processed_files_name, folder)
 
+
 def _read_marketdata(meta: CacheMetadata) -> None:
     template = retrieve_template(meta.template)
     df = template.reader.read(meta)
     man = CacheManager()
-    
     # Generate schema from template fields if available
     schema = None
-    if hasattr(template, 'fields') and template.fields:
+    if hasattr(template, "fields") and template.fields:
         try:
-            from .fieldset_schema.adapters import PyArrowAdapter
             adapter = PyArrowAdapter(template.fields, verbose_warnings=False)
             schema = adapter.get_target_schema()
         except Exception:
             # Fall back to inferred schema if conversion fails
             schema = None
-    
+            schema = None
+
     if isinstance(df, dict) and bool(template.reader.multi):
         db_folder: dict = man.db_folders(template)
         for name, dx in df.items():
@@ -790,17 +835,18 @@ def _read_marketdata(meta: CacheMetadata) -> None:
                 # save_parquet_file(meta, db_folder[name], template.reader.multi[name], dx)
                 pfn = template.reader.multi[name]
                 save_partitioned_parquet_file(
-                    meta, db_folder[name], pfn, dx, 
+                    meta,
+                    db_folder[name],
+                    pfn,
+                    dx,
                     template.writer.partitioning,
-                    schema=schema
+                    schema=schema,
                 )
     elif isinstance(df, pd.DataFrame) and not template.reader.multi:
         # save_parquet_file(meta, man.db_folder(template), "data", df)
         folder = man.cache_path(man.db_folder(template))
         save_partitioned_parquet_file(
-            meta, folder, "data", df, 
-            template.writer.partitioning,
-            schema=schema
+            meta, folder, "data", df, template.writer.partitioning, schema=schema
         )
 
 
@@ -823,14 +869,13 @@ def get_marketdata(
             return cache.process_without_checks(meta)
         except DownloadException:
             return None
-        except:
+        except Exception:
             cache.remove_meta(meta)
             return None
+    elif cache.has_meta(meta):
+        return cache.load_marketdata(meta, reprocess)
     else:
-        if cache.has_meta(meta):
-            return cache.load_marketdata(meta, reprocess)
-        else:
-            return get_marketdata(template_name, reprocess=True, **kwargs)
+        return get_marketdata(template_name, reprocess=True, **kwargs)
 
 
 def download_marketdata(template_name: str, reprocess: bool = False, **kwargs) -> None:
@@ -844,7 +889,9 @@ def download_marketdata(template_name: str, reprocess: bool = False, **kwargs) -
         " ",
         progressbar.Timer(),
     ]
-    for args in progressbar.progressbar(kwargs_iter, max_value=len(kwargs_iter), widgets=widgets):
+    for args in progressbar.progressbar(
+        kwargs_iter, max_value=len(kwargs_iter), widgets=widgets
+    ):
         meta = CacheMetadata(template.id)
         meta.extra_key = template.downloader.extra_key
         meta.download_args = args
@@ -855,15 +902,16 @@ def download_marketdata(template_name: str, reprocess: bool = False, **kwargs) -
                 cache.load_meta(meta)
                 cache.remove_meta(meta)
             cache.download_marketdata(meta)
-        else:
-            if not cache.has_successful_trial(meta):
-                if cache.has_meta(meta):
-                    cache.load_meta(meta)
-                    check = all([os.path.exists(cache.cache_path(f)) for f in meta.downloaded_files])
-                    if not check:
-                        cache.download_marketdata(meta)
-                else:
+        elif not cache.has_successful_trial(meta):
+            if cache.has_meta(meta):
+                cache.load_meta(meta)
+                check = all(
+                    Path(cache.cache_path(f)).exists() for f in meta.downloaded_files
+                )
+                if not check:
                     cache.download_marketdata(meta)
+            else:
+                cache.download_marketdata(meta)
 
 
 def process_marketdata(template_name: str, reprocess: bool = False) -> None:
@@ -888,10 +936,7 @@ def process_marketdata(template_name: str, reprocess: bool = False) -> None:
                 meta = CacheMetadata(template.id)
                 meta.from_dict(_meta)
                 try:
-                    if reprocess:
-                        meta.processing_errors = ""
-                        cache.read_marketdata(meta)
-                    elif len(meta.processed_files) == 0:
+                    if reprocess or len(meta.processed_files) == 0:
                         meta.processing_errors = ""
                         cache.read_marketdata(meta)
                 except Exception as ex:

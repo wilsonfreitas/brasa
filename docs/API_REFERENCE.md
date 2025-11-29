@@ -194,7 +194,7 @@ returns = get_returns("PETR4", start=datetime(2024, 1, 1))
 
 # Multiple symbols
 returns = get_returns(
-    ["PETR4", "VALE3", "ITUB4"], 
+    ["PETR4", "VALE3", "ITUB4"],
     start=datetime(2023, 1, 1),
     end=datetime(2024, 12, 31)
 )
@@ -410,7 +410,7 @@ from datetime import datetime
 
 # Date range
 period = DateRange(
-    start=datetime(2024, 1, 1), 
+    start=datetime(2024, 1, 1),
     end=datetime(2024, 12, 31),
     calendar="B3"
 )

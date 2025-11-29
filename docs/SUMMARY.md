@@ -235,15 +235,15 @@ python -m brasa.cli query "SELECT * FROM 'b3-cotahist-daily'"
 
 ### What's Covered
 
-✅ Complete system architecture  
-✅ All public APIs documented  
-✅ 6+ real-world use cases with code  
-✅ Template configuration guide  
-✅ Performance optimization tips  
-✅ Troubleshooting guide  
-✅ Configuration reference  
-✅ Best practices  
-✅ Extension points  
+✅ Complete system architecture
+✅ All public APIs documented
+✅ 6+ real-world use cases with code
+✅ Template configuration guide
+✅ Performance optimization tips
+✅ Troubleshooting guide
+✅ Configuration reference
+✅ Best practices
+✅ Extension points
 
 ### Examples Included
 

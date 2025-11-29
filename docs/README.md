@@ -263,7 +263,7 @@ from brasa.queries import get_returns
 from datetime import datetime
 
 returns = get_returns(
-    ["PETR4", "VALE3"], 
+    ["PETR4", "VALE3"],
     start=datetime(2024, 1, 1)
 )
 ```

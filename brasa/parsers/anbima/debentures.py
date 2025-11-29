@@ -1,7 +1,8 @@
-import io
 from itertools import dropwhile
+
 import pandas as pd
-from ..util import PortugueseRulesParser2, Parser
+
+from ..util import Parser, PortugueseRulesParser2
 
 
 class DebenturesParser(Parser):
@@ -36,20 +37,20 @@ class DebenturesParser(Parser):
         _drop_empy = filter(lambda x: x[1].strip() != "", _drop_first_n)
         for _, line in _drop_empy:
             row = line.strip().split("@")
-            tit = dict(
-                symbol=row[0],
-                name=row[1],
-                maturity_date=self.pp.parse(row[2]),
-                underlying=row[3],
-                bid_yield=self.pp.parse(row[4]),
-                ask_yield=self.pp.parse(row[5]),
-                ref_yield=self.pp.parse(row[6]),
-                price=self.pp.parse(row[10]),
-                perc_price_par=self.pp.parse(row[11]),
-                duration=self.pp.parse(row[12]),
-                perc_reune=self.pp.parse(row[13]),
-                ref_ntnb=self.pp.parse(row[14]),
-            )
+            tit = {
+                "symbol": row[0],
+                "name": row[1],
+                "maturity_date": self.pp.parse(row[2]),
+                "underlying": row[3],
+                "bid_yield": self.pp.parse(row[4]),
+                "ask_yield": self.pp.parse(row[5]),
+                "ref_yield": self.pp.parse(row[6]),
+                "price": self.pp.parse(row[10]),
+                "perc_price_par": self.pp.parse(row[11]),
+                "duration": self.pp.parse(row[12]),
+                "perc_reune": self.pp.parse(row[13]),
+                "ref_ntnb": self.pp.parse(row[14]),
+            }
             self.instruments.append(tit)
         self._data = pd.DataFrame(self.instruments)
 

@@ -1,6 +1,6 @@
 import re
-from datetime import datetime
 from collections import OrderedDict
+from pathlib import Path
 
 import pandas as pd
 
@@ -14,17 +14,19 @@ def read_fwf(con, widths, colnames=None, skip=0, parse_fun=lambda x: x):
         colpositions.append((x, x + w))
         x = x + w
 
-    colnames = ["V{}".format(ix + 1) for ix in range(len(widths))] if colnames is None else colnames
+    colnames = (
+        [f"V{ix + 1}" for ix in range(len(widths))] if colnames is None else colnames
+    )
 
     terms = []
     for ix, line in enumerate(con):
         if ix < skip:
             continue
-        line = line.strip()
-        if len(line) != line_len:
+        _line = line.strip()
+        if len(_line) != line_len:
             continue
-        fields = [line[dx[0] : dx[1]].strip() for dx in colpositions]
-        obj = dict((k, v) for k, v in zip(colnames, fields))
+        fields = [_line[dx[0] : dx[1]].strip() for dx in colpositions]
+        obj = dict(zip(colnames, fields, strict=False))
         terms.append(parse_fun(obj))
 
     return terms
@@ -44,7 +46,7 @@ class Field:
 
 class DateField(Field):
     def __init__(self, width, format) -> None:
-        super(DateField, self).__init__(width)
+        super().__init__(width)
         self.format = format
 
     def parse(self, text: pd.Series) -> pd.Series:
@@ -53,7 +55,7 @@ class DateField(Field):
 
 class NumericField(Field):
     def __init__(self, width, dec=0, sign="") -> None:
-        super(NumericField, self).__init__(width)
+        super().__init__(width)
         self.dec = dec
         self.sign = sign
         self.dtype = "int64" if dec == 0 else "float64"
@@ -63,7 +65,11 @@ class NumericField(Field):
         if self.dec == 0:
             return m * pd.to_numeric(field, errors="coerce")
         else:
-            return m * pd.to_numeric(field, errors="coerce").astype(self.dtype) / (10 ** int(self.dec))
+            return (
+                m
+                * pd.to_numeric(field, errors="coerce").astype(self.dtype)
+                / (10 ** int(self.dec))
+            )
 
 
 class FWFRowMeta(type):
@@ -71,19 +77,19 @@ class FWFRowMeta(type):
     the columns defined in the table declaration.
     """
 
-    def __new__(meta, name, bases, attrs):
+    def __new__(cls, name, bases, attrs):
         """Create the class as normal, but also iterate over the attributes
         set.
         """
-        cls = type.__new__(meta, name, bases, attrs)
-        cls._fields = OrderedDict()
+        new_cls = type.__new__(cls, name, bases, attrs)
+        new_cls._fields = OrderedDict()
         # Then add the columns from this class.
         sorted_fields = sorted(
             ((k, v) for k, v in attrs.items() if isinstance(v, Field)),
             key=lambda x: x[1]._counter_val,
         )
-        cls._fields.update(OrderedDict(sorted_fields))
-        return cls
+        new_cls._fields.update(OrderedDict(sorted_fields))
+        return new_cls
 
 
 class FWFRow(metaclass=FWFRowMeta):
@@ -112,56 +118,58 @@ class FWFFileMeta(type):
     the columns defined in the table declaration.
     """
 
-    def __new__(meta, name, bases, attrs):
+    def __new__(cls, name, bases, attrs):
         """Create the class as normal, but also iterate over the attributes
         set.
         """
-        cls = type.__new__(meta, name, bases, attrs)
-        cls._rows = [(k, v) for k, v in attrs.items() if isinstance(v, FWFRow)]
-        cls._buckets = dict((r[0], []) for r in cls._rows)
-        return cls
+        new_cls = type.__new__(cls, name, bases, attrs)
+        new_cls._rows = [(k, v) for k, v in attrs.items() if isinstance(v, FWFRow)]
+        new_cls._buckets = {r[0]: [] for r in new_cls._rows}
+        return new_cls
 
 
 class FWFFile(metaclass=FWFFileMeta):
     skip_row = 0
 
     def __init__(self, fname, encoding="UTF8"):
-        if isinstance(fname, str):
-            fp = open(fname, "r", encoding=encoding)
-        else:
-            fp = fname
         for nx in self._buckets:
             self._buckets[nx] = []
-        for ix, line in enumerate(fp):
-            if isinstance(line, bytes):
-                line = line.decode(encoding)
-            if ix < self.skip_row:
-                continue
-            row_name, row_template = self._get_row_template(line)
-            # TODO: define policy to discard unmatched lines and
-            #       lines with parsing errors
-            # if len(line) < len(row_template):
-            #     continue
-            # fields = [
-            #     dx[2](line[dx[0]: dx[1]].strip())
-            #     for dx in row_template.colpositions
-            # ]
-            fields = [line[dx[0] : dx[1]].strip() for dx in row_template.colpositions]
-            obj = dict((k, v) for k, v in zip(row_template.names, fields))
-            self._buckets[row_name].append(obj)
+        if isinstance(fname, str):
+            with Path(fname).open(encoding=encoding) as fp:
+                for ix, line in enumerate(fp):
+                    if isinstance(line, bytes):
+                        _line = line.decode(encoding)
+                    if ix < self.skip_row:
+                        continue
+                    row_name, row_template = self._get_row_template(_line)
+                    fields = [
+                        _line[dx[0] : dx[1]].strip() for dx in row_template.colpositions
+                    ]
+                    obj = dict(zip(row_template.names, fields, strict=False))
+                    self._buckets[row_name].append(obj)
+        else:
+            for ix, line in enumerate(fname):
+                if isinstance(line, bytes):
+                    _line = line.decode(encoding)
+                if ix < self.skip_row:
+                    continue
+                row_name, row_template = self._get_row_template(_line)
+                fields = [
+                    _line[dx[0] : dx[1]].strip() for dx in row_template.colpositions
+                ]
+                obj = dict(zip(row_template.names, fields, strict=False))
+                self._buckets[row_name].append(obj)
         self._tables = {n: pd.DataFrame(b) for n, b in self._buckets.items()}
         for row_name, row_template in self._rows:
             for fn, f in row_template._fields.items():
                 self._tables[row_name][fn] = f.parse(self._tables[row_name][fn])
-        if isinstance(fname, str):
-            fp.close()
 
     def __getattribute__(self, name: str):
-        buckets = super(FWFFile, self).__getattribute__("_buckets")
+        buckets = super().__getattribute__("_buckets")
         if name in buckets:
             return buckets[name]
         else:
-            return super(FWFFile, self).__getattribute__(name)
+            return super().__getattribute__(name)
 
     def _get_row_template(self, line):
         for row in self._rows:

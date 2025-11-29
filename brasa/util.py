@@ -1,18 +1,16 @@
-from datetime import datetime
 import hashlib
 import itertools
 import logging
-import os
 import pickle
 import warnings
 import zipfile
+from datetime import datetime
+from pathlib import Path
 from tempfile import gettempdir
 from typing import IO, Any
 
-from bizdays import Calendar
-from bizdays import set_option
+from bizdays import Calendar, set_option
 from regexparser import TextParser
-
 
 set_option("mode.datetype", "datetime")
 
@@ -25,7 +23,9 @@ class SuppressUserWarnings:
         warnings.filterwarnings("default", category=UserWarning)
 
 
-def generate_checksum_for_template(template: str, args: dict, extra_key: str = "") -> str:
+def generate_checksum_for_template(
+    template: str, args: dict, extra_key: str = ""
+) -> str:
     """Generates a hash for a template and its arguments.
 
     The hash is used to identify a template and its arguments.
@@ -52,14 +52,18 @@ def unzip_file_to(fname, dest) -> list:
         logging.debug("zipped file %s", name)
         zf.extract(name, dest)
     zf.close()
-    return [os.path.join(dest, name) for name in names]
+    return [str(Path(dest) / name) for name in names]
 
 
 def unzip_recursive(fname):
     if isinstance(fname, str) and fname.lower().endswith(".zip"):
         fname = unzip_file_to(fname, gettempdir())
         return unzip_recursive(fname)
-    elif isinstance(fname, list) and len(fname) == 1 and fname[0].lower().endswith(".zip"):
+    elif (
+        isinstance(fname, list)
+        and len(fname) == 1
+        and fname[0].lower().endswith(".zip")
+    ):
         fname = unzip_file_to(fname[0], gettempdir())
         return unzip_recursive(fname)
     else:
@@ -102,7 +106,7 @@ class KwargsIterator:
 
     def __iter__(self):
         for kw in itertools.product(*self.elements):
-            yield dict(tuple(zip(self.names, kw)))
+            yield dict(tuple(zip(self.names, kw, strict=False)))
 
 
 class DateRange:
@@ -123,7 +127,9 @@ class DateRange:
         if start is not None and end is None:
             end = self.calendar.offset(datetime.today(), -1)
         elif start is not None and end is not None:
-            end = min(self.calendar.preceding(end), self.calendar.offset(datetime.today(), -1))
+            end = min(
+                self.calendar.preceding(end), self.calendar.offset(datetime.today(), -1)
+            )
         if year is not None:
             start = self.calendar.getdate("first bizday", year)
             end = self.calendar.getdate("last bizday", year)
@@ -154,25 +160,25 @@ class DateRangeParser(TextParser):
         self.calendar_name = calendar
         self.calendar = Calendar() if calendar == "actual" else Calendar.load(calendar)
 
-    def parse_year(self, text, match):
+    def parse_year(self, _text, match):
         r"^\d{4}$"
         year = int(match.group())
         start = self.calendar.getdate("first day", year)
         end = self.calendar.getdate("last day", year)
         return DateRange(start=start, end=end, calendar=self.calendar_name)
 
-    def parse_year_open_range(self, text, match):
+    def parse_year_open_range(self, _text, match):
         r"^(\d{4}):$"
         start = datetime(int(match.group(1)), 1, 1)
         return DateRange(start=start, calendar=self.calendar_name)
 
-    def parse_year_range(self, text, match):
+    def parse_year_range(self, _text, match):
         r"^(\d{4}):(\d{4})$"
         start = datetime(int(match.group(1)), 1, 1)
         end = datetime(int(match.group(2)), 12, 31)
         return DateRange(start=start, end=end, calendar=self.calendar_name)
 
-    def parse_month(self, text, match):
+    def parse_month(self, _text, match):
         r"^(\d{4})-(\d{2})$"
         year = int(match.group(1))
         month = int(match.group(2))
@@ -180,24 +186,24 @@ class DateRangeParser(TextParser):
         end = self.calendar.getdate("last day", year, month)
         return DateRange(start=start, end=end, calendar=self.calendar_name)
 
-    def parse_month_open_range(self, text, match):
+    def parse_month_open_range(self, _text, match):
         r"^(\d{4})-(\d{2}):$"
         year = int(match.group(1))
         month = int(match.group(2))
         start = self.calendar.getdate("first day", year, month)
         return DateRange(start=start, calendar=self.calendar_name)
 
-    def parse_date(self, text, match):
+    def parse_date(self, _text, match):
         r"^(\d{4}-\d{2}-\d{2})$"
         start = datetime.strptime(match.group(1), "%Y-%m-%d")
         return [start]
 
-    def parse_date_open_range(self, text, match):
+    def parse_date_open_range(self, _text, match):
         r"^(\d{4}-\d{2}-\d{2}):$"
         start = datetime.strptime(match.group(1), "%Y-%m-%d")
         return DateRange(start=start, calendar=self.calendar_name)
 
-    def parse_date_range(self, text, match):
+    def parse_date_range(self, _text, match):
         r"^(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})$"
         start = datetime.strptime(match.group(1), "%Y-%m-%d")
         end = datetime.strptime(match.group(2), "%Y-%m-%d")

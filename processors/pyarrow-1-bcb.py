@@ -3,13 +3,13 @@
 # os.environ["BRASA_DATA_PATH"] = "D:\\brasa"
 
 import sys
-sys.path.append('.')
+
+sys.path.append(".")
 
 from datetime import datetime
 
-from bcb import sgs
-from bcb import PTAX
 import pandas as pd
+from bcb import PTAX, sgs
 
 import brasa
 
@@ -40,12 +40,18 @@ dd_igpm["symbol"] = "IGPM"
 dd_igpm.columns = ["refdate", "value", "symbol"]
 
 ptax = PTAX()
-ep = ptax.get_endpoint('CotacaoMoedaPeriodo')
-dd = (ep.query()
-   .parameters(moeda='USD', dataInicial='1/1/2000', dataFinalCotacao=datetime.today().strftime("%m/%d/%Y"))
-   .filter(ep.tipoBoletim == "Fechamento")
-   .select(ep.dataHoraCotacao, ep.cotacaoVenda)
-   .collect())
+ep = ptax.get_endpoint("CotacaoMoedaPeriodo")
+dd = (
+    ep.query()
+    .parameters(
+        moeda="USD",
+        dataInicial="1/1/2000",
+        dataFinalCotacao=datetime.today().strftime("%m/%d/%Y"),
+    )
+    .filter(ep.tipoBoletim == "Fechamento")
+    .select(ep.dataHoraCotacao, ep.cotacaoVenda)
+    .collect()
+)
 dd_dol = dd
 dd_dol["symbol"] = "BRLUSD"
 dd_dol.columns = ["value", "refdate", "symbol"]

@@ -83,7 +83,7 @@ fields:                 # For simple file formats
     handler:
       type: numeric|character|date|posixct
       format: "%Y%m%d"  # For date fields
-      
+
 parts:                  # For multi-part files (MFWF)
   PartName:
     pattern: ^regex_pattern
@@ -201,14 +201,14 @@ fields:
     width: 12         # Fixed-width only
     handler:
       type: character
-      
+
   - name: close_price
     description: Closing price
     width: 13
     handler:
       type: numeric
       format: pt-br   # Brazilian number format (1.234,56)
-      
+
   - name: trade_date
     description: Trading date
     width: 8
@@ -238,7 +238,7 @@ fields:
      type: date
      format: "%Y%m%d"   # strptime format
    ```
-   
+
    Common formats:
    - `%Y%m%d`: 20240115
    - `%Y-%m-%d`: 2024-01-15
@@ -270,7 +270,7 @@ parts:
         handler:
           type: date
           format: "%Y%m%d"
-          
+
   Data:
     pattern: ^01      # Lines starting with 01
     fields:
@@ -287,7 +287,7 @@ parts:
         handler:
           type: numeric
           format: pt-br
-          
+
   Trailer:
     pattern: ^99      # Lines starting with 99
     fields:
@@ -346,7 +346,7 @@ downloader:
 
 reader:
   function: brasa.readers.read_b3_cotahist
-  
+
 writer:
   partitioning:
     - refdate
@@ -364,7 +364,7 @@ parts:
         handler:
           type: date
           format: "%Y%m%d"
-          
+
   HistoricalPrices:
     pattern: ^01
     fields:
@@ -406,7 +406,7 @@ downloader:
 reader:
   function: brasa.parsers.b3.company_info_parser
   output-filename-format: "%Y-%m-%d"
-  
+
 writer:
   partitioning:
     - refdate
@@ -444,7 +444,7 @@ reader:
   multi:
     futures: futures-data
     options: options-data
-    
+
 writer:
   partitioning:
     - refdate

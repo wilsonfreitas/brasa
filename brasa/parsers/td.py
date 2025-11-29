@@ -1,6 +1,8 @@
-from datetime import datetime
-import pandas as pd
 from collections import namedtuple
+from datetime import datetime
+
+import pandas as pd
+
 from .util import Parser
 
 

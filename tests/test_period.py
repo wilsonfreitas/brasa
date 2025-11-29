@@ -1,7 +1,8 @@
-
 from datetime import datetime
-from brasa.util import DateRange, is_iterable
+
 from bizdays import Calendar
+
+from brasa.util import DateRange, is_iterable
 
 
 def test_start_end_period() -> None:
@@ -15,6 +16,7 @@ def test_start_no_end_period() -> None:
     p = DateRange(start=datetime(2023, 1, 1), calendar="B3")
     assert p.start == datetime(2023, 1, 2)
     assert p.end == cal.offset(datetime.today(), -1)
+
 
 def test_year_period() -> None:
     p = DateRange(year=2022, calendar="B3")

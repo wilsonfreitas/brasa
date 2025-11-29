@@ -377,10 +377,10 @@ show(dataset_name, n=10) -> pd.DataFrame
    ```python
    # By year
    DateRange(year=2024, calendar="B3")
-   
+
    # By date range
    DateRange(start=datetime(2024,1,1), end=datetime.today(), calendar="B3")
-   
+
    # By month
    DateRange(year=2024, month=1, calendar="B3")
    ```
@@ -418,15 +418,15 @@ show(dataset_name, n=10) -> pd.DataFrame
 1. User Request
    ↓
    download_marketdata("template-id", refdate=dates)
-   
+
 2. Template Loading
    ↓
    retrieve_template() → MarketDataTemplate
-   
+
 3. Parameter Iteration
    ↓
    KwargsIterator expands parameters
-   
+
 4. For each parameter set:
    a. Create CacheMetadata
    b. Check if already cached (has_meta)
@@ -434,11 +434,11 @@ show(dataset_name, n=10) -> pd.DataFrame
       - MarketDataDownloader.download(**args)
       - Save files to .brasa-cache/raw/{template}/{checksum}/
       - Update metadata in SQLite
-      
+
 5. Process Request
    ↓
    process_marketdata("template-id", reprocess=False)
-   
+
 6. For each cached download:
    a. Load metadata from SQLite
    b. MarketDataReader.read(meta)
@@ -454,17 +454,17 @@ show(dataset_name, n=10) -> pd.DataFrame
 1. User Request
    ↓
    process_etl("template-id")
-   
+
 2. Template Loading
    ↓
    retrieve_template() → MarketDataTemplate with etl config
-   
+
 3. ETL Execution
    ↓
    a. Load source dataset(s) via get_dataset()
    b. Execute transformation function
    c. Write results via write_dataset()
-   
+
 4. Optional View Creation
    ↓
    BrasaDB.create_view("template-id")
@@ -476,22 +476,22 @@ show(dataset_name, n=10) -> pd.DataFrame
 1. User Query
    ↓
    df = get_returns(["PETR4", "VALE3"], start, end)
-   
+
 2. Dataset Access
    ↓
    ds = get_dataset("b3-equities-returns")
-   
+
 3. PyArrow Filtering
    ↓
    ds.filter(pc.field("symbol").isin(["PETR4", "VALE3"]))
      .filter(pc.field("refdate") >= start)
      .filter(pc.field("refdate") <= end)
-   
+
 4. Conversion
    ↓
    table = ds.to_table()
    df = table.to_pandas()
-   
+
 5. Post-processing
    ↓
    Pivot, join with calendar, fill missing dates
@@ -559,7 +559,7 @@ show(dataset_name, n=10) -> pd.DataFrame
 Implement function signature:
 ```python
 def custom_download(
-    md_downloader: MarketDataDownloader, 
+    md_downloader: MarketDataDownloader,
     **kwargs
 ) -> tuple[IO | None, dict[str, str]]:
     # Return (file_object, response_headers)

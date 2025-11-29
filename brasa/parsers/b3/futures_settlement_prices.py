@@ -1,17 +1,16 @@
-
-from datetime import datetime
 import io
+from datetime import datetime
 from typing import IO
-import numpy as np
 
+import numpy as np
 import pandas as pd
-from lxml import etree
 from bizdays import Calendar
+from lxml import etree
 
 
 def maturity2date_newcode(x: str, cal: Calendar, expr: str) -> datetime:
     """Converts a maturity code to a date.
-    
+
     The new code is a single letter, as in "F" for January.
     This code started to be used in 2007.
     """
@@ -22,7 +21,7 @@ def maturity2date_newcode(x: str, cal: Calendar, expr: str) -> datetime:
 
 def maturity2date_oldcode(x: str, cal: Calendar, expr: str) -> datetime:
     """Converts a maturity code to a date.
-    
+
     The old code is a three-letter code, as in "JAN" for January.
     This code was used until 2007.
     """
@@ -31,7 +30,7 @@ def maturity2date_oldcode(x: str, cal: Calendar, expr: str) -> datetime:
     return cal.getdate(expr, year, month)
 
 
-def maturity2date(x: str, cal: Calendar, expr: str="first day") -> datetime:
+def maturity2date(x: str, cal: Calendar, expr: str = "first day") -> datetime:
     maturity_code = x[-3:]
     if len(maturity_code) == 3:
         return maturity2date_newcode(maturity_code, cal, expr)
@@ -41,7 +40,7 @@ def maturity2date(x: str, cal: Calendar, expr: str="first day") -> datetime:
 
 def code2month(code: str) -> int:
     """Converts a month code to a month number.
-    
+
     The code can be a single letter, as in "F" for January,
     or a three-letter code, as in "JAN" for January.
     """
@@ -53,7 +52,7 @@ def code2month(code: str) -> int:
 
 def code2month_newcode(code: str) -> int:
     """Converts a month code to a month number.
-    
+
     The new code is a single letter, as in "F" for January.
     This code started to be used in 2007.
     """
@@ -67,22 +66,43 @@ def code2month_oldcode(code: str) -> int:
     The old code is a three-letter code, as in "JAN" for January.
     This code was used until 2007.
     """
-    month_codes = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO","SET", "OUT", "NOV", "DEZ"]
+    month_codes = [
+        "JAN",
+        "FEV",
+        "MAR",
+        "ABR",
+        "MAI",
+        "JUN",
+        "JUL",
+        "AGO",
+        "SET",
+        "OUT",
+        "NOV",
+        "DEZ",
+    ]
     return month_codes.index(code) + 1
 
 
 def future_settlement_prices_parser(fname: IO | str) -> pd.DataFrame:
-    df = pd.read_html(fname,
-                      attrs=dict(id="tblDadosAjustes"),
-                      decimal=",",
-                      thousands=".",
-                      encoding="latin1")[0]
-    df.columns = ["commodity", "maturity_code", "previous_settlement_price", "settlement_price", "price_variation", "settlement_value"]
+    df = pd.read_html(
+        fname,
+        attrs={"id": "tblDadosAjustes"},
+        decimal=",",
+        thousands=".",
+        encoding="latin1",
+    )[0]
+    df.columns = [
+        "commodity",
+        "maturity_code",
+        "previous_settlement_price",
+        "settlement_price",
+        "price_variation",
+        "settlement_value",
+    ]
     if isinstance(fname, io.IOBase):
         fname.seek(0)
     tree = etree.parse(fname, etree.HTMLParser())
-    refdate_str = tree.xpath(f"//input[@id='dData1']")[0].attrib["value"]
-    df["refdate"] = pd.to_datetime(refdate_str, format="%d/%m/%Y")
+    df["refdate"] = tree.xpath("//input[@id='dData1']")[0].attrib["value"]
     for ix in range(df.shape[0]):
         if df.loc[ix, "commodity"] is not np.nan:
             last_name = df.loc[ix, "commodity"]

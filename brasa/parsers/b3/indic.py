@@ -1,4 +1,4 @@
-from ..fwf import FWFFile, FWFRow, Field, DateField, NumericField
+from ..fwf import DateField, Field, FWFFile, FWFRow, NumericField
 
 
 class Indic_data(FWFRow):

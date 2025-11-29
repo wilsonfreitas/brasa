@@ -3,11 +3,34 @@
         "tests"
     ],
     "python.testing.unittestEnabled": false,
-    "python.testing.pytestEnabled": false,
+    "python.testing.pytestEnabled": true,
     "cSpell.enableFiletypes": [
         "!python"
     ],
     "cSpell.language": "en,pt,pt-BR",
     "python.analysis.enablePytestSupport": false,
-    "python.testing.autoTestDiscoverOnSaveEnabled": false
+    "python.testing.autoTestDiscoverOnSaveEnabled": false,
+    "python-envs.defaultEnvManager": "ms-python.python:venv",
+    "python-envs.defaultPackageManager": "ms-python.python:pip",
+    "python-envs.pythonProjects": [],
+    "python.analysis.typeCheckingMode": "basic",
+    // ==========================================================================
+    // Ruff - Python Formatter & Linter
+    // ==========================================================================
+    // Set Ruff as the default formatter for Python
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.fixAll.ruff": "explicit",
+            "source.organizeImports.ruff": "explicit"
+        }
+    },
+    // Ruff extension settings
+    "ruff.lineLength": 88,
+    "ruff.fixAll": true,
+    "ruff.organizeImports": true,
+    // Disable other Python formatting/linting tools to avoid conflicts
+    "python.formatting.provider": "none",
+    "python.linting.enabled": false
 }

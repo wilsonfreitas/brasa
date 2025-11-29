@@ -1,6 +1,7 @@
 import pandas as pd
-from ..util import Parser
 from lxml import etree
+
+from ..util import Parser
 
 
 class BVBG086Parser(Parser):
@@ -24,7 +25,9 @@ class BVBG086Parser(Parser):
         else:
             raise Exception("Invalid XML: tag BizGrpDtls not found")
 
-        xs = exchange.findall("{urn:bvmf.052.01.xsd}BizGrp/{urn:bvmf.217.01.xsd}Document/{urn:bvmf.217.01.xsd}PricRpt")
+        xs = exchange.findall(
+            "{urn:bvmf.052.01.xsd}BizGrp/{urn:bvmf.217.01.xsd}Document/{urn:bvmf.217.01.xsd}PricRpt"
+        )
         for node in xs:
             self.parse_price_report_node(node, tags)
         self.__instrs_table = pd.DataFrame(self.instruments)

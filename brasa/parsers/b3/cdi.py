@@ -1,8 +1,8 @@
 import json
+
 import pandas as pd
 
-from brasa.engine import CacheManager, CacheMetadata, MarketDataReader
-from ..util import PortugueseRulesParser2, Parser
+from ..util import Parser, PortugueseRulesParser2
 
 
 class CDIParser(Parser):

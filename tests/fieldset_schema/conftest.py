@@ -1,13 +1,8 @@
 import pytest
-import os
-import pandas as pd
-import pyarrow as pa
-import pyarrow.csv as pa_csv
-from datetime import date, datetime, time
 
 from brasa.fieldset_schema import (
-    Field, Fieldset, TypeParserFactory,
-    PandasAdapter, PyArrowAdapter, FieldsetReader
+    Field,
+    Fieldset,
 )
 
 
@@ -74,7 +69,7 @@ def sample_csv_path(tmp_path):
 def sample_csv_path_large(tmp_path):
     """Creates a larger temporary CSV file for testing PyArrow performance."""
     csv_content = "id,value\n"
-    for i in range(100000): # 100k rows
+    for i in range(100000):  # 100k rows
         csv_content += f"{i},{i*100}\n"
     file_path = tmp_path / "large_test_data.csv"
     file_path.write_text(csv_content)

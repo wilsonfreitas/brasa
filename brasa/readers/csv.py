@@ -1,7 +1,8 @@
-from itertools import dropwhile
-from datetime import datetime
 from collections import OrderedDict
-import pandas as pd
+from datetime import datetime
+from itertools import dropwhile
+from pathlib import Path
+from typing import ClassVar
 
 
 class Field:
@@ -17,7 +18,7 @@ class Field:
 
 class DateField(Field):
     def __init__(self, format):
-        super(DateField, self).__init__()
+        super().__init__()
         self.format = format
 
     def parse(self, text):
@@ -26,7 +27,7 @@ class DateField(Field):
 
 class NumericField(Field):
     def __init__(self, decimal=".", thousands=None):
-        super(NumericField, self).__init__()
+        super().__init__()
         self.decimal = decimal
         self.thousands = thousands
 
@@ -43,41 +44,44 @@ class CSVFileMeta(type):
     the columns defined in the table declaration.
     """
 
-    def __new__(meta, name, bases, attrs):
+    def __new__(cls, name, bases, attrs):
         """Create the class as normal, but also iterate over the attributes
         set.
         """
-        cls = type.__new__(meta, name, bases, attrs)
-        cls._fields = OrderedDict()
+        new_cls = type.__new__(cls, name, bases, attrs)
+        new_cls._fields = OrderedDict()
         # Then add the columns from this class.
         sorted_fields = sorted(
             ((k, v) for k, v in attrs.items() if isinstance(v, Field)),
             key=lambda x: x[1]._counter_val,
         )
-        cls._fields.update(OrderedDict(sorted_fields))
-        return cls
+        new_cls._fields.update(OrderedDict(sorted_fields))
+        return new_cls
 
 
 class CSVFile(metaclass=CSVFileMeta):
+    _fields: ClassVar[OrderedDict] = OrderedDict()
+    _skip_row = 1
     _skip_row = 1
     _separator = ","
     _encoding = "UTF8"
 
     def __init__(self, fname):
-        if isinstance(fname, str):
-            fp = open(fname, "r", encoding=self._encoding)
-        else:
-            fp = fname
-
         self.rows = []
-        fields_names = [f for f in self._fields.keys()]
+        fields_names = list(self._fields)
+        if isinstance(fname, str):
+            with Path(fname).open(encoding=self._encoding) as fp:
+                _drop_first_n = dropwhile(
+                    lambda x: x[0] < self._skip_row, enumerate(fp)
+                )
+        else:
+            _drop_first_n = dropwhile(lambda x: x[0] < self._skip_row, enumerate(fname))
 
-        _drop_first_n = dropwhile(lambda x: x[0] < self._skip_row, enumerate(fp))
         _drop_empy = filter(lambda x: x[1].strip() != "", _drop_first_n)
         for _, line in _drop_empy:
             row = line.split(self._separator)
-            parsed_row = {fields_names[ix]: self._fields[fields_names[ix]].parse(field) for ix, field in enumerate(row)}
+            parsed_row = {
+                fields_names[ix]: self._fields[fields_names[ix]].parse(field)
+                for ix, field in enumerate(row)
+            }
             self.rows.append(parsed_row)
-
-        if isinstance(fname, str):
-            fp.close()

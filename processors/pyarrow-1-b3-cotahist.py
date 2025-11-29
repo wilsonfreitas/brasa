@@ -3,11 +3,12 @@
 # os.environ["BRASA_DATA_PATH"] = "D:\\brasa"
 
 import sys
-# sys.path.append('c:/Users/wilso/OneDrive/Documentos/Dev/python/brasa')
-sys.path.append('.')
 
-import pyarrow.dataset as ds
+# sys.path.append('c:/Users/wilso/OneDrive/Documentos/Dev/python/brasa')
+sys.path.append(".")
+
 import pyarrow
+import pyarrow.dataset as ds
 
 import brasa
 
@@ -19,4 +20,9 @@ tb_cotahist_daily = brasa.get_dataset("b3-cotahist-daily").to_table()
 tb_cotahist = pyarrow.concat_tables([tb_cotahist_yearly, tb_cotahist_daily])
 
 tb_cotahist.sort_by([("refdate", "ascending")])
-ds.write_dataset(tb_cotahist, man.db_path("b3-cotahist"), format="parquet", existing_data_behavior="overwrite_or_ignore")
+ds.write_dataset(
+    tb_cotahist,
+    man.db_path("b3-cotahist"),
+    format="parquet",
+    existing_data_behavior="overwrite_or_ignore",
+)

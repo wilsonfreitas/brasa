@@ -1,5 +1,7 @@
 import json
+
 import pandas as pd
+
 from ..util import Parser
 
 
@@ -26,8 +28,7 @@ class StockIndexInfoParser(Parser):
             )
 
         dfr = (
-            df.groupby(["company", "spotlight", "code"]
-                       ).apply(_).reset_index(drop=True)
+            df.groupby(["company", "spotlight", "code"]).apply(_).reset_index(drop=True)
         )
 
         dfr["refdate"] = self._data["header"]["update"]

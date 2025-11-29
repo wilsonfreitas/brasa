@@ -1,9 +1,9 @@
-import io
 from itertools import dropwhile
-from lxml import etree
-from ..util import PortugueseRulesParser2, Parser
 
-from kyd.readers.csv import CSVFile, Field, DateField, NumericField
+from kyd.readers.csv import CSVFile, DateField, Field, NumericField
+from lxml import etree
+
+from ..util import Parser, PortugueseRulesParser2
 
 
 class TPFFile(CSVFile):
@@ -37,17 +37,17 @@ class TPFParser(Parser):
         _drop_empy = filter(lambda x: x[1].strip() != "", _drop_first_n)
         for _, line in _drop_empy:
             row = line.split("@")
-            tit = dict(
-                symbol=row[0],
-                refdate=self.pp.parse(row[1]),
-                cod_selic=row[2],
-                issue_date=self.pp.parse(row[3]),
-                maturity_date=self.pp.parse(row[4]),
-                bid_yield=self.pp.parse(row[5]),
-                ask_yield=self.pp.parse(row[6]),
-                ref_yield=self.pp.parse(row[7]),
-                price=self.pp.parse(row[8]),
-            )
+            tit = {
+                "symbol": row[0],
+                "refdate": self.pp.parse(row[1]),
+                "cod_selic": row[2],
+                "issue_date": self.pp.parse(row[3]),
+                "maturity_date": self.pp.parse(row[4]),
+                "bid_yield": self.pp.parse(row[5]),
+                "ask_yield": self.pp.parse(row[6]),
+                "ref_yield": self.pp.parse(row[7]),
+                "price": self.pp.parse(row[8]),
+            }
             self.instruments.append(tit)
 
     @property
