@@ -25,13 +25,13 @@ fields:
   - name: update_action
     description: Informa a ação de atualização que está ocorrendo
     handler:
-      type: factor
-      levels:
-        - 0
-        - 2
-      labels:
-        - new
-        - delete
+      type: integer
+      # levels:
+      #   - 0
+      #   - 2
+      # labels:
+      #   - new
+      #   - delete
   - name: traded_price
     description: Preço do negócio
     handler:
@@ -57,13 +57,13 @@ fields:
       ou after market
       (Período de negociação que funciona fora do horário regular do pregão).
     handler:
-      type: factor
-      levels:
-        - 1
-        - 6
-      labels:
-        - regular
-        - after
+      type: integer
+      # levels:
+      #   - 1
+      #   - 6
+      # labels:
+      #   - regular
+      #   - after
   - name: trade_date
     description: Data do pregão
     handler:

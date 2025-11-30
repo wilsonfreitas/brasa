@@ -54,15 +54,15 @@ fields:
   - name: market
     description: Mercado
     handler:
-      type: factor
-      levels:
-        - 91
-        - 92
-        - 93
-      labels:
-        - balcão
-        - eletrônico d0
-        - eletrônico d+1
+      type: integer
+      # levels:
+      #   - 91
+      #   - 92
+      #   - 93
+      # labels:
+      #   - balcão
+      #   - eletrônico d0
+      #   - eletrônico d+1
   - name: lending_code
     description: Código do Participante Doador
     handler:

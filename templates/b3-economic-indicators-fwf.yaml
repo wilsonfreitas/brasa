@@ -44,21 +44,21 @@ fields:
   - name: grupo_indicador
     description: Grupo do indicador
     handler:
-      type: factor
-      levels:
-      - IA
-      - DE
-      - RT
-      - BV
-      - ME
-      - ID
-      labels:
-      - indicadores-agro
-      - titulos-divida-externa
-      - indicadores-gerais
-      - ibovespa
-      - moeda-estrangeira
-      - indice-idi
+      type: character
+      # levels:
+      # - IA
+      # - DE
+      # - RT
+      # - BV
+      # - ME
+      # - ID
+      # labels:
+      # - indicadores-agro
+      # - titulos-divida-externa
+      # - indicadores-gerais
+      # - ibovespa
+      # - moeda-estrangeira
+      # - indice-idi
     width: 2
   - name: cod_indicador
     description: Código do indicador
