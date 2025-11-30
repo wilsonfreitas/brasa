@@ -1,0 +1,47 @@
+# Pre-commit hooks for brasa project
+# See https://pre-commit.com for more information
+
+# Global exclusions - applied to all hooks
+exclude: '\.ipynb$'
+
+repos:
+  # Ruff - Fast Python linter and formatter
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.0
+    hooks:
+      # Run the linter with auto-fix
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      # Run the formatter
+      - id: ruff-format
+
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      # Trims trailing whitespace
+      - id: trailing-whitespace
+      # Ensures files end with a newline
+      - id: end-of-file-fixer
+      # Checks yaml files for syntax
+      - id: check-yaml
+      # Checks toml files for syntax
+      - id: check-toml
+      # Checks for large files
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      # Checks for merge conflict markers
+      - id: check-merge-conflict
+      # Checks for debugger imports
+      - id: debug-statements
+      # Validates Python AST
+      - id: check-ast
+
+  # Type checking with mypy (optional - can be slow)
+  # Uncomment if you want type checking in pre-commit
+  # - repo: https://github.com/pre-commit/mirrors-mypy
+  #   rev: v1.9.0
+  #   hooks:
+  #     - id: mypy
+  #       additional_dependencies: [types-pyyaml, types-pytz, types-requests, types-lxml]
+  #       args: [--ignore-missing-imports]
