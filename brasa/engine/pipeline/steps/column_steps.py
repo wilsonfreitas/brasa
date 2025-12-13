@@ -1,0 +1,132 @@
+"""Column manipulation pipeline steps.
+
+Steps for renaming, selecting, and transforming DataFrame columns.
+"""
+
+from __future__ import annotations
+
+import pandas as pd
+
+from ..context import PipelineContext
+from ..registry import StepRegistry
+from ..step import PipelineStep
+
+
+@StepRegistry.register("set_columns")
+class SetColumnsStep(PipelineStep):
+    """Set column names for a DataFrame.
+
+    Parameters:
+        names: List of column names to assign
+    """
+
+    def execute(self, data: pd.DataFrame, _context: PipelineContext) -> pd.DataFrame:
+        names = self.require_param("names")
+
+        if len(names) != len(data.columns):
+            raise ValueError(
+                f"Number of names ({len(names)}) doesn't match "
+                f"number of columns ({len(data.columns)})"
+            )
+
+        data.columns = names
+        return data
+
+
+@StepRegistry.register("rename_columns")
+class RenameColumnsStep(PipelineStep):
+    """Rename columns using a mapping.
+
+    Parameters:
+        mapping: Dictionary mapping old names to new names
+    """
+
+    def execute(self, data: pd.DataFrame, _context: PipelineContext) -> pd.DataFrame:
+        mapping = self.require_param("mapping")
+        return data.rename(columns=mapping)
+
+
+@StepRegistry.register("select_columns")
+class SelectColumnsStep(PipelineStep):
+    """Select specific columns from a DataFrame.
+
+    Parameters:
+        columns: List of column names to keep
+    """
+
+    def execute(self, data: pd.DataFrame, _context: PipelineContext) -> pd.DataFrame:
+        columns = self.require_param("columns")
+        missing = set(columns) - set(data.columns)
+        if missing:
+            raise ValueError(f"Columns not found: {missing}")
+        return data[columns]
+
+
+@StepRegistry.register("drop_columns")
+class DropColumnsStep(PipelineStep):
+    """Drop columns from a DataFrame.
+
+    Parameters:
+        columns: List of column names to drop
+        errors: How to handle missing columns ('raise' or 'ignore', default: 'raise')
+    """
+
+    def execute(self, data: pd.DataFrame, _context: PipelineContext) -> pd.DataFrame:
+        columns = self.require_param("columns")
+        errors = self.get_param("errors", "raise")
+        return data.drop(columns=columns, errors=errors)
+
+
+@StepRegistry.register("add_column")
+class AddColumnStep(PipelineStep):
+    """Add a new column to the DataFrame.
+
+    Parameters:
+        name: Name of the new column
+        value: Static value to assign (optional)
+        from_context: Key to get value from context.intermediate_results (optional)
+        from_download_args: Key to get value from meta.download_args (optional)
+    """
+
+    def execute(self, data: pd.DataFrame, context: PipelineContext) -> pd.DataFrame:
+        name = self.require_param("name")
+
+        if "value" in self.params:
+            value = self.params["value"]
+        elif "from_context" in self.params:
+            key = self.params["from_context"]
+            value = context.get_result(key)
+        elif "from_download_args" in self.params:
+            key = self.params["from_download_args"]
+            value = context.meta.download_args.get(key)
+        else:
+            raise ValueError(
+                "add_column requires 'value', 'from_context', or 'from_download_args'"
+            )
+
+        data[name] = value
+        return data
+
+
+@StepRegistry.register("reorder_columns")
+class ReorderColumnsStep(PipelineStep):
+    """Reorder columns in a specific order.
+
+    Parameters:
+        order: List of column names in desired order
+        keep_rest: Whether to keep unlisted columns at the end (default: False)
+    """
+
+    def execute(self, data: pd.DataFrame, _context: PipelineContext) -> pd.DataFrame:
+        order = self.require_param("order")
+        keep_rest = self.get_param("keep_rest", False)
+
+        missing = set(order) - set(data.columns)
+        if missing:
+            raise ValueError(f"Columns not found: {missing}")
+
+        if keep_rest:
+            rest = [c for c in data.columns if c not in order]
+            order = list(order) + rest
+
+        return data[order]
