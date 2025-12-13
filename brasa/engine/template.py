@@ -45,10 +45,12 @@ class MarketDataReader:
     """Configuration for reading market data files.
 
     Defines how to read downloaded files and convert them to DataFrames.
+    Supports both legacy function-based readers and the new pipeline approach.
     """
 
-    def __init__(self, reader: dict):
+    def __init__(self, reader: dict, template_id: str = ""):
         self.attributes = {}
+        self._template_id = template_id
         for n, v in reader.items():
             self.attributes[n] = v
         self.locale = reader.get("locale", "en_US")
@@ -56,11 +58,28 @@ class MarketDataReader:
         self.decimal = reader.get("decimal", ".")
         self.thousands = reader.get("thousands", ",")
         self.separator = reader.get("separator", ",")
-        self.read_function = load_function_by_name(reader["function"])
         self.multi = reader.get("multi", {})
         self.parts: list | None = None
         self.fields: Fieldset | None = None
         self.output_filename_format = reader.get("output-filename-format", "%Y-%m-%d")
+
+        # Check for pipeline-based reader (new approach)
+        self._pipeline = None
+        if "pipeline" in reader:
+            from .pipeline import ReaderPipeline
+
+            self._pipeline = ReaderPipeline.from_config(reader["pipeline"])
+            self.read_function = None
+        elif "function" in reader:
+            # Legacy function-based reader
+            self.read_function = load_function_by_name(reader["function"])
+        else:
+            self.read_function = None
+
+    @property
+    def has_pipeline(self) -> bool:
+        """Check if this reader uses the pipeline approach."""
+        return self._pipeline is not None
 
     def set_parts(self, parts: list) -> None:
         """Set template parts for multi-part file reading."""
@@ -75,7 +94,7 @@ class MarketDataReader:
         return self.attributes.get(key, default)
 
     def read(self, meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFrame]:
-        """Read data using the configured read function.
+        """Read data using the configured read function or pipeline.
 
         Args:
             meta: Cache metadata containing file paths and context.
@@ -83,8 +102,19 @@ class MarketDataReader:
         Returns:
             DataFrame or dictionary of DataFrames with the read data.
         """
-        df = self.read_function(meta)
-        return df
+        if self._pipeline is not None:
+            # Use the new pipeline approach
+            return self._pipeline.execute(
+                meta=meta,
+                reader_config=self.attributes,
+                fields=self.fields,
+                template_id=self._template_id,
+            )
+        elif self.read_function is not None:
+            # Use the legacy function approach
+            return self.read_function(meta)
+        else:
+            raise ValueError("Reader has no pipeline or function configured")
 
 
 class MarketDataWriter:
@@ -185,6 +215,11 @@ class MarketDataTemplate:
         """Load and parse the YAML template file."""
         with Path(self.template_path).open(encoding="utf-8") as f:
             template = yaml.safe_load(f)
+
+        # First pass: extract the template ID
+        self.id = template.get("id", "")
+
+        # Second pass: process all template sections
         for n in template:
             self.__dict__[n] = template[n]
             if n == "downloader":
@@ -192,7 +227,7 @@ class MarketDataTemplate:
                 self.downloader = MarketDataDownloader(template[n])
             elif n == "reader":
                 self.has_reader = True
-                self.reader = MarketDataReader(template[n])
+                self.reader = MarketDataReader(template[n], template_id=self.id)
             elif n == "writer":
                 self.writer = MarketDataWriter(template[n])
             elif n == "fields":
