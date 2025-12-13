@@ -9,7 +9,8 @@ import pyarrow.compute as pc
 import pyarrow.dataset as ds
 from bizdays import Calendar, get_option, set_option
 
-from .engine import CacheManager
+from .engine import CacheManager, retrieve_template
+from .fieldset_schema import PyArrowAdapter
 
 __all__ = [
     "BrasaDB",
@@ -19,6 +20,8 @@ __all__ = [
     "get_prices",
     "get_returns",
     "get_symbols",
+    "get_template_partitioning",
+    "get_template_schema",
     "show",
     "write_dataset",
 ]
@@ -166,9 +169,96 @@ def get_prices(
     return df
 
 
-def get_dataset(name: str, schema: pyarrow.Schema = None) -> ds.Dataset:
+def get_template_schema(name: str) -> pyarrow.Schema | None:
+    """Get PyArrow schema from a template's field definitions.
+
+    Args:
+        name: The template name (same as dataset name).
+
+    Returns:
+        PyArrow Schema if the template has fields defined, None otherwise.
+    """
+    try:
+        template = retrieve_template(name)
+        if hasattr(template, "fields") and template.fields is not None:
+            adapter = PyArrowAdapter(template.fields, verbose_warnings=False)
+            return adapter.get_target_schema()
+    except ValueError:
+        # Template not found
+        pass
+    return None
+
+
+def get_template_partitioning(
+    name: str, schema: pyarrow.Schema | None = None
+) -> ds.Partitioning | None:
+    """Get partitioning from a template's writer configuration.
+
+    Args:
+        name: The template name (same as dataset name).
+        schema: Optional schema to extract partition field types from.
+
+    Returns:
+        PyArrow Partitioning object if partitioning is defined, None otherwise.
+    """
+    try:
+        template = retrieve_template(name)
+        if hasattr(template, "writer") and template.writer is not None:
+            partitioning_cols = getattr(template.writer, "partitioning", None)
+            if partitioning_cols:
+                # Build partitioning with proper types from schema
+                if schema is not None:
+                    partition_fields = []
+                    for col in partitioning_cols:
+                        if col in schema.names:
+                            partition_fields.append(schema.field(col))
+                        else:
+                            # Default to string if not in schema
+                            partition_fields.append(
+                                pyarrow.field(col, pyarrow.string())
+                            )
+                    return ds.partitioning(
+                        pyarrow.schema(partition_fields), flavor="hive"
+                    )
+                else:
+                    # Return simple partitioning without type info
+                    return ds.partitioning(flavor="hive")
+    except ValueError:
+        # Template not found
+        pass
+    return None
+
+
+def get_dataset(
+    name: str,
+    schema: pyarrow.Schema | None = None,
+    partitioning: ds.Partitioning | list[str] | None = None,
+    use_template_schema: bool = True,
+) -> ds.Dataset:
+    """Load a dataset by name.
+
+    Args:
+        name: The dataset name.
+        schema: Optional PyArrow schema to use. If None and use_template_schema is True,
+            attempts to load schema from the template definition.
+        partitioning: Optional partitioning specification. Can be a list of column names
+            or a PyArrow Partitioning object. If None and use_template_schema is True,
+            attempts to load from the template.
+        use_template_schema: If True (default), automatically loads the schema and
+            partitioning from the template when not provided.
+
+    Returns:
+        PyArrow Dataset.
+    """
     man = CacheManager()
-    return ds.dataset(man.db_path(name), schema=schema, format="parquet")
+    if use_template_schema:
+        if schema is None:
+            schema = get_template_schema(name)
+        if partitioning is None:
+            partitioning = get_template_partitioning(name, schema)
+    return ds.dataset(
+        man.db_path(name), schema=schema, format="parquet", partitioning=partitioning
+    )
 
 
 def describe(name: str) -> None:
