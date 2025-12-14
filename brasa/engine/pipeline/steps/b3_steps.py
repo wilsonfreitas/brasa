@@ -5,6 +5,10 @@ Custom steps for processing B3 (Brazilian Stock Exchange) data.
 
 from __future__ import annotations
 
+import gzip
+import logging
+from typing import Any
+
 import numpy as np
 import pandas as pd
 from lxml import etree
@@ -12,6 +16,8 @@ from lxml import etree
 from brasa.engine.pipeline.context import PipelineContext
 from brasa.engine.pipeline.registry import StepRegistry
 from brasa.engine.pipeline.step import PipelineStep
+
+logger = logging.getLogger(__name__)
 
 
 @StepRegistry.register("b3_parse_refdate_from_html")
@@ -99,3 +105,73 @@ class B3CreateSymbolStep(PipelineStep):
 
         data[output_col] = data[commodity_col] + data[maturity_col]
         return data
+
+
+@StepRegistry.register("b3_read_bvbg086_xml")
+class B3ReadBVBG086XmlStep(PipelineStep):
+    """Read and parse B3 BVBG086 gzipped XML file.
+
+    Extracts price report data from the BVBG086 XML format using XPath
+    based on field tags defined in the template.
+
+    The BVBG086 file contains market prices for various financial instruments
+    traded on B3. Each field in the template should have a 'tag' attribute
+    specifying the XML path to extract the value from.
+
+    Parameters:
+        None (uses field tags from context.fields)
+    """
+
+    def execute(self, _data: Any, context: PipelineContext) -> pd.DataFrame:
+        filepath = context.downloaded_file
+        logger.debug(f"Reading BVBG086 XML file: {filepath}")
+
+        # Parse the gzipped XML
+        with gzip.open(filepath) as f:
+            tree = etree.parse(f)
+
+        exchange = tree.getroot()[0][0]
+        ns_bvmf052 = {None: "urn:bvmf.052.01.xsd"}
+
+        # Extract creation date from BizGrpDtls
+        td_xpath = etree.ETXPath("//{urn:bvmf.052.01.xsd}BizGrpDtls")
+        td = td_xpath(exchange)
+        if len(td) == 0:
+            logger.error("Invalid XML: tag BizGrpDtls not found")
+            raise ValueError("Invalid XML: tag BizGrpDtls not found")
+
+        creation_date = td[0].find("CreDtAndTm", ns_bvmf052).text[:10]
+        logger.debug(f"Creation date extracted: {creation_date}")
+
+        # Find all price report nodes
+        price_reports = exchange.findall(
+            "{urn:bvmf.052.01.xsd}BizGrp/"
+            "{urn:bvmf.217.01.xsd}Document/"
+            "{urn:bvmf.217.01.xsd}PricRpt"
+        )
+        logger.debug(f"Found {len(price_reports)} price report nodes")
+
+        # Build tag mapping from fields
+        tags: dict[str, str] = {}
+        if context.fields:
+            for field in context.fields:
+                tag = field.get_attribute("tag")
+                if tag:
+                    tags[field.name] = tag
+            logger.debug(f"Field tags mapping: {list(tags.keys())}")
+        else:
+            logger.warning("No fields defined in context, DataFrame will be empty")
+
+        # Parse each price report node
+        instruments: list[dict[str, Any]] = []
+        ns_bvmf217 = {None: "urn:bvmf.217.01.xsd"}
+
+        for node in price_reports:
+            data: dict[str, Any] = {}
+            for field_name, tag_path in tags.items():
+                elements = node.findall(tag_path, ns_bvmf217)
+                data[field_name] = elements[0].text if elements else None
+            instruments.append(data)
+
+        logger.info(f"Parsed {len(instruments)} instruments from BVBG086")
+        return pd.DataFrame(instruments)
