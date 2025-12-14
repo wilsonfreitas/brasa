@@ -14,7 +14,7 @@ brasa.download_marketdata("b3-bvbg028", refdate=period)
 
 brasa.download_marketdata("b3-bvbg086", refdate=period)
 
-brasa.download_marketdata("b3-futures-settlement-prices", refdate=period)
+# brasa.download_marketdata("b3-futures-settlement-prices", refdate=period)
 
 brasa.download_marketdata("b3-cotahist-daily", refdate=period)
 
