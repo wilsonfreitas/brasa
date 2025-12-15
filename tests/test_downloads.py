@@ -86,6 +86,7 @@ def test_download_marketdata_b3_url_encoded_with_null_argument():
     # assert len(meta.downloaded_files) == 1
 
 
+@pytest.mark.skip(reason="Resource no longer available")
 def test_download_settlement_prices():
     meta = CacheMetadata("b3-futures-settlement-prices")
     _download_marketdata(meta, refdate=datetime(2023, 5, 10))
