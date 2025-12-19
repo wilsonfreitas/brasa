@@ -16,6 +16,7 @@ from .registry import StepRegistry
 
 if TYPE_CHECKING:
     from brasa.engine.cache import CacheMetadata
+    from brasa.engine.template import DatasetConfig
     from brasa.fieldset_schema import Fieldset
 
     from .step import PipelineStep
@@ -43,11 +44,13 @@ class ReaderPipeline:
         self.steps = steps
 
     @classmethod
-    def from_config(cls, config: list[dict[str, Any]]) -> ReaderPipeline:
+    def from_config(cls, config: dict[str, Any] | list) -> ReaderPipeline:
         """Create a pipeline from YAML configuration.
 
         Args:
-            config: List of step configurations from YAML.
+            config: Pipeline configuration from YAML. Can be either:
+                - A dict with a 'steps' key containing a list of step names or configs
+                - A list of step configurations (for backward compatibility)
 
         Returns:
             Configured pipeline instance.
@@ -55,14 +58,26 @@ class ReaderPipeline:
         Raises:
             ValueError: If any step configuration is invalid.
         """
+        # Handle dict with 'steps' key
+        step_list = config.get("steps", []) if isinstance(config, dict) else config
+
         steps = []
-        for step_config in config:
-            if "step" not in step_config:
+        for step_config in step_list:
+            # Support both string step names and dict configurations
+            if isinstance(step_config, str):
+                step_name = step_config
+                step = StepRegistry.create(step_name, {})
+            elif isinstance(step_config, dict):
+                if "step" not in step_config:
+                    raise ValueError(
+                        f"Step configuration must have a 'step' key: {step_config}"
+                    )
+                step_name = step_config["step"]
+                step = StepRegistry.create(step_name, step_config)
+            else:
                 raise ValueError(
-                    f"Step configuration must have a 'step' key: {step_config}"
+                    f"Invalid step configuration type: {type(step_config)}"
                 )
-            step_name = step_config["step"]
-            step = StepRegistry.create(step_name, step_config)
             steps.append(step)
         return cls(steps)
 
@@ -71,6 +86,7 @@ class ReaderPipeline:
         meta: CacheMetadata,
         reader_config: dict[str, Any],
         fields: Fieldset | None = None,
+        datasets: dict[str, DatasetConfig] | None = None,
         template_id: str = "",
     ) -> pd.DataFrame | dict[str, pd.DataFrame]:
         """Execute the pipeline and return the result.
@@ -82,6 +98,7 @@ class ReaderPipeline:
             meta: Cache metadata with file paths and download context.
             reader_config: Reader configuration from template.
             fields: Optional field definitions for type conversion.
+            datasets: Optional dataset configurations for multi-output templates.
             template_id: The template ID being processed.
 
         Returns:
@@ -94,6 +111,7 @@ class ReaderPipeline:
             meta=meta,
             reader_config=reader_config,
             fields=fields,
+            datasets=datasets,
             template_id=template_id,
         )
 

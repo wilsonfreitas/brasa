@@ -190,12 +190,27 @@ class CacheManager(Singleton):
         return folder
 
     def db_folders(self, template: MarketDataTemplate) -> dict:
-        """Get database folders for a multi-output template."""
+        """Get database folders for a multi-output template.
+
+        Supports both new datasets attribute and legacy reader.multi.
+        For datasets: uses output names directly as folder suffixes.
+        For legacy multi: uses the mapped output names as folder suffixes.
+        """
         db_folders = {}
-        for name, val in template.reader.multi.items():
-            folder = str(Path(self._db_folder) / f"{template.id}-{val}")
-            Path(self.cache_path(folder)).mkdir(parents=True, exist_ok=True)
-            db_folders[name] = folder
+
+        if template.datasets:
+            # New approach: use datasets output names directly
+            for output_name in template.datasets:
+                folder = str(Path(self._db_folder) / f"{template.id}-{output_name}")
+                Path(self.cache_path(folder)).mkdir(parents=True, exist_ok=True)
+                db_folders[output_name] = folder
+        elif template.reader.multi:
+            # Legacy fallback: use multi mapping (XML tag -> output name)
+            for name, val in template.reader.multi.items():
+                folder = str(Path(self._db_folder) / f"{template.id}-{val}")
+                Path(self.cache_path(folder)).mkdir(parents=True, exist_ok=True)
+                db_folders[name] = folder
+
         return db_folders
 
     def create_download_folder(self, meta: CacheMetadata):

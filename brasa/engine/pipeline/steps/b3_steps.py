@@ -175,3 +175,97 @@ class B3ReadBVBG086XmlStep(PipelineStep):
 
         logger.info(f"Parsed {len(instruments)} instruments from BVBG086")
         return pd.DataFrame(instruments)
+
+
+@StepRegistry.register("b3_read_bvbg087_xml")
+class B3ReadBVBG087XmlStep(PipelineStep):
+    """Read and parse B3 BVBG087 gzipped XML file.
+
+    Parses the file ONCE and returns Dict[str, DataFrame] for each
+    index type. The output keys are the dataset output names (e.g., 'indexes_info')
+    rather than the XML tags (e.g., 'IndxInf').
+
+    The BVBG087 file contains index information including:
+    - IndxInf: Market indexes (IBOV, IFIX, etc.)
+    - IOPVInf: Indicative Optimized Portfolio Value for ETFs
+    - BDRInf: BDR reference prices
+
+    Each field in the dataset fieldset should have a 'tag' attribute
+    specifying the XML path to extract the value from.
+
+    Parameters:
+        None (uses datasets configuration from context)
+    """
+
+    def _smart_find(self, node, xpath: str, ns: dict) -> str | None:
+        """Safely find an element and return its text."""
+        try:
+            element = node.find(xpath, ns)
+            return element.text if element is not None else None
+        except Exception:
+            return None
+
+    def _build_field_tags(self, fieldset) -> dict[str, str]:
+        """Build field name to XML tag mapping from fieldset."""
+        tags: dict[str, str] = {}
+        if fieldset:
+            for field in fieldset:
+                tag = field.get_attribute("tag")
+                if tag:
+                    tags[field.name] = tag
+        return tags
+
+    def execute(self, _data: Any, context: PipelineContext) -> dict[str, pd.DataFrame]:
+        filepath = context.downloaded_file
+        logger.debug(f"Reading BVBG087 XML file: {filepath}")
+
+        # Parse the gzipped XML
+        with gzip.open(filepath) as f:
+            tree = etree.parse(f)
+
+        ns = {None: "urn:bvmf.218.01.xsd"}
+        exchange = tree.getroot()[0][0]
+
+        # Extract trade date
+        td_xpath = etree.ETXPath("//{urn:bvmf.218.01.xsd}TradDt")
+        td = td_xpath(exchange)
+        if len(td) == 0:
+            logger.error("Invalid XML: tag TradDt not found")
+            raise ValueError("Invalid XML: tag TradDt not found")
+
+        trade_date = td[0].find("Dt", ns).text
+        logger.debug(f"Trade date extracted: {trade_date}")
+
+        # Parse each dataset from context
+        results: dict[str, pd.DataFrame] = {}
+
+        if not context.datasets:
+            logger.warning("No datasets defined in context, returning empty results")
+            return results
+
+        for output_name, dataset_config in context.datasets.items():
+            xml_tag = dataset_config.tag
+            fieldset = dataset_config.fields
+
+            # Build field tag mapping from fieldset
+            field_tags = self._build_field_tags(fieldset)
+            logger.debug(f"Field tags for {output_name}: {list(field_tags.keys())}")
+
+            records: list[dict[str, Any]] = []
+            _xpath = etree.ETXPath(f"//{{urn:bvmf.218.01.xsd}}{xml_tag}")
+
+            for node in _xpath(exchange):
+                data: dict[str, Any] = {
+                    "refdate": trade_date,
+                }
+                for field_name, xpath in field_tags.items():
+                    data[field_name] = self._smart_find(node, xpath, ns)
+                records.append(data)
+
+            results[output_name] = pd.DataFrame(records)
+            logger.debug(
+                f"Parsed {len(records)} records for {output_name} (tag: {xml_tag})"
+            )
+
+        logger.info(f"Parsed BVBG087 with {len(results)} datasets")
+        return results

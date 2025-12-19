@@ -14,11 +14,161 @@ downloader:
 reader:
   locale: en
   function: brasa.readers.read_b3_bvbg087
+  # Legacy function still used for backward compatibility
   multi:
     IndxInf: indexes_info
     IOPVInf: iopv_info
     BDRInf: bdr_info
+  pipeline:
+    steps:
+      - b3_read_bvbg087_xml
+      - apply_fields_multi
 writer:
   partitioning: [refdate]
-fields:
-  - name: ~
+datasets:
+  indexes_info:
+    tag: IndxInf
+    fields:
+      - name: refdate
+        description: Reference date
+        type: date
+      - name: symbol
+        description: Ticker symbol
+        tag: SctyInf/SctyId/TckrSymb
+        type: string
+      - name: security_id
+        description: Security ID
+        tag: SctyInf/FinInstrmId/OthrId/Id
+        type: integer
+      - name: security_proprietary
+        description: Security proprietary code
+        tag: SctyInf/FinInstrmId/OthrId/Tp/Prtry
+        type: integer
+      - name: security_market
+        description: Security market code
+        tag: SctyInf/FinInstrmId/PlcOfListg/MktIdrCd
+        type: string
+      - name: asset_desc
+        description: Asset description
+        tag: AsstDesc
+        type: string
+      - name: settlement_price
+        description: Settlement price
+        tag: SttlmVal
+        type: numeric
+      - name: open_price
+        description: Open price
+        tag: SctyInf/OpngPric
+        type: numeric
+      - name: min_price
+        description: Minimum price
+        tag: SctyInf/MinPric
+        type: numeric
+      - name: max_price
+        description: Maximum price
+        tag: SctyInf/MaxPric
+        type: numeric
+      - name: average_price
+        description: Average price
+        tag: SctyInf/TradAvrgPric
+        type: numeric
+      - name: close_price
+        description: Close price
+        tag: SctyInf/ClsgPric
+        type: numeric
+      - name: last_price
+        description: Last price
+        tag: SctyInf/IndxVal
+        type: numeric
+      - name: oscillation_val
+        description: Oscillation value
+        tag: SctyInf/OscnVal
+        type: numeric
+      - name: rising_shares_number
+        description: Number of rising shares
+        tag: RsngShrsNb
+        type: integer
+      - name: falling_shares_number
+        description: Number of falling shares
+        tag: FlngShrsNb
+        type: integer
+      - name: stable_shares_number
+        description: Number of stable shares
+        tag: StblShrsNb
+        type: integer
+  iopv_info:
+    tag: IOPVInf
+    fields:
+      - name: refdate
+        description: Reference date
+        type: date
+      - name: symbol
+        description: Ticker symbol
+        tag: SctyId/TckrSymb
+        type: string
+      - name: security_id
+        description: Security ID
+        tag: FinInstrmId/OthrId/Id
+        type: integer
+      - name: security_proprietary
+        description: Security proprietary code
+        tag: FinInstrmId/OthrId/Tp/Prtry
+        type: integer
+      - name: security_market
+        description: Security market code
+        tag: FinInstrmId/PlcOfListg/MktIdrCd
+        type: string
+      - name: open_price
+        description: Open price
+        tag: OpngPric
+        type: numeric
+      - name: min_price
+        description: Minimum price
+        tag: MinPric
+        type: numeric
+      - name: max_price
+        description: Maximum price
+        tag: MaxPric
+        type: numeric
+      - name: average_price
+        description: Average price
+        tag: TradAvrgPric
+        type: numeric
+      - name: close_price
+        description: Close price
+        tag: ClsgPric
+        type: numeric
+      - name: last_price
+        description: Last price
+        tag: IndxVal
+        type: numeric
+      - name: oscillation_val
+        description: Oscillation value
+        tag: OscnVal
+        type: numeric
+  bdr_info:
+    tag: BDRInf
+    fields:
+      - name: refdate
+        description: Reference date
+        type: date
+      - name: symbol
+        description: Ticker symbol
+        tag: SctyId/TckrSymb
+        type: string
+      - name: security_id
+        description: Security ID
+        tag: FinInstrmId/OthrId/Id
+        type: integer
+      - name: security_proprietary
+        description: Security proprietary code
+        tag: FinInstrmId/OthrId/Tp/Prtry
+        type: integer
+      - name: security_market
+        description: Security market code
+        tag: FinInstrmId/PlcOfListg/MktIdrCd
+        type: string
+      - name: ref_price
+        description: Reference price
+        tag: RefPric
+        type: numeric

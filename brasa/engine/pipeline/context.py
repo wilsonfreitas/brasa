@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from brasa.engine.cache import CacheMetadata
+    from brasa.engine.template import DatasetConfig
     from brasa.fieldset_schema import Fieldset
 
 
@@ -25,6 +26,7 @@ class PipelineContext:
         meta: Cache metadata containing file paths and download context.
         reader_config: Reader configuration from the template (encoding, decimal, etc.).
         fields: Field definitions from the template for type conversion.
+        datasets: Dataset configurations for multi-output templates.
         intermediate_results: Named results that steps can store for later use.
         template_id: The ID of the template being processed.
     """
@@ -32,6 +34,7 @@ class PipelineContext:
     meta: CacheMetadata
     reader_config: dict[str, Any]
     fields: Fieldset | None = None
+    datasets: dict[str, DatasetConfig] | None = None
     template_id: str = ""
     intermediate_results: dict[str, Any] = field(default_factory=dict)
 
@@ -67,6 +70,42 @@ class PipelineContext:
             The configuration value or default.
         """
         return self.reader_config.get(key, default)
+
+    def get_dataset_fieldset(self, dataset_name: str) -> Fieldset | None:
+        """Get the fieldset for a specific dataset.
+
+        Args:
+            dataset_name: The output name of the dataset.
+
+        Returns:
+            The Fieldset for the dataset, or falls back to self.fields.
+        """
+        if self.datasets and dataset_name in self.datasets:
+            return self.datasets[dataset_name].fields
+        return self.fields
+
+    def get_dataset_tag(self, dataset_name: str) -> str | None:
+        """Get the source tag for a dataset.
+
+        Args:
+            dataset_name: The output name of the dataset.
+
+        Returns:
+            The source tag (e.g., XML tag) for the dataset, or None.
+        """
+        if self.datasets and dataset_name in self.datasets:
+            return self.datasets[dataset_name].tag
+        return None
+
+    def get_tag_to_dataset_mapping(self) -> dict[str, str]:
+        """Get a mapping from source tags to dataset output names.
+
+        Returns:
+            Dictionary mapping tags to output names, e.g., {'IndxInf': 'indexes_info'}.
+        """
+        if self.datasets:
+            return {cfg.tag: name for name, cfg in self.datasets.items()}
+        return {}
 
     @property
     def encoding(self) -> str:

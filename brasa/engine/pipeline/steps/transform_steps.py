@@ -34,6 +34,42 @@ class ApplyFieldsStep(PipelineStep):
         return adapter.apply_types(data)
 
 
+@StepRegistry.register("apply_fields_multi")
+class ApplyFieldsMultiStep(PipelineStep):
+    """Apply field definitions to multiple DataFrames in a dict.
+
+    For multi-output pipelines, applies the corresponding fieldset to each
+    dataset using the dataset configurations from context.
+
+    Parameters:
+        errors: How to handle conversion errors ('raise', 'coerce', 'ignore')
+    """
+
+    def execute(
+        self, data: dict[str, pd.DataFrame], context: PipelineContext
+    ) -> dict[str, pd.DataFrame]:
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"apply_fields_multi expects Dict[str, DataFrame], got {type(data).__name__}"
+            )
+
+        from brasa.fieldset_schema import PandasAdapter
+
+        errors = self.get_param("errors", "coerce")
+        result: dict[str, pd.DataFrame] = {}
+
+        for dataset_name, df in data.items():
+            fieldset = context.get_dataset_fieldset(dataset_name)
+            if fieldset and len(fieldset) > 0:
+                adapter = PandasAdapter(fieldset, errors=errors)
+                result[dataset_name] = adapter.apply_types(df)
+            else:
+                # No fieldset defined, pass through unchanged
+                result[dataset_name] = df
+
+        return result
+
+
 @StepRegistry.register("parse_numeric")
 class ParseNumericStep(PipelineStep):
     """Parse string columns as numeric values.

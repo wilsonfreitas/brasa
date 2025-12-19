@@ -6,6 +6,7 @@ that define how to download, read, and write market data from various sources.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any
@@ -20,6 +21,21 @@ from .core import load_function_by_name
 
 if TYPE_CHECKING:
     from .cache import CacheMetadata
+
+
+@dataclass
+class DatasetConfig:
+    """Configuration for a single dataset in a multi-output template.
+
+    Attributes:
+        name: The output name for this dataset (e.g., 'indexes_info')
+        tag: The source identifier/XML tag (e.g., 'IndxInf')
+        fields: Field definitions for this dataset
+    """
+
+    name: str
+    tag: str
+    fields: Fieldset
 
 
 class TemplatePart:
@@ -61,6 +77,7 @@ class MarketDataReader:
         self.multi = reader.get("multi", {})
         self.parts: list | None = None
         self.fields: Fieldset | None = None
+        self.datasets: dict[str, DatasetConfig] | None = None
         self.output_filename_format = reader.get("output-filename-format", "%Y-%m-%d")
 
         # Check for pipeline-based reader (new approach)
@@ -89,6 +106,18 @@ class MarketDataReader:
         """Set field definitions for the reader."""
         self.fields = fields
 
+    def set_datasets(self, datasets: dict[str, DatasetConfig]) -> None:
+        """Set dataset configurations for multi-output reading.
+
+        Also builds the multi mapping from datasets (tag -> output_name).
+
+        Args:
+            datasets: Dictionary mapping output names to DatasetConfig objects.
+        """
+        self.datasets = datasets
+        # Build multi mapping from datasets: tag -> output_name
+        self.multi = {cfg.tag: name for name, cfg in datasets.items()}
+
     def get_attribute(self, key: str, default: Any = None) -> Any:
         """Get an attribute from the reader configuration."""
         return self.attributes.get(key, default)
@@ -108,6 +137,7 @@ class MarketDataReader:
                 meta=meta,
                 reader_config=self.attributes,
                 fields=self.fields,
+                datasets=self.datasets,
                 template_id=self._template_id,
             )
         elif self.read_function is not None:
@@ -211,6 +241,57 @@ class MarketDataTemplate:
         self.is_etl = False
         self.template = self.load_template()
 
+    def _process_template_section(
+        self, section_name: str, section_data: Any, template: dict
+    ) -> None:
+        """Process a single section of the template configuration."""
+        self.__dict__[section_name] = section_data
+
+        if section_name == "downloader":
+            self.has_downloader = True
+            self.downloader = MarketDataDownloader(section_data)
+        elif section_name == "reader":
+            self.has_reader = True
+            self.reader = MarketDataReader(section_data, template_id=self.id)
+        elif section_name == "writer":
+            self.writer = MarketDataWriter(section_data)
+        elif section_name == "fields":
+            self._process_fields(section_data)
+        elif section_name == "datasets":
+            self._process_datasets(section_data)
+        elif section_name == "parts":
+            self.has_parts = True
+            self.parts = section_data
+        elif section_name == "etl":
+            self.etl = MarketDataETL(section_data, template["id"])
+            self.is_etl = True
+
+    def _process_fields(self, fields_data: list) -> None:
+        """Process the fields section of the template."""
+        valid_fields = [f for f in fields_data if f.get("name") is not None]
+        flds = [Field.from_dict(f) for f in valid_fields]
+        fs = Fieldset()
+        fs.add_fields(*flds)
+        self.fields = fs
+
+    def _process_datasets(self, datasets_data: dict) -> None:
+        """Process the datasets section of the template."""
+        self.datasets = {}
+        for dataset_name, dataset_config in datasets_data.items():
+            tag = dataset_config.get("tag", dataset_name)
+            raw_fields = dataset_config.get("fields", [])
+            valid_fields = [f for f in raw_fields if f.get("name") is not None]
+            flds = [Field.from_dict(f) for f in valid_fields]
+            fs = Fieldset()
+            fs.add_fields(*flds)
+            self.datasets[dataset_name] = DatasetConfig(
+                name=dataset_name,
+                tag=tag,
+                fields=fs,
+            )
+        # Clear top-level fields when using datasets
+        self.fields = None
+
     def load_template(self) -> dict:
         """Load and parse the YAML template file."""
         with Path(self.template_path).open(encoding="utf-8") as f:
@@ -219,33 +300,19 @@ class MarketDataTemplate:
         # First pass: extract the template ID
         self.id = template.get("id", "")
 
+        # Initialize datasets to None
+        self.datasets: dict[str, DatasetConfig] | None = None
+
         # Second pass: process all template sections
-        for n in template:
-            self.__dict__[n] = template[n]
-            if n == "downloader":
-                self.has_downloader = True
-                self.downloader = MarketDataDownloader(template[n])
-            elif n == "reader":
-                self.has_reader = True
-                self.reader = MarketDataReader(template[n], template_id=self.id)
-            elif n == "writer":
-                self.writer = MarketDataWriter(template[n])
-            elif n == "fields":
-                # Filter out null fields (where name is None/null)
-                valid_fields = [f for f in template[n] if f.get("name") is not None]
-                flds = [Field.from_dict(f) for f in valid_fields]
-                fs = Fieldset()
-                fs.add_fields(*flds)
-                self.fields = fs
-            elif n == "parts":
-                self.has_parts = True
-                self.parts = template[n]
-            elif n == "etl":
-                self.etl = MarketDataETL(template[n], template["id"])
-                self.is_etl = True
+        for section_name, section_data in template.items():
+            self._process_template_section(section_name, section_data, template)
+
+        # Configure reader with fields/datasets/parts
         if self.has_reader:
             if self.has_parts:
                 self.reader.set_parts(self.parts)
+            elif self.datasets is not None:
+                self.reader.set_datasets(self.datasets)
             else:
                 self.reader.set_fields(self.fields)
         return template

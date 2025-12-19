@@ -98,6 +98,72 @@ def save_partitioned_parquet_file(
     meta.add_processed_file(processed_files_name, folder)
 
 
+def _get_schema_from_fields(fields):
+    """Generate PyArrow schema from fields if available.
+
+    Args:
+        fields: Field definitions to convert to schema.
+
+    Returns:
+        PyArrow schema or None if generation fails.
+    """
+    if not fields:
+        return None
+    try:
+        adapter = PyArrowAdapter(fields, verbose_warnings=False)
+        return adapter.get_target_schema()
+    except Exception:
+        return None
+
+
+def _process_multi_dataset_output(
+    meta: CacheMetadata, df: dict, template, man: CacheManager
+) -> None:
+    """Process multi-dataset dictionary output.
+
+    Args:
+        meta: Cache metadata to update.
+        df: Dictionary of DataFrames.
+        template: Template configuration.
+        man: CacheManager instance.
+    """
+    db_folder: dict = man.db_folders(template)
+
+    if template.datasets:
+        # New approach: use datasets for per-dataset schema and metadata
+        for output_name, dx in df.items():
+            if dx.shape[0] > 0:
+                dataset_config = template.datasets[output_name]
+                schema = _get_schema_from_fields(
+                    dataset_config.fields if dataset_config.fields else None
+                )
+                save_partitioned_parquet_file(
+                    meta,
+                    db_folder[output_name],
+                    output_name,
+                    dx,
+                    template.writer.partitioning,
+                    schema=schema,
+                )
+    elif template.reader.multi:
+        # Legacy fallback: use multi mapping (XML tag -> output name)
+        schema = _get_schema_from_fields(
+            template.fields if hasattr(template, "fields") else None
+        )
+
+        for name, dx in df.items():
+            if dx.shape[0] > 0:
+                pfn = template.reader.multi[name]
+                save_partitioned_parquet_file(
+                    meta,
+                    db_folder[name],
+                    pfn,
+                    dx,
+                    template.writer.partitioning,
+                    schema=schema,
+                )
+
+
 def _read_marketdata(meta: CacheMetadata) -> None:
     """Read downloaded files and save as processed parquet files.
 
@@ -111,30 +177,13 @@ def _read_marketdata(meta: CacheMetadata) -> None:
     df = template.reader.read(meta)
     man = CacheManager()
 
-    # Generate schema from template fields if available
-    schema = None
-    if hasattr(template, "fields") and template.fields:
-        try:
-            adapter = PyArrowAdapter(template.fields, verbose_warnings=False)
-            schema = adapter.get_target_schema()
-        except Exception:
-            # Fall back to inferred schema if conversion fails
-            schema = None
-
-    if isinstance(df, dict) and bool(template.reader.multi):
-        db_folder: dict = man.db_folders(template)
-        for name, dx in df.items():
-            if dx.shape[0] > 0:
-                pfn = template.reader.multi[name]
-                save_partitioned_parquet_file(
-                    meta,
-                    db_folder[name],
-                    pfn,
-                    dx,
-                    template.writer.partitioning,
-                    schema=schema,
-                )
-    elif isinstance(df, pd.DataFrame) and not template.reader.multi:
+    if isinstance(df, dict):
+        _process_multi_dataset_output(meta, df, template, man)
+    elif isinstance(df, pd.DataFrame):
+        # Single dataset output
+        schema = _get_schema_from_fields(
+            template.fields if hasattr(template, "fields") else None
+        )
         folder = man.cache_path(man.db_folder(template))
         save_partitioned_parquet_file(
             meta, folder, "data", df, template.writer.partitioning, schema=schema
