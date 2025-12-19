@@ -137,9 +137,10 @@ def _process_multi_dataset_output(
                 schema = _get_schema_from_fields(
                     dataset_config.fields if dataset_config.fields else None
                 )
+                folder = man.cache_path(db_folder[output_name])
                 save_partitioned_parquet_file(
                     meta,
-                    db_folder[output_name],
+                    folder,
                     output_name,
                     dx,
                     template.writer.partitioning,
