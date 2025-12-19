@@ -1,7 +1,7 @@
 id: b3-futures-settlement-prices
 filename: ~
 filetype: CUSTOM
-description: Preços de Ajustes Diários de Contratos Futuros
+description: Preços de Ajustes Diários de Contratos Futuros da B3
 locale: pt
 downloader:
   verify_ssl: false
@@ -12,12 +12,57 @@ downloader:
   args:
     refdate: ~
 reader:
-  function: brasa.readers.read_b3_futures_settlement_prices
+  encoding: latin1
   decimal: ","
   thousands: "."
-  encoding: latin1
-  html_attrs:
-    id: tblDadosAjustes
+  pipeline:
+    # Step 1: Read the HTML file and extract tables
+    - step: read_html
+      attrs:
+        id: tblDadosAjustes
+
+    # Step 2: Select the first (and only) table
+    - step: first_table
+
+    # Step 3: Set column names
+    - step: set_columns
+      names:
+        - commodity
+        - maturity_code
+        - previous_price
+        - price
+        - price_change
+        - settlement_value
+
+    # Step 4: Parse the reference date from HTML and store in context
+    - step: b3_parse_refdate_from_html
+      xpath: "//input[@id='dData1']"
+      attribute: value
+      store_as: refdate
+
+    # Step 5: Add refdate column from context
+    - step: add_column
+      name: refdate
+      from_context: refdate
+
+    # Step 6: Forward fill commodity names (they only appear in first row of group)
+    - step: b3_forward_fill_commodity
+      column: commodity
+
+    # Step 7: Extract just the commodity code from the name
+    - step: b3_extract_commodity_code
+      column: commodity
+
+    # Step 8: Create the symbol by concatenating commodity and maturity
+    - step: b3_create_symbol
+      commodity_column: commodity
+      maturity_column: maturity_code
+      output_column: symbol
+
+    # Step 9: Apply field type conversions
+    - step: apply_fields
+      errors: coerce
+
 writer:
   partitioning: [refdate]
 fields:
