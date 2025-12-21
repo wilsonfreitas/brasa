@@ -1,0 +1,23 @@
+# Pipeline-based ETL template for DI1 futures only
+# Demonstrates filtering and consolidation
+id: b3-futures-di1-consolidated
+description: DI1 futures contracts consolidated into a single file
+
+etl:
+  pipeline:
+    # Step 1: Load the source dataset
+    - step: load
+      input: b3-futures-settlement-prices
+
+    # Step 2: Filter to DI1 contracts only
+    - step: filter
+      where:
+        commodity: "DI1"
+
+    # Step 3: Sort by date and maturity
+    - step: sort
+      by: [refdate, maturity_code]
+
+writer:
+  # Empty partitioning = single file output
+  partitioning: []

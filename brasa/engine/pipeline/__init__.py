@@ -5,7 +5,7 @@ transforming market data files. Instead of monolithic reader functions,
 data processing is broken down into reusable steps that can be combined
 in YAML templates.
 
-Example YAML configuration:
+Example YAML configuration for reader pipeline:
     reader:
       pipeline:
         - step: read_html
@@ -16,18 +16,54 @@ Example YAML configuration:
         - step: set_columns
           names: [col1, col2, col3]
         - step: apply_fields
+
+Example YAML configuration for ETL pipeline:
+    etl:
+      pipeline:
+        - step: load
+          input: source-dataset
+        - step: filter
+          where: { commodity: "DI1" }
+    writer:
+      partitioning: []
+
+Shared Transforms:
+    The `shared_transforms` module provides reusable transformation functions
+    that can be used by both reader and ETL pipelines:
+    - filter_data, select_columns, sort_data
+    - drop_columns, rename_columns
+    - drop_duplicates, fill_na, to_dataframe
 """
 
 # Import built-in steps to register them
-from . import steps  # noqa: F401
+# Shared transforms for code reuse between pipelines
+from . import (
+    shared_transforms,
+    steps,  # noqa: F401
+)
 from .context import PipelineContext
+from .context_protocol import PipelineContextProtocol
+
+# ETL Pipeline components
+from .etl_context import ETLPipelineContext
+from .etl_executor import ETLPipeline
+from .etl_steps import ETLPipelineStep, ETLStepRegistry
 from .executor import ReaderPipeline
 from .registry import StepRegistry
 from .step import PipelineStep
 
 __all__ = [
+    # ETL pipeline
+    "ETLPipeline",
+    "ETLPipelineContext",
+    "ETLPipelineStep",
+    "ETLStepRegistry",
+    # Reader pipeline
     "PipelineContext",
+    # Shared
+    "PipelineContextProtocol",
     "PipelineStep",
     "ReaderPipeline",
     "StepRegistry",
+    "shared_transforms",
 ]

@@ -48,13 +48,50 @@ class MarketDataETL:
     """Configuration for ETL (Extract-Transform-Load) processes.
 
     Wraps ETL configuration from a template and loads the processing function.
+    Supports both function-based ETL (legacy) and pipeline-based ETL (new).
     """
 
     def __init__(self, etl: dict, template_id: str) -> None:
         for n, v in etl.items():
             self.__dict__[n] = v
         self.template_id = template_id
-        self.process_function = load_function_by_name(etl["function"])
+        self._is_pipeline = "pipeline" in etl
+        self._pipeline = None
+
+        if self._is_pipeline:
+            # New pipeline-based ETL
+            from .pipeline.etl_executor import ETLPipeline
+
+            self._pipeline = ETLPipeline.from_config(etl["pipeline"])
+            self.process_function = None
+        else:
+            # Legacy function-based ETL
+            self.process_function = load_function_by_name(etl["function"])
+
+    @property
+    def is_pipeline(self) -> bool:
+        """Check if this ETL uses the pipeline approach."""
+        return self._is_pipeline
+
+    @property
+    def pipeline(self):
+        """Get the ETL pipeline (if pipeline-based)."""
+        return self._pipeline
+
+    def get_input_datasets(self) -> list[str]:
+        """Get the list of input dataset names this ETL depends on.
+
+        Returns:
+            List of dataset names that are inputs to this ETL.
+        """
+        if self._pipeline:
+            return self._pipeline.get_input_datasets()
+        # For function-based ETL, try common attribute names
+        inputs = []
+        for attr in ["input_dataset", "futures_dataset", "bcb_dataset"]:
+            if hasattr(self, attr):
+                inputs.append(getattr(self, attr))
+        return inputs
 
 
 class MarketDataReader:

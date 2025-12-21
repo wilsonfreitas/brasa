@@ -74,16 +74,93 @@ def test_template_loading():
     """Test loading a template with pipeline configuration."""
     from brasa.engine.template import retrieve_template
 
-    # Load the original template (legacy function-based)
-    template = retrieve_template("b3-futures-settlement-prices")
-    assert template.id == "b3-futures-settlement-prices"
+    # Load a template with legacy function-based reader (no pipeline)
+    template = retrieve_template("b3-cdi")
+    assert template.id == "b3-cdi"
     assert template.has_reader
     assert not template.reader.has_pipeline
     assert template.reader.read_function is not None
 
-    # Load the new pipeline-based template
-    template = retrieve_template("b3-futures-settlement-prices-pipeline")
-    assert template.id == "b3-futures-settlement-prices-pipeline"
+    # Load a template with pipeline-based reader
+    template = retrieve_template("b3-futures-settlement-prices")
+    assert template.id == "b3-futures-settlement-prices"
     assert template.has_reader
     assert template.reader.has_pipeline
     assert template.reader.read_function is None
+
+
+def test_etl_pipeline_template_loading():
+    """Test loading an ETL template with pipeline configuration."""
+    from brasa.engine.template import retrieve_template
+
+    # Load a legacy function-based ETL template
+    template = retrieve_template("b3-futures-dol")
+    assert template.id == "b3-futures-dol"
+    assert template.is_etl
+    assert not template.etl.is_pipeline
+    assert template.etl.process_function is not None
+    assert "b3-futures-settlement-prices" in template.etl.get_input_datasets()
+
+    # Load a new pipeline-based ETL template
+    template = retrieve_template("b3-futures")
+    assert template.id == "b3-futures"
+    assert template.is_etl
+    assert template.etl.is_pipeline
+    assert template.etl.pipeline is not None
+    assert len(template.etl.pipeline) == 1
+    assert "b3-futures-settlement-prices" in template.etl.get_input_datasets()
+
+
+def test_etl_step_registry():
+    """Test the ETL step registry."""
+    from brasa.engine.pipeline import ETLStepRegistry
+
+    # Check that all built-in steps are registered
+    steps = ETLStepRegistry.get_all_steps()
+    assert "load" in steps
+    assert "filter" in steps
+    assert "select" in steps
+    assert "sort" in steps
+    assert "to_dataframe" in steps
+    # New steps using shared transforms
+    assert "drop_columns" in steps
+    assert "rename_columns" in steps
+    assert "drop_duplicates" in steps
+    assert "fill_na" in steps
+
+
+def test_shared_transforms():
+    """Test that shared transforms can be used directly."""
+    import pandas as pd
+
+    from brasa.engine.pipeline import shared_transforms
+
+    # Create test data
+    df = pd.DataFrame(
+        {
+            "a": [1, 2, 3, 2, 1],
+            "b": ["x", "y", "z", "y", "x"],
+            "c": [10.0, 20.0, 30.0, 40.0, 50.0],
+        }
+    )
+
+    # Test filter_data
+    filtered = shared_transforms.filter_data(df, {"a": 2})
+    assert len(filtered) == 2
+
+    # Test select_columns
+    selected = shared_transforms.select_columns(df, ["a", "b"])
+    assert list(selected.columns) == ["a", "b"]
+
+    # Test sort_data
+    sorted_df = shared_transforms.sort_data(df, "c", descending=True)
+    assert sorted_df["c"].iloc[0] == 50.0
+
+    # Test drop_duplicates
+    deduped = shared_transforms.drop_duplicates(df, subset=["a"])
+    assert len(deduped) == 3
+
+    # Test rename_columns
+    renamed = shared_transforms.rename_columns(df, {"a": "alpha"})
+    assert "alpha" in renamed.columns
+    assert "a" not in renamed.columns

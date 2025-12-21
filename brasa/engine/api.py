@@ -150,7 +150,9 @@ def process_etl(template_name: str) -> None:
     """Run an ETL process defined in a template.
 
     ETL templates define custom processing logic that transforms
-    multiple data sources into derived datasets.
+    multiple data sources into derived datasets. Supports both:
+    - Function-based ETL (legacy): Uses a Python function for transformation.
+    - Pipeline-based ETL (new): Uses declarative pipeline steps.
 
     Args:
         template_name: Name of the ETL template to run.
@@ -166,4 +168,16 @@ def process_etl(template_name: str) -> None:
     with progressbar.ProgressBar(max_value=1, widgets=widgets) as bar:
         bar.update(1)
         template = retrieve_template(template_name)
-        template.etl.process_function(template.etl)
+
+        if template.etl.is_pipeline:
+            # New pipeline-based ETL
+            writer = getattr(template, "writer", None)
+            fields = getattr(template, "fields", None)
+            template.etl.pipeline.execute_and_write(
+                template_id=template.id,
+                writer=writer,
+                fields=fields,
+            )
+        else:
+            # Legacy function-based ETL
+            template.etl.process_function(template.etl)
