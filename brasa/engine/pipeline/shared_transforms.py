@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 def filter_data(
     data: ds.Dataset | pd.DataFrame,
     where: dict[str, Any],
-) -> ds.Dataset | pd.DataFrame:
+) -> pd.DataFrame:
     """Filter rows based on conditions.
 
     Args:
@@ -33,7 +33,7 @@ def filter_data(
                Can be a single value or list of values (IN clause).
 
     Returns:
-        Filtered dataset or DataFrame.
+        Filtered DataFrame.
     """
     import pyarrow.compute as pc
 
@@ -46,7 +46,8 @@ def filter_data(
             else:
                 condition = pc.field(column) == value
             expr = condition if expr is None else expr & condition
-        return data.filter(expr) if expr else data
+        _data = data.to_table()
+        return (_data.filter(expr) if expr is not None else _data).to_pandas()
 
     elif isinstance(data, pd.DataFrame):
         # Filter pandas DataFrame
@@ -219,4 +220,127 @@ def fill_na(
         df = df.fillna(method=method)
     else:
         df = df.fillna(value)
+    return df
+
+
+def convert_future_maturity_codes_to_dates(
+    data: ds.Dataset | pd.DataFrame,
+    code_column: str,
+    date_column: str,
+    maturity_day: str = "first day",
+    calendar: str = "Actual",
+) -> pd.DataFrame:
+    """Convert futures maturity codes to actual dates.
+
+    Args:
+        data: Input dataset or DataFrame.
+        code_column: Column with maturity codes (e.g. 'H23').
+        date_column: Column to create with actual dates.
+        maturity_day: 'first day' or 'last day' of the month.
+        calendar: Business day calendar to use (default: Actual).
+
+    Returns:
+        DataFrame with new date column.
+    """
+
+    from bizdays import Calendar
+
+    from brasa.parsers.b3.futures_settlement_prices import maturity2date
+
+    cal: Any = Calendar.load(calendar)
+    df = to_dataframe(data)
+
+    df[date_column] = df[code_column].apply(
+        lambda x: maturity2date(x, cal, maturity_day)
+    )
+    return df
+
+
+def adjust_following_bizdays(
+    data: ds.Dataset | pd.DataFrame,
+    date_column: str,
+    adjusted_column: str,
+    calendar: str = "Actual",
+) -> pd.DataFrame:
+    """Convert futures maturity codes to actual dates.
+
+    Args:
+        data: Input dataset or DataFrame.
+        date_column: Column with dates to adjust.
+        adjusted_column: Column to create with adjusted dates.
+        calendar: Business day calendar to use (default: Actual).
+
+    Returns:
+        DataFrame with new date column.
+    """
+
+    from bizdays import Calendar
+
+    cal: Any = Calendar.load(calendar)
+    df = to_dataframe(data)
+
+    df[adjusted_column] = cal.following(df[date_column])
+    return df
+
+
+def calculate_bizdays(
+    data: ds.Dataset | pd.DataFrame,
+    start_date_column: str,
+    end_date_column: str,
+    bizdays_column: str,
+    calendar: str = "Actual",
+) -> pd.DataFrame:
+    """Calculate business days between two date columns.
+
+    Args:
+        data: Input dataset or DataFrame.
+        start_date_column: Column with start dates.
+        end_date_column: Column with end dates.
+        bizdays_column: Column to create with business days count.
+        calendar: Business day calendar to use (default: Actual).
+
+    Returns:
+        DataFrame with new bizdays column.
+    """
+
+    from bizdays import Calendar
+
+    cal: Any = Calendar.load(calendar)
+    df = to_dataframe(data)
+
+    df[bizdays_column] = cal.bizdays(
+        df[start_date_column],
+        df[end_date_column],
+    )
+    return df
+
+
+def calculate_implied_rate(
+    data: ds.Dataset | pd.DataFrame,
+    price_column: str,
+    implied_rate_column: str,
+    days_to_maturity_column: str,
+    compounding: str = "simple",
+    forward_price: float = 100_000,
+) -> pd.DataFrame:
+    """Calculate implied interest rate from futures prices.
+
+    Args:
+        data: Input dataset or DataFrame.
+        price_column: Column with futures prices.
+        settlement_column: Column with settlement prices.
+        days_to_maturity_column: Column with days to maturity.
+        implied_rate_column: Column to create with implied rates.
+    Returns:
+        DataFrame with new implied rate column.
+    """
+    df = to_dataframe(data)
+
+    if compounding == "simple":
+        t = df[days_to_maturity_column] / 360
+        df[implied_rate_column] = (forward_price / df[price_column] - 1) * (1 / t)
+    elif compounding == "discrete":
+        t = df[days_to_maturity_column] / 252
+        df[implied_rate_column] = (forward_price / df[price_column]) ** (1 / t) - 1
+
     return df

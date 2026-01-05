@@ -340,3 +340,104 @@ class FillNAStep(ETLPipelineStep):
         method = self.get_param("method")
         columns = self.get_param("columns")
         return shared_transforms.fill_na(data, value, method, columns)
+
+
+@ETLStepRegistry.register("future_maturity_to_date")
+class FutureMaturity2Date(ETLPipelineStep):
+    """Convert future maturity codes to actual dates.
+
+    Parameters:
+        code_column: Name of the column with future maturity codes.
+        date_column: Name of the output column for the converted dates.
+        maturity_day: Day of month for maturity date (default: first day, examples: 15th day, first bizday).
+        calendar: Business day calendar to use (default: Actual).
+    """
+
+    def execute(
+        self, data: ds.Dataset | pd.DataFrame, _context: ETLPipelineContext
+    ) -> pd.DataFrame:
+        """Convert future maturity codes to dates."""
+        code_column = self.require_param("code_column")
+        date_column = self.require_param("date_column")
+        maturity_day = self.get_param("maturity_day", "first day")
+        calendar = self.get_param("calendar", "Actual")
+        return shared_transforms.convert_future_maturity_codes_to_dates(
+            data, code_column, date_column, maturity_day, calendar
+        )
+
+
+@ETLStepRegistry.register("following_bizday")
+class AdjustFollowingBizdays(ETLPipelineStep):
+    """Adjust dates to the following business day.
+
+    Parameters:
+        date_column: Name of the column with dates to adjust.
+        adjusted_column: Name of the output column for adjusted dates.
+        calendar: Business day calendar to use (default: Actual).
+    """
+
+    def execute(
+        self, data: ds.Dataset | pd.DataFrame, _context: ETLPipelineContext
+    ) -> pd.DataFrame:
+        """Convert future maturity codes to dates."""
+        date_column = self.require_param("date_column")
+        adjusted_column = self.require_param("adjusted_column")
+        calendar = self.get_param("calendar", "Actual")
+        return shared_transforms.adjust_following_bizdays(
+            data, date_column, adjusted_column, calendar
+        )
+
+
+@ETLStepRegistry.register("bizdays")
+class CalculateBizdays(ETLPipelineStep):
+    """Calculate business days between two date columns.
+
+    Parameters:
+        from_column: Name of the start date column.
+        to_column: Name of the end date column.
+        output_column: Name of the output column for business day counts.
+        calendar: Business day calendar to use (default: Actual).
+    """
+
+    def execute(
+        self, data: ds.Dataset | pd.DataFrame, _context: ETLPipelineContext
+    ) -> pd.DataFrame:
+        """Convert future maturity codes to dates."""
+        from_column = self.require_param("from_column")
+        to_column = self.require_param("to_column")
+        output_column = self.require_param("output_column")
+        calendar = self.get_param("calendar", "Actual")
+        return shared_transforms.calculate_bizdays(
+            data, from_column, to_column, output_column, calendar
+        )
+
+
+@ETLStepRegistry.register("implied_rate")
+class CalculateImpliedRate(ETLPipelineStep):
+    """Calculate implied interest rate from price.
+
+    Parameters:
+        price_column: Name of the column with prices.
+        rate_column: Name of the output column for implied rates.
+        days_to_maturity_column: Name of the column with days to maturity.
+        compounding: Compounding regime ('simple', 'compound' or 'discrete', 'continuous').
+        forward_price: Forward price used in calculation (default: 100,000).
+    """
+
+    def execute(
+        self, data: ds.Dataset | pd.DataFrame, _context: ETLPipelineContext
+    ) -> pd.DataFrame:
+        """Calculate implied interest rates."""
+        price_column = self.require_param("price_column")
+        rate_column = self.require_param("rate_column")
+        days_to_maturity_column = self.require_param("days_to_maturity_column")
+        compounding = self.get_param("compounding", "simple")
+        forward_price = self.get_param("forward_price", 100_000)
+        return shared_transforms.calculate_implied_rate(
+            data,
+            price_column,
+            rate_column,
+            days_to_maturity_column,
+            compounding,
+            forward_price,
+        )
