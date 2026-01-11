@@ -4,17 +4,55 @@ This module provides the high-level functions for downloading, processing,
 and retrieving market data. These are the main entry points for users.
 """
 
+from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
-import progressbar
 
 from brasa.util import KwargsIterator
 
 from .cache import CacheManager, CacheMetadata
 from .exceptions import DownloadException
+from .reporting import (
+    TaskReport,
+    Verbosity,
+    capture_warnings,
+    create_task_result_from_exception,
+    create_task_result_skipped,
+    create_task_result_success,
+)
 from .template import retrieve_template
+
+
+def _should_download(cache: CacheManager, meta: CacheMetadata, reprocess: bool) -> bool:
+    """Determine if data should be downloaded.
+
+    Args:
+        cache: Cache manager instance.
+        meta: Cache metadata for the template.
+        reprocess: If True, force re-download.
+
+    Returns:
+        True if data should be downloaded, False otherwise.
+    """
+    if reprocess:
+        if cache.has_meta(meta):
+            cache.load_meta(meta)
+            cache.remove_meta(meta)
+        return True
+
+    if not cache.has_successful_trial(meta):
+        if cache.has_meta(meta):
+            cache.load_meta(meta)
+            check = all(
+                Path(cache.cache_path(f)).exists() for f in meta.downloaded_files
+            )
+            if not check:
+                return True
+        else:
+            return True
+
+    return False
 
 
 def get_marketdata(
@@ -55,98 +93,234 @@ def get_marketdata(
         return get_marketdata(template_name, reprocess=True, **kwargs)
 
 
-def download_marketdata(template_name: str, reprocess: bool = False, **kwargs) -> None:
+def download_marketdata(
+    template_name: str,
+    reprocess: bool = False,
+    verbosity: Verbosity = Verbosity.NORMAL,
+    report_file: str | Path | None = None,
+    **kwargs,
+) -> TaskReport:
     """Download market data for multiple dates/parameters.
 
-    Downloads data in batch mode with progress bar. Supports downloading
-    for multiple dates or parameter combinations.
+    Downloads data in batch mode with pytest-style progress display.
+    Supports downloading for multiple dates or parameter combinations.
 
     Args:
         template_name: Name of the template to use.
         reprocess: If True, force re-download even if data exists.
+        verbosity: Output verbosity level (QUIET, NORMAL, VERBOSE).
+        report_file: Optional path to save the report (JSON or TXT).
         **kwargs: Template-specific download arguments. Lists are expanded
                   to download for each combination.
+
+    Returns:
+        TaskReport with results of all download operations.
     """
     template = retrieve_template(template_name)
     cache = CacheManager()
     kwargs_iter = KwargsIterator(kwargs)
-    widgets = [
-        f"D {template_name} ",
-        progressbar.SimpleProgress(format="%(value_s)3s/%(max_value_s)-3s"),
-        progressbar.Bar(),
-        " ",
-        progressbar.Timer(),
-    ]
-    for args in progressbar.progressbar(
-        kwargs_iter, max_value=len(kwargs_iter), widgets=widgets
-    ):
+
+    report = TaskReport(
+        operation="download",
+        template_name=template_name,
+        verbosity=verbosity,
+    )
+    report.start(total=len(kwargs_iter))
+
+    for args in kwargs_iter:
+        start_time = datetime.now()
+
         meta = CacheMetadata(template.id)
         meta.extra_key = template.downloader.extra_key
         meta.download_args = args
         meta.downloaded_files = []
         meta.processed_files = {}
-        if reprocess:
-            if cache.has_meta(meta):
-                cache.load_meta(meta)
-                cache.remove_meta(meta)
-            cache.download_marketdata(meta)
-        elif not cache.has_successful_trial(meta):
-            if cache.has_meta(meta):
-                cache.load_meta(meta)
-                check = all(
-                    Path(cache.cache_path(f)).exists() for f in meta.downloaded_files
-                )
-                if not check:
+
+        with capture_warnings() as captured_warnings:
+            try:
+                should_download = _should_download(cache, meta, reprocess)
+
+                if should_download:
                     cache.download_marketdata(meta)
-            else:
-                cache.download_marketdata(meta)
+
+                    # Reload meta to get downloaded files
+                    if cache.has_meta(meta):
+                        cache.load_meta(meta)
+
+                    duration = (datetime.now() - start_time).total_seconds()
+
+                    result = create_task_result_success(
+                        operation="download",
+                        template_name=template_name,
+                        args=args,
+                        duration=duration,
+                        downloaded_files=meta.downloaded_files,
+                        processed_files=meta.processed_files,
+                        captured_warnings=captured_warnings,
+                    )
+                else:
+                    # Task was skipped (already downloaded)
+                    duration = (datetime.now() - start_time).total_seconds()
+
+                    result = create_task_result_skipped(
+                        operation="download",
+                        template_name=template_name,
+                        args=args,
+                        duration=duration,
+                        downloaded_files=meta.downloaded_files,
+                        processed_files=meta.processed_files,
+                    )
+
+            except DownloadException as ex:
+                duration = (datetime.now() - start_time).total_seconds()
+                result = create_task_result_from_exception(
+                    exception=ex,
+                    operation="download",
+                    template_name=template_name,
+                    args=args,
+                    duration=duration,
+                    downloaded_files=meta.downloaded_files,
+                    processed_files=meta.processed_files,
+                    captured_warnings=captured_warnings,
+                    is_expected_error=True,
+                )
+
+            except Exception as ex:
+                duration = (datetime.now() - start_time).total_seconds()
+                result = create_task_result_from_exception(
+                    exception=ex,
+                    operation="download",
+                    template_name=template_name,
+                    args=args,
+                    duration=duration,
+                    downloaded_files=meta.downloaded_files,
+                    processed_files=meta.processed_files,
+                    captured_warnings=captured_warnings,
+                    is_expected_error=False,
+                )
+
+        report.add_result(result)
+
+    report.finish()
+
+    if report_file:
+        report_path = Path(report_file)
+        file_format = "json" if report_path.suffix == ".json" else "txt"
+        report.save_report(report_path, format=file_format)
+
+    return report
 
 
-def process_marketdata(template_name: str, reprocess: bool = False) -> None:
+def process_marketdata(
+    template_name: str,
+    reprocess: bool = False,
+    verbosity: Verbosity = Verbosity.NORMAL,
+    report_file: str | Path | None = None,
+) -> TaskReport:
     """Process all downloaded data for a template.
 
     Reads raw downloaded files and converts them to parquet format.
-    Shows progress bar during processing.
+    Shows pytest-style progress display during processing.
 
     Args:
         template_name: Name of the template to process.
         reprocess: If True, reprocess even if already processed.
+        verbosity: Output verbosity level (QUIET, NORMAL, VERBOSE).
+        report_file: Optional path to save the report (JSON or TXT).
+
+    Returns:
+        TaskReport with results of all processing operations.
     """
     template = retrieve_template(template_name)
     cache = CacheManager()
+
     with cache.meta_db_connection as conn:
         c = conn.cursor()
         c.execute("select id from cache_metadata where template = ?", (template_name,))
         rows = c.fetchall()
-        widgets: list[Any] = [
-            f"P {template_name} ",
-            progressbar.SimpleProgress(format="%(value_s)3s/%(max_value_s)-3s"),
-            progressbar.Bar(),
-            " ",
-            progressbar.Timer(),
-        ]
-        errors = []
-        with progressbar.ProgressBar(max_value=len(rows), widgets=widgets) as pbar:
-            for meta_row in rows:
-                pbar.update(pbar.value + 1)
-                _meta = cache._load_meta_dict_by_id(meta_row[0])
-                meta = CacheMetadata(template.id)
-                meta.from_dict(_meta)
-                try:
-                    if reprocess or len(meta.processed_files) == 0:
-                        meta.processing_errors = ""
-                        cache.read_marketdata(meta)
-                except Exception as ex:
-                    errors.append((meta, ex))
-                    meta.processing_errors = str(ex)
-                    cache.save_meta(meta)
 
-        if len(errors) > 0:
-            for err in errors:
-                print(err[0].download_args, err[1])
+    report = TaskReport(
+        operation="process",
+        template_name=template_name,
+        verbosity=verbosity,
+    )
+    report.start(total=len(rows))
+
+    for meta_row in rows:
+        start_time = datetime.now()
+
+        _meta = cache._load_meta_dict_by_id(meta_row[0])
+        meta = CacheMetadata(template.id)
+        meta.from_dict(_meta)
+
+        with capture_warnings() as captured_warnings:
+            try:
+                should_process = reprocess or len(meta.processed_files) == 0
+
+                if should_process:
+                    meta.processing_errors = ""
+                    cache.read_marketdata(meta)
+
+                    duration = (datetime.now() - start_time).total_seconds()
+
+                    result = create_task_result_success(
+                        operation="process",
+                        template_name=template_name,
+                        args=meta.download_args,
+                        duration=duration,
+                        downloaded_files=meta.downloaded_files,
+                        processed_files=meta.processed_files,
+                        captured_warnings=captured_warnings,
+                    )
+                else:
+                    # Task was skipped (already processed)
+                    duration = (datetime.now() - start_time).total_seconds()
+
+                    result = create_task_result_skipped(
+                        operation="process",
+                        template_name=template_name,
+                        args=meta.download_args,
+                        duration=duration,
+                        downloaded_files=meta.downloaded_files,
+                        processed_files=meta.processed_files,
+                    )
+
+            except Exception as ex:
+                duration = (datetime.now() - start_time).total_seconds()
+
+                # Save error to metadata
+                meta.processing_errors = str(ex)
+                cache.save_meta(meta)
+
+                result = create_task_result_from_exception(
+                    exception=ex,
+                    operation="process",
+                    template_name=template_name,
+                    args=meta.download_args,
+                    duration=duration,
+                    downloaded_files=meta.downloaded_files,
+                    processed_files=meta.processed_files,
+                    captured_warnings=captured_warnings,
+                    is_expected_error=False,
+                )
+
+        report.add_result(result)
+
+    report.finish()
+
+    if report_file:
+        report_path = Path(report_file)
+        file_format = "json" if report_path.suffix == ".json" else "txt"
+        report.save_report(report_path, format=file_format)
+
+    return report
 
 
-def process_etl(template_name: str) -> None:
+def process_etl(
+    template_name: str,
+    verbosity: Verbosity = Verbosity.NORMAL,
+    report_file: str | Path | None = None,
+) -> TaskReport:
     """Run an ETL process defined in a template.
 
     ETL templates define custom processing logic that transforms
@@ -156,28 +330,67 @@ def process_etl(template_name: str) -> None:
 
     Args:
         template_name: Name of the ETL template to run.
+        verbosity: Output verbosity level (QUIET, NORMAL, VERBOSE).
+        report_file: Optional path to save the report (JSON or TXT).
+
+    Returns:
+        TaskReport with results of the ETL operation.
     """
-    widgets: list[Any] = [
-        f"ETL {template_name} ",
-        progressbar.SimpleProgress(format="%(value_s)3s/%(max_value_s)-3s"),
-        progressbar.Bar(),
-        " ",
-        progressbar.Timer(),
-    ]
+    report = TaskReport(
+        operation="etl",
+        template_name=template_name,
+        verbosity=verbosity,
+    )
+    report.start(total=1)
 
-    with progressbar.ProgressBar(max_value=1, widgets=widgets) as bar:
-        bar.update(1)
-        template = retrieve_template(template_name)
+    start_time = datetime.now()
 
-        if template.etl.is_pipeline:
-            # New pipeline-based ETL
-            writer = getattr(template, "writer", None)
-            fields = getattr(template, "fields", None)
-            template.etl.pipeline.execute_and_write(
-                template_id=template.id,
-                writer=writer,
-                fields=fields,
+    with capture_warnings() as captured_warnings:
+        try:
+            template = retrieve_template(template_name)
+
+            if template.etl.is_pipeline:
+                # New pipeline-based ETL
+                writer = getattr(template, "writer", None)
+                fields = getattr(template, "fields", None)
+                template.etl.pipeline.execute_and_write(
+                    template_id=template.id,
+                    writer=writer,
+                    fields=fields,
+                )
+            else:
+                # Legacy function-based ETL
+                template.etl.process_function(template.etl)
+
+            duration = (datetime.now() - start_time).total_seconds()
+
+            result = create_task_result_success(
+                operation="etl",
+                template_name=template_name,
+                args={},
+                duration=duration,
+                captured_warnings=captured_warnings,
             )
-        else:
-            # Legacy function-based ETL
-            template.etl.process_function(template.etl)
+
+        except Exception as ex:
+            duration = (datetime.now() - start_time).total_seconds()
+
+            result = create_task_result_from_exception(
+                exception=ex,
+                operation="etl",
+                template_name=template_name,
+                args={},
+                duration=duration,
+                captured_warnings=captured_warnings,
+                is_expected_error=False,
+            )
+
+    report.add_result(result)
+    report.finish()
+
+    if report_file:
+        report_path = Path(report_file)
+        file_format = "json" if report_path.suffix == ".json" else "txt"
+        report.save_report(report_path, format=file_format)
+
+    return report

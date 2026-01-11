@@ -1,5 +1,7 @@
 from .engine import (
     CacheManager,
+    TaskReport,
+    Verbosity,
     download_marketdata,
     get_marketdata,
     process_etl,
@@ -21,6 +23,8 @@ from .queries import (
 __all__ = [
     "BrasaDB",
     "CacheManager",
+    "TaskReport",
+    "Verbosity",
     "describe",
     "download_marketdata",
     "get_dataset",
