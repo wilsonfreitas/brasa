@@ -102,8 +102,8 @@ def test_etl_pipeline_template_loading():
     assert "b3-futures-settlement-prices" in template.etl.get_input_datasets()
 
     # Load a new pipeline-based ETL template
-    template = retrieve_template("b3-futures")
-    assert template.id == "b3-futures"
+    template = retrieve_template("b3-futures-settlement-prices-consolidated")
+    assert template.id == "b3-futures-settlement-prices-consolidated"
     assert template.is_etl
     assert template.etl.is_pipeline
     assert template.etl.pipeline is not None

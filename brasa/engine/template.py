@@ -18,6 +18,7 @@ from brasa.fieldset_schema import Fieldset
 from brasa.fieldset_schema.field import Field
 
 from .core import load_function_by_name
+from .layers import DEFAULT_ETL_LAYER, DEFAULT_LAYER, DataLayer
 
 if TYPE_CHECKING:
     from .cache import CacheMetadata
@@ -187,13 +188,63 @@ class MarketDataReader:
 class MarketDataWriter:
     """Configuration for writing processed market data.
 
-    Defines partitioning and other write options for parquet output.
+    Defines partitioning, layer, dataset name, and other write options for parquet output.
+
+    Attributes:
+        partitioning: List of column names for Hive-style partitioning.
+        layer: The data layer for this dataset (input, staging, curated).
+        dataset: The output dataset name. If not specified, defaults to template ID.
     """
 
-    def __init__(self, writer: dict):
+    def __init__(self, writer: dict, template_id: str = ""):
         for n, v in writer.items():
             self.__dict__[n] = v
         self.partitioning = writer.get("partitioning", [])
+        # Parse layer from config, default to INPUT if not specified
+        layer_str = writer.get("layer")
+        self._layer = DataLayer.from_string(layer_str) if layer_str else DEFAULT_LAYER
+        # Parse dataset name, default to template_id if not specified
+        self._dataset = writer.get("dataset", template_id)
+        self._template_id = template_id
+
+    @property
+    def dataset(self) -> str:
+        """Get the output dataset name.
+
+        Returns:
+            The dataset name. Falls back to template_id if not explicitly set.
+        """
+        return self._dataset if self._dataset else self._template_id
+
+    @dataset.setter
+    def dataset(self, value: str) -> None:
+        """Set the output dataset name.
+
+        Args:
+            value: The dataset name to use for output.
+        """
+        self._dataset = value
+
+    @property
+    def layer(self) -> DataLayer:
+        """Get the data layer for this writer.
+
+        Returns:
+            The DataLayer enum value.
+        """
+        return self._layer
+
+    @layer.setter
+    def layer(self, value: DataLayer | str) -> None:
+        """Set the data layer for this writer.
+
+        Args:
+            value: Either a DataLayer enum or string representation.
+        """
+        if isinstance(value, str):
+            self._layer = DataLayer.from_string(value)
+        else:
+            self._layer = value
 
 
 class MarketDataDownloader:
@@ -291,7 +342,7 @@ class MarketDataTemplate:
             self.has_reader = True
             self.reader = MarketDataReader(section_data, template_id=self.id)
         elif section_name == "writer":
-            self.writer = MarketDataWriter(section_data)
+            self.writer = MarketDataWriter(section_data, template_id=self.id)
         elif section_name == "fields":
             self._process_fields(section_data)
         elif section_name == "datasets":
@@ -343,6 +394,23 @@ class MarketDataTemplate:
         # Second pass: process all template sections
         for section_name, section_data in template.items():
             self._process_template_section(section_name, section_data, template)
+
+        # Ensure writer exists with appropriate default layer
+        if not hasattr(self, "writer") or self.writer is None:
+            # Create default writer based on template type
+            default_writer_config: dict = {"partitioning": []}
+            self.writer = MarketDataWriter(default_writer_config, template_id=self.id)
+
+        # If ETL template without explicit layer, default to staging
+        has_explicit_layer = "writer" in template and "layer" in template.get(
+            "writer", {}
+        )
+        if (
+            self.is_etl
+            and self.writer._layer == DEFAULT_LAYER
+            and not has_explicit_layer
+        ):
+            self.writer._layer = DEFAULT_ETL_LAYER
 
         # Configure reader with fields/datasets/parts
         if self.has_reader:

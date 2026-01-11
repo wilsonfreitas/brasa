@@ -20,6 +20,8 @@ __all__ = [
     "get_prices",
     "get_returns",
     "get_symbols",
+    "get_template_dataset",
+    "get_template_layer",
     "get_template_partitioning",
     "get_template_schema",
     "show",
@@ -229,16 +231,63 @@ def get_template_partitioning(
     return None
 
 
+def get_template_layer(name: str) -> str | None:
+    """Get the data layer from a template's writer configuration.
+
+    Args:
+        name: The template name (same as dataset name).
+
+    Returns:
+        The layer string (e.g., 'input', 'staging', 'curated') if defined,
+        None otherwise.
+    """
+    try:
+        template = retrieve_template(name)
+        if hasattr(template, "writer") and template.writer is not None:
+            return template.writer.layer.value
+    except ValueError:
+        # Template not found
+        pass
+    return None
+
+
+def get_template_dataset(template_name: str) -> str | None:
+    """Get the dataset name from a template's writer configuration.
+
+    The dataset name is used to determine the output folder path.
+    If not explicitly set, it defaults to the template ID.
+
+    Args:
+        template_name: The template name to look up.
+
+    Returns:
+        The dataset name if the template exists, None otherwise.
+    """
+    try:
+        template = retrieve_template(template_name)
+        if hasattr(template, "writer") and template.writer is not None:
+            return template.writer.dataset
+    except ValueError:
+        # Template not found
+        pass
+    return None
+
+
 def get_dataset(
     name: str,
     schema: pyarrow.Schema | None = None,
     partitioning: ds.Partitioning | list[str] | None = None,
     use_template_schema: bool = True,
+    layer: str | None = None,
 ) -> ds.Dataset:
     """Load a dataset by name.
 
+    The name can be either a template ID or a dataset name. When use_template_schema
+    is True, the function attempts to load the template to get schema, partitioning,
+    layer, and the actual dataset name (which may differ from template ID).
+
     Args:
-        name: The dataset name.
+        name: The template ID or dataset name.
         schema: Optional PyArrow schema to use. If None and use_template_schema is True,
             attempts to load schema from the template definition.
         partitioning: Optional partitioning specification. Can be a list of column names
@@ -246,18 +295,35 @@ def get_dataset(
             attempts to load from the template.
         use_template_schema: If True (default), automatically loads the schema and
             partitioning from the template when not provided.
+        layer: Optional data layer override. If None and use_template_schema is True,
+            attempts to load from the template. If layer is provided, it takes precedence.
 
     Returns:
         PyArrow Dataset.
     """
     man = CacheManager()
+    dataset_name = name
+
     if use_template_schema:
         if schema is None:
             schema = get_template_schema(name)
         if partitioning is None:
             partitioning = get_template_partitioning(name, schema)
+        if layer is None:
+            layer = get_template_layer(name)
+        # Get the actual dataset name from template (may differ from template ID)
+        template_dataset = get_template_dataset(name)
+        if template_dataset:
+            dataset_name = template_dataset
+
+    # Build path with layer if available
+    dataset_path = f"{layer}/{dataset_name}" if layer else dataset_name
+
     return ds.dataset(
-        man.db_path(name), schema=schema, format="parquet", partitioning=partitioning
+        man.db_path(dataset_path),
+        schema=schema,
+        format="parquet",
+        partitioning=partitioning,
     )
 
 
@@ -275,16 +341,46 @@ def show(name: str, n: int = 10):
 
 
 def write_dataset(
-    df: pd.DataFrame, name: str, format: str = "parquet", schema: pyarrow.Schema = None
+    df: pd.DataFrame,
+    name: str,
+    format: str = "parquet",
+    schema: pyarrow.Schema = None,
+    layer: str | None = None,
 ) -> None:
+    """Write a DataFrame as a dataset.
+
+    The name can be either a template ID or a dataset name. When a template
+    exists, the function uses its configuration for layer and dataset name.
+
+    Args:
+        df: DataFrame to write.
+        name: The template ID or dataset name.
+        format: Output format (default: 'parquet').
+        schema: Optional PyArrow schema.
+        layer: Optional data layer. If None, attempts to get from template.
+    """
     man = CacheManager()
+    dataset_name = name
+
+    # Get layer and dataset name from template if not provided
+    if layer is None:
+        layer = get_template_layer(name)
+
+    # Get the actual dataset name from template (may differ from template ID)
+    template_dataset = get_template_dataset(name)
+    if template_dataset:
+        dataset_name = template_dataset
+
+    # Build path with layer if available
+    dataset_path = f"{layer}/{dataset_name}" if layer else dataset_name
+
     if schema:
         tb = pyarrow.Table.from_pandas(df, schema=schema)
     else:
         tb = pyarrow.Table.from_pandas(df)
     ds.write_dataset(
         tb,
-        man.db_path(name),
+        man.db_path(dataset_path),
         format=format,
         existing_data_behavior="overwrite_or_ignore",
     )

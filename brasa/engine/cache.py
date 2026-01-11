@@ -160,7 +160,15 @@ class CacheManager(Singleton):
         return str(path)
 
     def db_path(self, name: str) -> str:
-        """Get the path for a database file."""
+        """Get the path for a database file.
+
+        Args:
+            name: The relative path within the db folder. Can include
+                layer prefix (e.g., 'input/template-id').
+
+        Returns:
+            Absolute path to the database file or folder.
+        """
         return str(Path(self.cache_path(self._db_folder)) / name)
 
     @property
@@ -184,8 +192,22 @@ class CacheManager(Singleton):
         return sqlite3.connect(database=self.cache_path(self.meta_db_filename))
 
     def db_folder(self, template: MarketDataTemplate) -> str:
-        """Get the database folder for a template."""
-        folder = str(Path(self._db_folder) / template.id)
+        """Get the database folder for a template, including layer.
+
+        The folder path includes the data layer from the template's writer
+        configuration. Structure: db/{layer}/{dataset-name}
+
+        Uses writer.dataset if specified, otherwise falls back to template.id.
+
+        Args:
+            template: The template to get the folder for.
+
+        Returns:
+            Relative path to the database folder within the cache.
+        """
+        layer = template.writer.layer.value
+        dataset_name = template.writer.dataset
+        folder = str(Path(self._db_folder) / layer / dataset_name)
         Path(self.cache_path(folder)).mkdir(parents=True, exist_ok=True)
         return folder
 
@@ -195,19 +217,34 @@ class CacheManager(Singleton):
         Supports both new datasets attribute and legacy reader.multi.
         For datasets: uses output names directly as folder suffixes.
         For legacy multi: uses the mapped output names as folder suffixes.
+
+        The folder paths include the data layer from the template's writer
+        configuration. Structure: db/{layer}/{dataset-name}-{output-name}
+
+        Uses writer.dataset if specified, otherwise falls back to template.id.
+
+        Args:
+            template: The template to get folders for.
+
+        Returns:
+            Dictionary mapping output names to folder paths.
         """
         db_folders = {}
+        layer = template.writer.layer.value
+        dataset_name = template.writer.dataset
 
         if template.datasets:
             # New approach: use datasets output names directly
             for output_name in template.datasets:
-                folder = str(Path(self._db_folder) / f"{template.id}-{output_name}")
+                folder = str(
+                    Path(self._db_folder) / layer / f"{dataset_name}-{output_name}"
+                )
                 Path(self.cache_path(folder)).mkdir(parents=True, exist_ok=True)
                 db_folders[output_name] = folder
         elif template.reader.multi:
             # Legacy fallback: use multi mapping (XML tag -> output name)
             for name, val in template.reader.multi.items():
-                folder = str(Path(self._db_folder) / f"{template.id}-{val}")
+                folder = str(Path(self._db_folder) / layer / f"{dataset_name}-{val}")
                 Path(self.cache_path(folder)).mkdir(parents=True, exist_ok=True)
                 db_folders[name] = folder
 

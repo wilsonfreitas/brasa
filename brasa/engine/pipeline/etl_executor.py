@@ -143,8 +143,16 @@ class ETLPipeline:
         df = self.execute(template_id, writer, fields)
         man = CacheManager()
 
-        # Get output path
-        output_path = man.db_path(template_id)
+        # Get output path using layer and dataset from writer
+        if writer is not None:
+            layer = writer.layer.value
+            dataset = writer.dataset
+            output_path = man.db_path(f"{layer}/{dataset}")
+        else:
+            # Fallback for templates without writer config
+            from brasa.engine.layers import DEFAULT_ETL_LAYER
+
+            output_path = man.db_path(f"{DEFAULT_ETL_LAYER.value}/{template_id}")
 
         # Get partitioning from writer
         partitioning = []

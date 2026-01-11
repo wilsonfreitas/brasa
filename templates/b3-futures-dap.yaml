@@ -4,7 +4,8 @@ description: Futuros de Juros Real (Cupom de IPCA) - DAP
 etl:
   pipeline:
     - step: load
-      input: b3-futures
+      input: b3-futures-settlement-prices
+      layer: staging
     - step: filter
       where:
         commodity: "DAP"

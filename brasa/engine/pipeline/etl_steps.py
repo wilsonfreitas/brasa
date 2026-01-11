@@ -186,24 +186,58 @@ class LoadDatasetStep(ETLPipelineStep):
     This step loads an existing dataset and returns it as a PyArrow Dataset.
     It must be the first step in a pipeline (or used to load additional datasets).
 
-    Parameters:
+    Two modes of operation:
+
+    **Mode 1: Template-based loading (recommended)**
+        template: Name of the template that created the dataset.
+            The layer, dataset name, and partitioning are derived from the template.
+
+    **Mode 2: Explicit loading**
         input: Name of the dataset to load.
+        layer: Data layer to load from (e.g., 'input', 'staging', 'curated').
+        partitioning: Optional list of column names for partitioning.
+            If not provided, uses 'hive' auto-detection.
+
+    Examples:
+        # Template-based (derives layer, dataset, partitioning from template)
+        - step: load
+          template: b3-futures-settlement-prices-consolidated
+
+        # Explicit (specify input and layer directly)
+        - step: load
+          input: b3-futures-settlement-prices
+          layer: staging
+          partitioning: [commodity]  # optional
     """
 
     def execute(self, _data: Any, _context: ETLPipelineContext) -> ds.Dataset:
         """Load the specified dataset.
 
         Args:
-            data: Ignored (this is typically the first step).
-            context: ETL pipeline context.
+            _data: Ignored (this is typically the first step).
+            _context: ETL pipeline context.
 
         Returns:
             PyArrow Dataset.
         """
         from brasa.queries import get_dataset
 
+        template_name = self.params.get("template")
+
+        if template_name:
+            # Mode 1: Template-based - derive everything from template
+            return get_dataset(template_name)
+
+        # Mode 2: Explicit - require input and layer
         dataset_name = self.require_param("input")
-        return get_dataset(dataset_name)
+        layer_name = self.require_param("layer")
+        partitioning = self.params.get("partitioning", "hive")
+
+        return get_dataset(
+            dataset_name,
+            layer=layer_name,
+            partitioning=partitioning,
+        )
 
 
 @ETLStepRegistry.register("filter")

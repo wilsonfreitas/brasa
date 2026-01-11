@@ -1,0 +1,44 @@
+# Pipeline-based ETL template for consolidated futures data
+# This template loads data from the input layer and stores in staging layer
+# with the same dataset name (b3-futures-settlement-prices)
+id: b3-futures-settlement-prices-consolidated
+description: Consolidated futures settlement prices (repartitioned by commodity)
+
+etl:
+  pipeline:
+    - step: load
+      input: b3-futures-settlement-prices
+      layer: input
+
+writer:
+  dataset: b3-futures-settlement-prices  # Same name as input, different layer!
+  layer: staging
+  partitioning: [commodity]
+
+# Fields inherited from input dataset (b3-futures-settlement-prices)
+# Uncomment to override:
+# fields:
+# - name: commodity
+#   description: Commodity code
+#   type: character
+# - name: maturity_code
+#   description: Maturity code (3 chars)
+#   type: character
+# - name: previous_price
+#   description: Previous settlement price
+#   type: number
+# - name: price
+#   description: Current settlement price
+#   type: number
+# - name: price_change
+#   description: Price change
+#   type: number
+# - name: settlement_value
+#   description: Settlement value per contract (R$)
+#   type: number
+# - name: refdate
+#   description: Reference date
+#   type: date(format="%Y-%m-%d")
+# - name: symbol
+#   description: Futures contract symbol
+#   type: character
