@@ -423,8 +423,61 @@ class MarketDataTemplate:
         return template
 
 
+# Module-level cache for loaded templates
+_template_cache: dict[str, MarketDataTemplate] = {}
+
+
+def _get_templates_dir() -> Path:
+    """Get the path to the templates directory.
+
+    Returns:
+        Path to the templates directory.
+    """
+    return (Path(__file__).parent / ".." / ".." / "templates").resolve()
+
+
+def list_templates() -> list[str]:
+    """List all available template names.
+
+    Returns:
+        Sorted list of template names (without .yaml extension).
+    """
+    templates_dir = _get_templates_dir()
+    return sorted(f.stem for f in templates_dir.iterdir() if f.suffix == ".yaml")
+
+
+def clear_template_cache() -> None:
+    """Clear all cached templates.
+
+    Useful for development and testing when templates are modified.
+    """
+    _template_cache.clear()
+
+
+def reload_template(template_name: str) -> MarketDataTemplate:
+    """Force reload a template from disk, bypassing the cache.
+
+    Args:
+        template_name: Name of the template (without .yaml extension).
+
+    Returns:
+        Freshly loaded MarketDataTemplate instance.
+
+    Raises:
+        ValueError: If the template is not found or has ID mismatch.
+    """
+    # Remove from cache if present
+    if template_name in _template_cache:
+        del _template_cache[template_name]
+    # Load fresh
+    return retrieve_template(template_name)
+
+
 def retrieve_template(template_name: str) -> MarketDataTemplate:
     """Load a template by name from the templates directory.
+
+    Templates are cached after first load. Use reload_template() to force
+    a fresh load, or clear_template_cache() to clear all cached templates.
 
     Args:
         template_name: Name of the template (without .yaml extension).
@@ -433,12 +486,35 @@ def retrieve_template(template_name: str) -> MarketDataTemplate:
         Loaded MarketDataTemplate instance.
 
     Raises:
-        ValueError: If the template is not found.
+        ValueError: If the template is not found or if the template ID
+            does not match the filename.
     """
-    templates_dir = Path(__file__).parent / ".." / ".." / "templates"
-    sel = [f for f in templates_dir.iterdir() if f.name == f"{template_name}.yaml"]
-    if len(sel) == 0:
-        raise ValueError(f"Invalid template {template_name}")
-    else:
-        template_path = sel[0]
-        return MarketDataTemplate(template_path)
+    # Return cached template if available
+    if template_name in _template_cache:
+        return _template_cache[template_name]
+
+    templates_dir = _get_templates_dir()
+    template_path = templates_dir / f"{template_name}.yaml"
+
+    if not template_path.exists():
+        available = list_templates()
+        available_str = ", ".join(available[:10])
+        if len(available) > 10:
+            available_str += f", ... ({len(available)} total)"
+        raise ValueError(
+            f"Template '{template_name}' not found. "
+            f"Available templates: {available_str}"
+        )
+
+    template = MarketDataTemplate(template_path)
+
+    # Validate that template ID matches filename
+    if template.id != template_name:
+        raise ValueError(
+            f"Template ID mismatch: file '{template_name}.yaml' has id '{template.id}'. "
+            f"The template ID must match the filename."
+        )
+
+    # Cache the template
+    _template_cache[template_name] = template
+    return template
