@@ -70,6 +70,19 @@ from .processing import (
     save_partitioned_parquet_file,
 )
 
+# Reporting classes
+from .reporting import (
+    ProgressDisplay,
+    TaskReport,
+    TaskResult,
+    TaskStatus,
+    Verbosity,
+    capture_warnings,
+    create_task_result_from_exception,
+    create_task_result_skipped,
+    create_task_result_success,
+)
+
 # Template classes and functions
 from .template import (
     MarketDataDownloader,
@@ -104,14 +117,23 @@ __all__ = [
     "MarketDataWriter",
     "NumericFieldHandler",
     "NumericParser",
+    "ProgressDisplay",
     "PtBRNumericParser",
     "Singleton",
+    "TaskReport",
+    "TaskResult",
+    "TaskStatus",
     "TemplateField",
     "TemplateFields",
     "TemplatePart",
+    "Verbosity",
     "_download_marketdata",
     "_read_marketdata",
+    "capture_warnings",
     "clear_template_cache",
+    "create_task_result_from_exception",
+    "create_task_result_skipped",
+    "create_task_result_success",
     "download_marketdata",
     "get_fname_part",
     "get_marketdata",
