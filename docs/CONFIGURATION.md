@@ -58,6 +58,7 @@ downloader:
   encoding: utf-8
   verify_ssl: true|false
   extra-key: date|datetime|null
+  download_delay: 5    # Delay between downloads (for rate limiting)
   validator: brasa.downloaders.{validator_function}
   args:
     param1: ~           # Required parameter (must be provided)
@@ -143,6 +144,14 @@ verify_ssl: false  # For sites with certificate issues
 **validator**: Function to validate downloaded file
 - `brasa.downloaders.validate_empty_file`: Check file not empty
 - `brasa.downloaders.validate_json_empty_file`: Check JSON not empty
+
+**download_delay**: Delay in seconds between consecutive downloads (default: 0)
+```yaml
+download_delay: 5  # Wait 5 seconds between downloads
+```
+This option is useful for APIs with rate limiting. When downloading multiple items
+(e.g., company info for all listed companies), the delay prevents hitting rate limits.
+The delay is only applied between downloads, not before the first one.
 
 **args**: Download function arguments
 ```yaml
