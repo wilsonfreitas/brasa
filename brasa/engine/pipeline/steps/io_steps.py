@@ -95,14 +95,20 @@ class ReadJsonStep(PipelineStep):
     """
 
     def execute(self, _data: Any, context: PipelineContext) -> pd.DataFrame:
+        import gzip
         import json
         from pathlib import Path
 
         filepath = context.downloaded_file
         json_path = self.get_param("path")
 
-        with Path(filepath).open(encoding=context.encoding) as f:
-            json_data = json.load(f)
+        # Handle gzip-compressed files
+        if str(filepath).endswith(".gz"):
+            with gzip.open(filepath, "rt", encoding=context.encoding) as f:
+                json_data = json.load(f)
+        else:
+            with Path(filepath).open(encoding=context.encoding) as f:
+                json_data = json.load(f)
 
         if json_path:
             # Navigate to the specified path

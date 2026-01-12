@@ -269,3 +269,41 @@ class B3ReadBVBG087XmlStep(PipelineStep):
 
         logger.info(f"Parsed BVBG087 with {len(results)} datasets")
         return results
+
+
+@StepRegistry.register("b3_parse_header_indexes_composition")
+class B3ParseHeaderIndexesCompositionStep(PipelineStep):
+    """Parse the reference date from B3 indexes composition JSON.
+
+    Extracts the reference date from the JSON file and stores it in the context.
+
+    Parameters:
+        path: JSON path to extract the date from (default: None)
+        store_as: Name to store the result under in context (default: 'refdate')
+    """
+
+    def execute(self, data: pd.DataFrame, context: PipelineContext) -> pd.DataFrame:
+        import gzip
+        import json
+        from pathlib import Path
+
+        filepath = context.downloaded_file
+        json_path = self.get_param("path")
+        store_as = self.get_param("store_as", "refdate")
+
+        if str(filepath).endswith(".gz"):
+            with gzip.open(filepath, "rt", encoding=context.encoding) as f:
+                json_data = json.load(f)
+        else:
+            with Path(filepath).open(encoding=context.encoding) as f:
+                json_data = json.load(f)
+
+        if json_path:
+            for key in json_path.split("."):
+                if isinstance(json_data, dict):
+                    json_data = json_data[key]
+                elif isinstance(json_data, list) and key.isdigit():
+                    json_data = json_data[int(key)]
+            context.store_result(store_as, json_data)
+
+        return data

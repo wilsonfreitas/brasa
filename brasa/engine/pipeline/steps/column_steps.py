@@ -86,6 +86,7 @@ class AddColumnStep(PipelineStep):
         value: Static value to assign (optional)
         from_context: Key to get value from context.intermediate_results (optional)
         from_download_args: Key to get value from meta.download_args (optional)
+        use_extra_key: Boolean flag to use meta.extra_key as value (optional)
     """
 
     def execute(self, data: pd.DataFrame, context: PipelineContext) -> pd.DataFrame:
@@ -99,9 +100,11 @@ class AddColumnStep(PipelineStep):
         elif "from_download_args" in self.params:
             key = self.params["from_download_args"]
             value = context.meta.download_args.get(key)
+        elif self.params.get("use_extra_key"):
+            value = context.meta.extra_key
         else:
             raise ValueError(
-                "add_column requires 'value', 'from_context', or 'from_download_args'"
+                "add_column requires 'value', 'from_context', 'from_download_args', or 'use_extra_key' parameter"
             )
 
         data[name] = value

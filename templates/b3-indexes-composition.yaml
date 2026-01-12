@@ -1,10 +1,11 @@
 id: b3-indexes-composition
 filename: ~
-filetype: MCUSTOM
+filetype: CUSTOM
 description: Composição dos índices da B3
 locale: pt
 downloader:
   function: brasa.downloaders.b3_paged_url_encoded_download
+  verifyssl: false
   url: https://sistemaswebb3-listados.b3.com.br/indexProxy/indexCall/GetStockIndex
   format: json
   encoding: latin1
@@ -14,29 +15,72 @@ downloader:
   extra-key: date
 reader:
   function: brasa.readers.read_b3_indexes_composition
-parts:
-  Header:
-    name: header
-    fields:
-      - name: update
-        description: Data de atualização do índice
-        handler:
-          type: Date
-          format: "%Y-%m-%d"
-      - name: start_month
-        description: Mês de início de vigência do índice
-      - name: end_month
-        description: Mês de fim de vigência do índice
-      - name: year
-        description: Ano de criação do índice
-  Results:
-    name: results
-    fields:
-      - name: company
-        description: Nome da companhia
-      - name: spotlight
-        description: Código de especificação da ação
-      - name: code
-        description: Código da ação
-      - name: indexes
-        description: Lista de índexes separados por vírgula
+  encoding: latin1
+  pipeline:
+    - step: read_json
+      path: results
+    - step: add_column
+      use_extra_key: true
+      name: refdate
+
+    - step: b3_parse_header_indexes_composition
+      path: header.update
+      store_as: update_date
+    - step: add_column
+      name: update_date
+      from_context: update_date
+
+    - step: b3_parse_header_indexes_composition
+      path: header.startMonth
+      store_as: start_month
+    - step: add_column
+      name: start_month
+      from_context: start_month
+
+    - step: b3_parse_header_indexes_composition
+      path: header.endMonth
+      store_as: end_month
+    - step: add_column
+      name: end_month
+      from_context: end_month
+
+    - step: b3_parse_header_indexes_composition
+      path: header.year
+      store_as: year
+    - step: add_column
+      name: year
+      from_context: year
+
+    - step: apply_fields
+      errors: coerce
+writers:
+  layer: input
+  partition: refdate
+fields:
+- name: corporation_name
+  description: Nome da companhia
+  type: character
+- name: specification_code
+  description: Código de especificação da ação
+  type: character
+- name: symbol
+  description: Código da ação
+  type: character
+- name: indexes
+  description: Lista de índexes separados por vírgula
+  type: character
+- name: refdate
+  description: Data de referência
+  type: date
+- name: update_date
+  description: Data de atualização do índice
+  type: date
+- name: start_month
+  description: Mês de início de vigência do índice
+  type: integer
+- name: end_month
+  description: Mês de fim de vigência do índice
+  type: integer
+- name: year
+  description: Ano de criação do índice
+  type: integer
