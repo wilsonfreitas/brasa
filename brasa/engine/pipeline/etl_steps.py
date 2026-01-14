@@ -475,3 +475,36 @@ class CalculateImpliedRate(ETLPipelineStep):
             compounding,
             forward_price,
         )
+
+
+@ETLStepRegistry.register("flatten_columns")
+class FlattenStep(ETLPipelineStep):
+    """Flatten columns by splitting delimited values into separate rows.
+
+    This step is useful for exploding columns that contain multiple values
+    separated by a delimiter (e.g., comma-separated index names).
+
+    Parameters:
+        columns: List of column names to flatten.
+        separator: The delimiter used to split values (default: ",").
+
+    Examples:
+        # Flatten a column with comma-separated values
+        - step: flatten_columns
+          columns:
+            - indexes
+
+        # Flatten with a custom separator
+        - step: flatten_columns
+          columns:
+            - tags
+          separator: "|"
+    """
+
+    def execute(
+        self, data: ds.Dataset | pd.DataFrame, _context: ETLPipelineContext
+    ) -> pd.DataFrame:
+        """Flatten the specified columns."""
+        columns = self.require_param("columns")
+        separator = self.get_param("separator", ",")
+        return shared_transforms.flatten_column(data, columns, separator)

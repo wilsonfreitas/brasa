@@ -344,3 +344,53 @@ def calculate_implied_rate(
         df[implied_rate_column] = (forward_price / df[price_column]) ** (1 / t) - 1
 
     return df
+
+
+def flatten_column(
+    data: ds.Dataset | pd.DataFrame,
+    columns: list[str],
+    separator: str = ",",
+) -> pd.DataFrame:
+    """Flatten columns by splitting values and exploding into separate rows.
+
+    This function takes columns containing delimited values (e.g., "A,B,C")
+    and expands them into multiple rows, one for each value.
+
+    Args:
+        data: Input dataset or DataFrame.
+        columns: List of column names to flatten.
+        separator: The delimiter used to separate values in the column.
+            Defaults to comma (",").
+
+    Returns:
+        DataFrame with the specified columns flattened into separate rows.
+
+    Example:
+        Input DataFrame:
+            | code  | indexes     |
+            |-------|-------------|
+            | PETR4 | IBOV,IBRX   |
+            | VALE3 | IBOV        |
+
+        After flatten_column(df, ["indexes"], separator=","):
+            | code  | indexes |
+            |-------|---------|
+            | PETR4 | IBOV    |
+            | PETR4 | IBRX    |
+            | VALE3 | IBOV    |
+    """
+    df = to_dataframe(data)
+
+    for column in columns:
+        if column not in df.columns:
+            raise ValueError(f"Column '{column}' not found in DataFrame")
+        # Split values by separator and strip whitespace from each value
+        df[column] = (
+            df[column]
+            .str.split(separator)
+            .apply(lambda x: [v.strip() for v in x] if isinstance(x, list) else x)
+        )
+        # Explode the column to create separate rows
+        df = df.explode(column, ignore_index=True)
+
+    return df
