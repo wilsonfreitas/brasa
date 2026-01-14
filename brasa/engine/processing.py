@@ -90,11 +90,20 @@ def save_partitioned_parquet_file(
     if schema:
         tb = pa.Table.from_pandas(df, schema=schema)
         pq.write_to_dataset(
-            tb, root_path=folder, partition_cols=partition_cols, schema=schema
+            tb,
+            root_path=folder,
+            partition_cols=partition_cols,
+            schema=schema,
+            existing_data_behavior="delete_matching",
         )
     else:
         tb = pa.Table.from_pandas(df)
-        pq.write_to_dataset(tb, root_path=folder, partition_cols=partition_cols)
+        pq.write_to_dataset(
+            tb,
+            root_path=folder,
+            partition_cols=partition_cols,
+            existing_data_behavior="delete_matching",
+        )
     meta.add_processed_file(processed_files_name, folder)
 
 
