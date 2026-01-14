@@ -5,6 +5,8 @@ including file format handling (zip, base64), validation, and compression.
 """
 
 import time
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
@@ -16,6 +18,7 @@ from .cache import CacheManager, CacheMetadata
 from .exceptions import DownloadException
 from .reporting import (
     TaskReport,
+    TaskResult,
     Verbosity,
     capture_warnings,
     create_task_result_from_exception,
@@ -226,10 +229,12 @@ def process_marketdata(
     reprocess: bool = False,
     verbosity: Verbosity = Verbosity.NORMAL,
     report_file: str | Path | None = None,
+    max_workers: int = 4,
 ) -> TaskReport:
     """Process all downloaded data for a template.
 
     Reads raw downloaded files and converts them to parquet format.
+    Uses parallel processing for file I/O with serialized database writes.
     Shows pytest-style progress display during processing.
 
     Args:
@@ -237,10 +242,13 @@ def process_marketdata(
         reprocess: If True, reprocess even if already processed.
         verbosity: Output verbosity level (QUIET, NORMAL, VERBOSE).
         report_file: Optional path to save the report (JSON or TXT).
+        max_workers: Maximum number of parallel workers for processing.
 
     Returns:
         TaskReport with results of all processing operations.
     """
+    from .processing import _read_marketdata
+
     template = retrieve_template(template_name)
     cache = CacheManager()
 
@@ -256,7 +264,18 @@ def process_marketdata(
     )
     report.start(total=len(rows))
 
-    for meta_row in rows:
+    # Lock for serializing SQLite writes
+    db_lock = threading.Lock()
+
+    def process_single(meta_row: tuple) -> TaskResult:
+        """Process a single cache entry.
+
+        Args:
+            meta_row: Tuple containing the metadata row ID.
+
+        Returns:
+            TaskResult with processing result information.
+        """
         start_time = datetime.now()
 
         _meta = cache._load_meta_dict_by_id(meta_row[0])
@@ -269,7 +288,13 @@ def process_marketdata(
 
                 if should_process:
                     meta.processing_errors = ""
-                    cache.read_marketdata(meta)
+
+                    # File I/O - parallelizable
+                    _read_marketdata(meta)
+
+                    # Serialized DB write
+                    with db_lock:
+                        cache.save_meta(meta)
 
                     duration = (datetime.now() - start_time).total_seconds()
 
@@ -298,9 +323,10 @@ def process_marketdata(
             except Exception as ex:
                 duration = (datetime.now() - start_time).total_seconds()
 
-                # Save error to metadata
+                # Save error to metadata (serialized)
                 meta.processing_errors = str(ex)
-                cache.save_meta(meta)
+                with db_lock:
+                    cache.save_meta(meta)
 
                 result = create_task_result_from_exception(
                     exception=ex,
@@ -314,7 +340,15 @@ def process_marketdata(
                     is_expected_error=False,
                 )
 
-        report.add_result(result)
+        return result
+
+    # Process in parallel using ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(process_single, row): row for row in rows}
+
+        for future in as_completed(futures):
+            result = future.result()
+            report.add_result(result)
 
     report.finish()
 
