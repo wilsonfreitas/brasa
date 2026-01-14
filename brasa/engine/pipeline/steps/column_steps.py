@@ -86,6 +86,7 @@ class AddColumnStep(PipelineStep):
         value: Static value to assign (optional)
         from_context: Key to get value from context.intermediate_results (optional)
         from_download_args: Key to get value from meta.download_args (optional)
+        use_extra_key: Boolean flag to use meta.extra_key as value (optional)
     """
 
     def execute(self, data: pd.DataFrame, context: PipelineContext) -> pd.DataFrame:
@@ -93,16 +94,21 @@ class AddColumnStep(PipelineStep):
 
         if "value" in self.params:
             value = self.params["value"]
-        elif "from_context" in self.params:
-            key = self.params["from_context"]
-            value = context.get_result(key)
-        elif "from_download_args" in self.params:
-            key = self.params["from_download_args"]
-            value = context.meta.download_args.get(key)
+        elif "from" in self.params:
+            from_param = self.params["from"]
+            where = from_param["where"]
+            if where == "context":
+                key = from_param["key"]
+                value = context.get_result(key)
+            elif where == "download_args":
+                key = from_param["key"]
+                value = context.meta.download_args.get(key)
+            elif where == "extra_key":
+                value = context.meta.extra_key
+            else:
+                raise ValueError(f"Unknown 'from.where' value: {where}")
         else:
-            raise ValueError(
-                "add_column requires 'value', 'from_context', or 'from_download_args'"
-            )
+            raise ValueError("add_column requires 'value', or 'from' parameter")
 
         data[name] = value
         return data

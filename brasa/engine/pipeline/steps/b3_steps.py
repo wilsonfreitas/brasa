@@ -269,3 +269,38 @@ class B3ReadBVBG087XmlStep(PipelineStep):
 
         logger.info(f"Parsed BVBG087 with {len(results)} datasets")
         return results
+
+
+@StepRegistry.register("b3_add_columns_from_json_fields")
+class B3AddColumnsFromJsonFieldsStep(PipelineStep):
+    """Parse B3's JSON fields and add as columns.
+
+    Parameters:
+        map: Mapping of column names to JSON paths
+    """
+
+    def execute(self, data: pd.DataFrame, context: PipelineContext) -> pd.DataFrame:
+        import gzip
+        import json
+        from pathlib import Path
+
+        filepath = context.downloaded_file
+        map_param = self.require_param("map")
+
+        if str(filepath).endswith(".gz"):
+            with gzip.open(filepath, "rt", encoding=context.encoding) as f:
+                json_data = json.load(f)
+        else:
+            with Path(filepath).open(encoding=context.encoding) as f:
+                json_data = json.load(f)
+
+        for store_as, json_path in map_param.items():
+            json_data_copy = json_data  # Use a copy to traverse
+            for key in json_path.split("."):
+                if isinstance(json_data_copy, dict):
+                    json_data_copy = json_data_copy[key]
+                elif isinstance(json_data_copy, list) and key.isdigit():
+                    json_data_copy = json_data_copy[int(key)]
+            data[store_as] = json_data_copy
+
+        return data
