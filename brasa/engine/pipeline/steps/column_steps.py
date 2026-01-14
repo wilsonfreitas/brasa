@@ -94,18 +94,21 @@ class AddColumnStep(PipelineStep):
 
         if "value" in self.params:
             value = self.params["value"]
-        elif "from_context" in self.params:
-            key = self.params["from_context"]
-            value = context.get_result(key)
-        elif "from_download_args" in self.params:
-            key = self.params["from_download_args"]
-            value = context.meta.download_args.get(key)
-        elif self.params.get("use_extra_key"):
-            value = context.meta.extra_key
+        elif "from" in self.params:
+            from_param = self.params["from"]
+            where = from_param["where"]
+            if where == "context":
+                key = from_param["key"]
+                value = context.get_result(key)
+            elif where == "download_args":
+                key = from_param["key"]
+                value = context.meta.download_args.get(key)
+            elif where == "extra_key":
+                value = context.meta.extra_key
+            else:
+                raise ValueError(f"Unknown 'from.where' value: {where}")
         else:
-            raise ValueError(
-                "add_column requires 'value', 'from_context', 'from_download_args', or 'use_extra_key' parameter"
-            )
+            raise ValueError("add_column requires 'value', or 'from' parameter")
 
         data[name] = value
         return data

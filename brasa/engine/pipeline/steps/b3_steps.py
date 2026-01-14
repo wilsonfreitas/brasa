@@ -271,15 +271,12 @@ class B3ReadBVBG087XmlStep(PipelineStep):
         return results
 
 
-@StepRegistry.register("b3_parse_header_indexes_composition")
-class B3ParseHeaderIndexesCompositionStep(PipelineStep):
-    """Parse the reference date from B3 indexes composition JSON.
-
-    Extracts the reference date from the JSON file and stores it in the context.
+@StepRegistry.register("b3_add_columns_from_json_fields")
+class B3AddColumnsFromJsonFieldsStep(PipelineStep):
+    """Parse B3's JSON fields and add as columns.
 
     Parameters:
-        path: JSON path to extract the date from (default: None)
-        store_as: Name to store the result under in context (default: 'refdate')
+        map: Mapping of column names to JSON paths
     """
 
     def execute(self, data: pd.DataFrame, context: PipelineContext) -> pd.DataFrame:
@@ -288,8 +285,7 @@ class B3ParseHeaderIndexesCompositionStep(PipelineStep):
         from pathlib import Path
 
         filepath = context.downloaded_file
-        json_path = self.get_param("path")
-        store_as = self.get_param("store_as", "refdate")
+        map_param = self.require_param("map")
 
         if str(filepath).endswith(".gz"):
             with gzip.open(filepath, "rt", encoding=context.encoding) as f:
@@ -298,12 +294,13 @@ class B3ParseHeaderIndexesCompositionStep(PipelineStep):
             with Path(filepath).open(encoding=context.encoding) as f:
                 json_data = json.load(f)
 
-        if json_path:
+        for store_as, json_path in map_param.items():
+            json_data_copy = json_data  # Use a copy to traverse
             for key in json_path.split("."):
-                if isinstance(json_data, dict):
-                    json_data = json_data[key]
-                elif isinstance(json_data, list) and key.isdigit():
-                    json_data = json_data[int(key)]
-            context.store_result(store_as, json_data)
+                if isinstance(json_data_copy, dict):
+                    json_data_copy = json_data_copy[key]
+                elif isinstance(json_data_copy, list) and key.isdigit():
+                    json_data_copy = json_data_copy[int(key)]
+            data[store_as] = json_data_copy
 
         return data

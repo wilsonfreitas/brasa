@@ -19,37 +19,32 @@ reader:
   pipeline:
     - step: read_json
       path: results
+
     - step: add_column
-      use_extra_key: true
+      from:
+        where: extra_key
       name: refdate
 
-    - step: b3_parse_header_indexes_composition
-      path: header.update
-      store_as: update_date
-    - step: add_column
-      name: update_date
-      from_context: update_date
+    # extract json fields and add as columns
+    - step: b3_add_columns_from_json_fields
+      map:
+        # column_name: json_path
+        update_date: header.update
+        start_month: header.startMonth
+        end_month: header.endMonth
+        year: header.year
 
-    - step: b3_parse_header_indexes_composition
-      path: header.startMonth
-      store_as: start_month
-    - step: add_column
-      name: start_month
-      from_context: start_month
-
-    - step: b3_parse_header_indexes_composition
-      path: header.endMonth
-      store_as: end_month
-    - step: add_column
-      name: end_month
-      from_context: end_month
-
-    - step: b3_parse_header_indexes_composition
-      path: header.year
-      store_as: year
-    - step: add_column
-      name: year
-      from_context: year
+    - step: set_columns
+      names:
+        - corporation_name
+        - specification_code
+        - symbol
+        - indexes
+        - refdate
+        - update_date
+        - start_month
+        - end_month
+        - year
 
     - step: apply_fields
       errors: coerce
