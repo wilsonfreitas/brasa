@@ -251,6 +251,11 @@ class MarketDataDownloader:
     """Configuration for downloading market data from remote sources.
 
     Defines URL patterns, download functions, and file format handling.
+
+    Attributes:
+        download_delay: Delay in seconds between consecutive downloads.
+            Used to avoid rate limiting on APIs that restrict request frequency.
+            Default is 0 (no delay).
     """
 
     def __init__(self, downloader: dict) -> None:
@@ -262,6 +267,7 @@ class MarketDataDownloader:
         self.args = downloader.get("args", {})
         self.encoding = downloader.get("encoding", "utf-8")
         self.verify_ssl = downloader.get("verify_ssl", True)
+        self.download_delay = downloader.get("download_delay", 0)
         self.download_function = load_function_by_name(downloader["function"])
         validator: str = downloader.get(
             "validator", "brasa.downloaders.validate_empty_file"

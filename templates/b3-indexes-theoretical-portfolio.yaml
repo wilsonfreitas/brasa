@@ -8,6 +8,7 @@ downloader:
   url: https://sistemaswebb3-listados.b3.com.br/indexProxy/indexCall/GetTheoricalPortfolio
   format: json
   encoding: latin1
+  download_delay: 5
   args:
     pageNumber: 1
     pageSize: 9999

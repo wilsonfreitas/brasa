@@ -1,9 +1,10 @@
 """Public API for market data operations.
 
-This module provides the high-level functions for downloading, processing,
-and retrieving market data. These are the main entry points for users.
+This module handles the downloading of market data from remote sources,
+including file format handling (zip, base64), validation, and compression.
 """
 
+import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -123,6 +124,9 @@ def download_marketdata(
     cache = CacheManager()
     kwargs_iter = KwargsIterator(kwargs)
 
+    # Get download delay from template (default 0)
+    download_delay = template.downloader.download_delay
+
     report = TaskReport(
         operation="download",
         template_name=template_name,
@@ -130,7 +134,13 @@ def download_marketdata(
     )
     report.start(total=len(kwargs_iter))
 
+    is_first_download = True
     for args in kwargs_iter:
+        # Apply delay between downloads (not before the first one)
+        if download_delay > 0 and not is_first_download:
+            time.sleep(download_delay)
+        is_first_download = False
+
         start_time = datetime.now()
 
         meta = CacheMetadata(template.id)
