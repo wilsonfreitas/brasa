@@ -48,9 +48,9 @@ reader:
 
     - step: apply_fields
       errors: coerce
-writers:
+writer:
   layer: input
-  partition: refdate
+  partitioning: [refdate]
 fields:
 - name: corporation_name
   description: Nome da companhia
