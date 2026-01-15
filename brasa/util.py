@@ -98,7 +98,9 @@ class KwargsIterator:
             self.__len = 0
             self.names = []
         else:
-            self.__len = max(len(x) for x in self.elements)
+            self.__len = 1
+            for x in self.elements:
+                self.__len *= len(x)
             self.names = list(kwargs.keys())
 
     def __len__(self) -> int:
