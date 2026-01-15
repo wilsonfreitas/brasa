@@ -4,8 +4,8 @@ This module handles the downloading of market data from remote sources,
 including file format handling (zip, base64), validation, and compression.
 """
 
-import time
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
@@ -134,13 +134,7 @@ def download_marketdata(
     )
     report.start(total=len(kwargs_iter))
 
-    is_first_download = True
     for args in kwargs_iter:
-        # Apply delay between downloads (not before the first one)
-        if download_delay > 0 and not is_first_download:
-            time.sleep(download_delay)
-        is_first_download = False
-
         start_time = datetime.now()
 
         meta = CacheMetadata(template.id)
@@ -154,6 +148,10 @@ def download_marketdata(
                 should_download = _should_download(cache, meta, reprocess)
 
                 if should_download:
+                    # Apply delay between downloads (not before the first one)
+                    if download_delay > 0:
+                        time.sleep(download_delay)
+
                     cache.download_marketdata(meta)
 
                     # Reload meta to get downloaded files
