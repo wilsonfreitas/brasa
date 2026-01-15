@@ -11,6 +11,8 @@ import pytz
 import requests
 from bcb import sgs
 
+from brasa.engine.exceptions import DownloadException
+
 
 @contextmanager
 def disable_ssl_warnings():
@@ -42,12 +44,9 @@ class SimpleDownloader:
             res = requests.get(self.url, verify=self.verify_ssl)
             self.response = res
 
-        msg = f"status_code = {res.status_code} url = {self.url}"
-        logg = logging.warn if res.status_code != 200 else logging.info
-        logg(msg)
-
         if res.status_code != 200:
-            return None
+            msg = f"status_code = {res.status_code} url = {self.url}"
+            raise DownloadException(msg)
 
         temp = io.BytesIO(res.content)
         return temp
@@ -127,12 +126,9 @@ class SettlementPricesDownloader(DatetimeDownloader):
             res = requests.post(self.url, params=body, verify=self.verify_ssl)
             self.response = res
 
-        msg = f"status_code = {res.status_code} url = {self.url}"
-        logg = logging.warn if res.status_code != 200 else logging.info
-        logg(msg)
-
         if res.status_code != 200:
-            return None
+            msg = f"status_code = {res.status_code} url = {self.url}"
+            raise DownloadException(msg)
 
         temp = io.BytesIO(res.content)
         return temp
@@ -188,11 +184,9 @@ class VnaAnbimaURLDownloader(SimpleDownloader):
             "Inicio": refdate.strftime("%d/%m/%Y"),
         }
         res = requests.post(url, params=body)
-        msg = f"status_code = {res.status_code} url = {url}"
-        logg = logging.warn if res.status_code != 200 else logging.info
-        logg(msg)
         if res.status_code != 200:
-            return None, None, res.status_code, refdate
+            msg = f"status_code = {res.status_code} url = {self.url}"
+            raise DownloadException(msg)
         status_code = res.status_code
         temp_file = io.BytesIO(res.content)
         f_fname = self.get_fname(None, refdate)
