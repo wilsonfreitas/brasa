@@ -445,21 +445,21 @@ class CacheManager(Singleton):
         try:
             _download_marketdata(meta, **meta.download_args)
             self.save_trial(meta, True)
-        except DuplicatedFolderException:
+        except DuplicatedFolderException as e:
             self.save_trial(meta, True)
-            return
-        except DownloadException:
+            raise e
+        except DownloadException as e:
             self.save_trial(meta, False)
-            return
-        except Exception:
+            raise e
+        except Exception as e:
             self.save_trial(meta, False)
             self.clean_meta_raw_folder(meta)
-            return
-        try:
-            self.save_meta(meta)
-        except Exception:
-            self.clean_meta_db(meta)
-            return
+            raise e
+        finally:
+            try:
+                self.save_meta(meta)
+            except Exception:
+                self.clean_meta_db(meta)
 
     def process_without_checks(
         self, meta: CacheMetadata
