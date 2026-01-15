@@ -454,10 +454,14 @@ def _get_companies_cvm_codes() -> list[int]:
 
 
 def _get_indexes_names() -> list[str]:
-    tb = get_dataset("b3-indexes-composition").scanner(columns=["refdate"]).to_table()
+    tb = (
+        get_dataset("b3-indexes-composition", layer="staging")
+        .scanner(columns=["refdate"])
+        .to_table()
+    )
     max_date = pyarrow.compute.max(tb.column("refdate"))
     df = (
-        get_dataset("b3-indexes-composition")
+        get_dataset("b3-indexes-composition", layer="staging")
         .filter(pc.field("refdate") == max_date)
         .scanner(columns=["indexes"])
         .to_table()
