@@ -50,40 +50,40 @@ fields:
   type: integer
 - name: month01
   description: Coluna do mês de janeiro
-  type: number
+  type: number(thousands=".", decimal=",")
 - name: month02
   description: Coluna do mês de fevereiro
-  type: number
+  type: number(thousands=".", decimal=",")
 - name: month03
   description: Coluna do mês de março
-  type: number
+  type: number(thousands=".", decimal=",")
 - name: month04
   description: Coluna do mês de abril
-  type: number
+  type: number(thousands=".", decimal=",")
 - name: month05
   description: Coluna do mês de maio
-  type: number
+  type: number(thousands=".", decimal=",")
 - name: month06
   description: Coluna do mês de junho
-  type: number
+  type: number(thousands=".", decimal=",")
 - name: month07
   description: Coluna do mês de julho
-  type: number
+  type: number(thousands=".", decimal=",")
 - name: month08
   description: Coluna do mês de agosto
-  type: number
+  type: number(thousands=".", decimal=",")
 - name: month09
   description: Coluna do mês de setembro
-  type: number
+  type: number(thousands=".", decimal=",")
 - name: month10
   description: Coluna do mês de outubro
-  type: number
+  type: number(thousands=".", decimal=",")
 - name: month11
   description: Coluna do mês de novembro
-  type: number
+  type: number(thousands=".", decimal=",")
 - name: month12
   description: Coluna do mês de dezembro
-  type: number
+  type: number(thousands=".", decimal=",")
 - name: year
   description: Ano
   type: integer
