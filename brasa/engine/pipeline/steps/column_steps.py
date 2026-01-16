@@ -1,9 +1,12 @@
 """Column manipulation pipeline steps.
 
 Steps for renaming, selecting, and transforming DataFrame columns.
+These steps work with both DataFrames and PyArrow Datasets where possible.
 """
 
 from __future__ import annotations
+
+from typing import Any
 
 import pandas as pd
 
@@ -35,46 +38,48 @@ class SetColumnsStep(PipelineStep):
 
 @StepRegistry.register("rename_columns")
 class RenameColumnsStep(PipelineStep):
-    """Rename columns using a mapping.
+    """Rename columns using a mapping (supports DataFrame and PyArrow Dataset).
 
     Parameters:
         mapping: Dictionary mapping old names to new names
     """
 
-    def execute(self, data: pd.DataFrame, _context: PipelineContext) -> pd.DataFrame:
+    def execute(self, data: pd.DataFrame, _context: Any) -> pd.DataFrame:
+        from .. import shared_transforms
+
         mapping = self.require_param("mapping")
-        return data.rename(columns=mapping)
+        return shared_transforms.rename_columns(data, mapping)
 
 
 @StepRegistry.register("select_columns")
 class SelectColumnsStep(PipelineStep):
-    """Select specific columns from a DataFrame.
+    """Select specific columns from data (supports DataFrame and PyArrow Dataset).
 
     Parameters:
         columns: List of column names to keep
     """
 
-    def execute(self, data: pd.DataFrame, _context: PipelineContext) -> pd.DataFrame:
+    def execute(self, data: pd.DataFrame, _context: Any) -> pd.DataFrame:
+        from .. import shared_transforms
+
         columns = self.require_param("columns")
-        missing = set(columns) - set(data.columns)
-        if missing:
-            raise ValueError(f"Columns not found: {missing}")
-        return data[columns]
+        return shared_transforms.select_columns(data, columns)
 
 
 @StepRegistry.register("drop_columns")
 class DropColumnsStep(PipelineStep):
-    """Drop columns from a DataFrame.
+    """Drop columns from data (supports DataFrame and PyArrow Dataset).
 
     Parameters:
         columns: List of column names to drop
-        errors: How to handle missing columns ('raise' or 'ignore', default: 'raise')
+        errors: How to handle missing columns ('raise' or 'ignore', default: 'ignore')
     """
 
-    def execute(self, data: pd.DataFrame, _context: PipelineContext) -> pd.DataFrame:
+    def execute(self, data: pd.DataFrame, _context: Any) -> pd.DataFrame:
+        from .. import shared_transforms
+
         columns = self.require_param("columns")
-        errors = self.get_param("errors", "raise")
-        return data.drop(columns=columns, errors=errors)
+        return shared_transforms.drop_columns(data, columns)
 
 
 @StepRegistry.register("add_column")

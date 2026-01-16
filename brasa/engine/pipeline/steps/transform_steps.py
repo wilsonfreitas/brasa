@@ -1,11 +1,16 @@
 """Data transformation pipeline steps.
 
 Steps for transforming data values, parsing types, and applying field schemas.
+These steps work with both DataFrames and PyArrow Datasets where possible.
 """
 
 from __future__ import annotations
 
+from typing import Any
+
 import pandas as pd
+
+from brasa.engine.pipeline.shared_transforms import to_dataframe
 
 from ..context import PipelineContext
 from ..registry import StepRegistry
@@ -153,7 +158,7 @@ class ParseDateTimeStep(PipelineStep):
 
 @StepRegistry.register("fill_na")
 class FillNaStep(PipelineStep):
-    """Fill NA/NaN values in columns.
+    """Fill NA/NaN values in columns (supports DataFrame and PyArrow Dataset).
 
     Parameters:
         columns: List of column names to fill (optional, all if not specified)
@@ -161,27 +166,31 @@ class FillNaStep(PipelineStep):
         method: Fill method ('ffill', 'bfill')
     """
 
-    def execute(self, data: pd.DataFrame, _context: PipelineContext) -> pd.DataFrame:
+    def execute(self, data: pd.DataFrame, _context: Any) -> pd.DataFrame:
+        from .. import shared_transforms
+
         columns = self.get_param("columns")
         value = self.get_param("value")
         method = self.get_param("method")
 
-        if columns:
-            subset = data[columns]
-            if value is not None:
-                data[columns] = subset.fillna(value)
-            elif method == "ffill":
-                data[columns] = subset.ffill()
-            elif method == "bfill":
-                data[columns] = subset.bfill()
-        elif value is not None:
-            data = data.fillna(value)
-        elif method == "ffill":
-            data = data.ffill()
-        elif method == "bfill":
-            data = data.bfill()
+        return shared_transforms.fill_na(data, value, method, columns)
 
-        return data
+
+@StepRegistry.register("drop_duplicates")
+class DropDuplicatesStep(PipelineStep):
+    """Remove duplicate rows (supports DataFrame and PyArrow Dataset).
+
+    Parameters:
+        subset: Column names to consider for identifying duplicates (optional).
+        keep: Which duplicates to keep ('first', 'last', False). Default: 'first'.
+    """
+
+    def execute(self, data: pd.DataFrame, _context: Any) -> pd.DataFrame:
+        from .. import shared_transforms
+
+        subset = self.get_param("subset")
+        keep = self.get_param("keep", "first")
+        return shared_transforms.drop_duplicates(data, subset, keep)
 
 
 @StepRegistry.register("drop_na")
@@ -326,6 +335,8 @@ class MeltStep(PipelineStep):
         var_name = self.get_param("var_name", "variable")
         value_name = self.get_param("value_name", "value")
 
+        data = to_dataframe(data)
+
         return pd.melt(
             data,
             id_vars=id_vars,
@@ -337,24 +348,36 @@ class MeltStep(PipelineStep):
 
 @StepRegistry.register("sort")
 class SortStep(PipelineStep):
-    """Sort DataFrame by one or more columns.
+    """Sort data by one or more columns (supports DataFrame and PyArrow Dataset).
 
     Parameters:
         by: Column name or list of column names to sort by
         ascending: Sort ascending (default: True). Can be bool or list of bools.
+        descending: Sort descending (default: False). Alternative to ascending.
         na_position: Where to place NAs ('first' or 'last', default: 'last')
     """
 
-    def execute(self, data: pd.DataFrame, _context: PipelineContext) -> pd.DataFrame:
-        by = self.require_param("by")
-        ascending = self.get_param("ascending", True)
-        na_position = self.get_param("na_position", "last")
+    def execute(self, data: pd.DataFrame, _context: Any) -> pd.DataFrame:
+        from .. import shared_transforms
 
-        return data.sort_values(
-            by=by,
-            ascending=ascending,
-            na_position=na_position,
-        ).reset_index(drop=True)
+        by = self.require_param("by")
+        ascending = self.get_param("ascending")
+        descending = self.get_param("descending")
+
+        # Handle ascending/descending parameters
+        if descending is not None:
+            # Use descending parameter (ETL style)
+            return shared_transforms.sort_data(data, by, descending)
+        elif ascending is not None:
+            # Use ascending parameter (reader style) - convert to descending
+            if isinstance(ascending, bool):
+                desc = not ascending
+            else:
+                desc = [not a for a in ascending]
+            return shared_transforms.sort_data(data, by, desc)
+        else:
+            # Default: ascending (descending=False)
+            return shared_transforms.sort_data(data, by, False)
 
 
 @StepRegistry.register("make_date")

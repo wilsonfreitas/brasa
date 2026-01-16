@@ -18,7 +18,8 @@ from brasa.engine.cache import CacheManager
 from brasa.fieldset_schema.adapters import PyArrowAdapter
 
 from .etl_context import ETLPipelineContext
-from .etl_steps import ETLPipelineStep, ETLStepRegistry
+from .registry import StepRegistry
+from .step import PipelineStep
 
 if TYPE_CHECKING:
     from brasa.engine.template import MarketDataWriter
@@ -38,7 +39,7 @@ class ETLPipeline:
         steps: List of ETL pipeline steps to execute.
     """
 
-    def __init__(self, steps: list[ETLPipelineStep]) -> None:
+    def __init__(self, steps: list[PipelineStep]) -> None:
         """Initialize the pipeline with a list of steps.
 
         Args:
@@ -70,7 +71,7 @@ class ETLPipeline:
                     f"Step configuration must have a 'step' key: {step_config}"
                 )
             step_name = step_config["step"]
-            step = ETLStepRegistry.create(step_name, step_config)
+            step = StepRegistry.create(step_name, step_config)
             steps.append(step)
         return cls(steps)
 

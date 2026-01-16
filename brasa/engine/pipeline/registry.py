@@ -96,6 +96,15 @@ class StepRegistry:
         return sorted(cls._steps.keys())
 
     @classmethod
+    def get_all_steps(cls) -> dict[str, type[PipelineStep]]:
+        """Get all registered steps.
+
+        Returns:
+            Dictionary mapping step names to step classes.
+        """
+        return cls._steps.copy()
+
+    @classmethod
     def clear(cls) -> None:
         """Clear all registered steps. Useful for testing."""
         cls._steps.clear()

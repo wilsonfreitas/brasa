@@ -1,15 +1,13 @@
 """Base class for pipeline steps.
 
 This module defines the abstract base class that all pipeline steps must inherit from.
+Both reader pipelines and ETL pipelines use this base class with the unified StepRegistry.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from .context import PipelineContext
+from typing import Any
 
 
 class PipelineStep(ABC):
@@ -18,6 +16,13 @@ class PipelineStep(ABC):
     A pipeline step is a single unit of work that transforms data in some way.
     Steps are composable and can be chained together to form a complete
     data processing pipeline.
+
+    This unified base class works with both:
+    - Reader pipelines (PipelineContext with file metadata)
+    - ETL pipelines (ETLPipelineContext with writer config)
+
+    Steps should use duck typing or protocol checks if they need specific
+    context features. Most steps only need params and work with Any context.
 
     Attributes:
         name: The registered name of this step type.
@@ -35,12 +40,12 @@ class PipelineStep(ABC):
         self.params = params or {}
 
     @abstractmethod
-    def execute(self, data: Any, context: PipelineContext) -> Any:
+    def execute(self, data: Any, context: Any) -> Any:
         """Execute the step and return the transformed data.
 
         Args:
             data: Input data from the previous step (or None for the first step).
-            context: Pipeline context containing metadata and configuration.
+            context: Pipeline context (PipelineContext, ETLPipelineContext, or compatible).
 
         Returns:
             Transformed data to pass to the next step.
@@ -74,6 +79,21 @@ class PipelineStep(ABC):
         if key not in self.params:
             raise ValueError(f"Step '{self.name}' requires parameter '{key}'")
         return self.params[key]
+
+    def get_input_datasets(self) -> list[str]:
+        """Get the list of input dataset names this step depends on.
+
+        Used by ETL pipelines to determine dataset dependencies.
+
+        Returns:
+            List of dataset names that are inputs to this step.
+        """
+        inputs = []
+        if "input" in self.params:
+            inputs.append(self.params["input"])
+        if "right" in self.params:
+            inputs.append(self.params["right"])
+        return inputs
 
     @classmethod
     def from_config(cls, config: dict[str, Any]) -> PipelineStep:

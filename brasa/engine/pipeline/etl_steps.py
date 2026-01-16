@@ -5,173 +5,24 @@ datasets into derived datasets.
 
 The ETL steps use shared transformation functions from shared_transforms.py
 to enable code reuse between reader and ETL pipelines.
+
+All steps now use the unified StepRegistry and PipelineStep base class,
+allowing steps to be shared between reader and ETL pipelines.
 """
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import Any
 
 import pandas as pd
 import pyarrow.dataset as ds
 
 from . import shared_transforms
+from .registry import StepRegistry
+from .step import PipelineStep
 
-if TYPE_CHECKING:
-    from .etl_context import ETLPipelineContext
-
-
-class ETLPipelineStep(ABC):
-    """Base class for ETL pipeline steps.
-
-    ETL pipeline steps operate on PyArrow datasets or DataFrames and
-    produce transformed data for the next step in the pipeline.
-
-    Attributes:
-        name: The registered name of this step type.
-        params: Configuration parameters for this step instance.
-    """
-
-    name: str = ""
-
-    def __init__(self, params: dict[str, Any] | None = None) -> None:
-        """Initialize the step with configuration parameters.
-
-        Args:
-            params: Dictionary of parameters from the YAML configuration.
-        """
-        self.params = params or {}
-
-    @abstractmethod
-    def execute(self, data: Any, context: ETLPipelineContext) -> Any:
-        """Execute the step and return the transformed data.
-
-        Args:
-            data: Input data from the previous step (or None for first step).
-            context: ETL pipeline context containing metadata and configuration.
-
-        Returns:
-            Transformed data to pass to the next step.
-        """
-        ...
-
-    def get_param(self, key: str, default: Any = None) -> Any:
-        """Get a parameter value with an optional default.
-
-        Args:
-            key: Parameter name.
-            default: Default value if parameter is not set.
-
-        Returns:
-            The parameter value or default.
-        """
-        return self.params.get(key, default)
-
-    def require_param(self, key: str) -> Any:
-        """Get a required parameter value.
-
-        Args:
-            key: Parameter name.
-
-        Returns:
-            The parameter value.
-
-        Raises:
-            ValueError: If the parameter is not set.
-        """
-        if key not in self.params:
-            raise ValueError(f"Step '{self.name}' requires parameter '{key}'")
-        return self.params[key]
-
-    def get_input_datasets(self) -> list[str]:
-        """Get the list of input dataset names this step depends on.
-
-        Returns:
-            List of dataset names that are inputs to this step.
-        """
-        inputs = []
-        if "input" in self.params:
-            inputs.append(self.params["input"])
-        if "right" in self.params:
-            inputs.append(self.params["right"])
-        return inputs
-
-    @classmethod
-    def from_config(cls, config: dict[str, Any]) -> ETLPipelineStep:
-        """Create a step instance from YAML configuration.
-
-        Args:
-            config: Dictionary from YAML configuration.
-
-        Returns:
-            Configured step instance.
-        """
-        params = {k: v for k, v in config.items() if k != "step"}
-        return cls(params)
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(params={self.params})"
-
-
-class ETLStepRegistry:
-    """Registry of available ETL pipeline steps.
-
-    Provides decorator-based registration and factory method for creating
-    step instances from YAML configuration.
-    """
-
-    _steps: ClassVar[dict[str, type[ETLPipelineStep]]] = {}
-
-    @classmethod
-    def register(cls, name: str):
-        """Decorator to register a step class with a given name.
-
-        Args:
-            name: The name to register the step under.
-
-        Returns:
-            Decorator function.
-        """
-
-        def decorator(step_class: type[ETLPipelineStep]):
-            if name in cls._steps:
-                raise ValueError(
-                    f"ETL Step '{name}' is already registered by {cls._steps[name].__name__}"
-                )
-            step_class.name = name
-            cls._steps[name] = step_class
-            return step_class
-
-        return decorator
-
-    @classmethod
-    def create(cls, name: str, config: dict[str, Any]) -> ETLPipelineStep:
-        """Create a step instance from configuration.
-
-        Args:
-            name: The registered name of the step.
-            config: Step configuration from YAML.
-
-        Returns:
-            Configured step instance.
-
-        Raises:
-            ValueError: If the step name is not registered.
-        """
-        if name not in cls._steps:
-            available = ", ".join(sorted(cls._steps.keys()))
-            raise ValueError(f"Unknown ETL step '{name}'. Available steps: {available}")
-        step_class = cls._steps[name]
-        return step_class.from_config(config)
-
-    @classmethod
-    def get_all_steps(cls) -> dict[str, type[ETLPipelineStep]]:
-        """Get all registered steps.
-
-        Returns:
-            Dictionary mapping step names to step classes.
-        """
-        return cls._steps.copy()
+# Backward compatibility alias - ETLPipelineStep is now just PipelineStep
+ETLPipelineStep = PipelineStep
 
 
 # =============================================================================
@@ -179,8 +30,8 @@ class ETLStepRegistry:
 # =============================================================================
 
 
-@ETLStepRegistry.register("load")
-class LoadDatasetStep(ETLPipelineStep):
+@StepRegistry.register("load")
+class LoadDatasetStep(PipelineStep):
     """Load a dataset by name.
 
     This step loads an existing dataset and returns it as a PyArrow Dataset.
@@ -210,12 +61,12 @@ class LoadDatasetStep(ETLPipelineStep):
           partitioning: [commodity]  # optional
     """
 
-    def execute(self, _data: Any, _context: ETLPipelineContext) -> ds.Dataset:
+    def execute(self, _data: Any, _context: Any) -> ds.Dataset:
         """Load the specified dataset.
 
         Args:
             _data: Ignored (this is typically the first step).
-            _context: ETL pipeline context.
+            _context: Pipeline context (ETLPipelineContext or compatible).
 
         Returns:
             PyArrow Dataset.
@@ -240,9 +91,9 @@ class LoadDatasetStep(ETLPipelineStep):
         )
 
 
-@ETLStepRegistry.register("filter")
-class FilterStep(ETLPipelineStep):
-    """Filter rows based on conditions.
+@StepRegistry.register("dataset_filter")
+class DatasetFilterStep(PipelineStep):
+    """Filter rows based on conditions (supports PyArrow Dataset and DataFrame).
 
     Parameters:
         where: Dictionary of column -> value(s) for equality filtering.
@@ -250,32 +101,32 @@ class FilterStep(ETLPipelineStep):
     """
 
     def execute(
-        self, data: ds.Dataset | pd.DataFrame, _context: ETLPipelineContext
+        self, data: ds.Dataset | pd.DataFrame, _context: Any
     ) -> ds.Dataset | pd.DataFrame:
         """Filter the data based on the where clause."""
         where = self.require_param("where")
         return shared_transforms.filter_data(data, where)
 
 
-@ETLStepRegistry.register("select")
-class SelectColumnsStep(ETLPipelineStep):
-    """Select specific columns from the dataset.
+@StepRegistry.register("dataset_select")
+class DatasetSelectColumnsStep(PipelineStep):
+    """Select specific columns from the dataset (supports PyArrow Dataset and DataFrame).
 
     Parameters:
         columns: List of column names to select.
     """
 
     def execute(
-        self, data: ds.Dataset | pd.DataFrame, _context: ETLPipelineContext
+        self, data: ds.Dataset | pd.DataFrame, _context: Any
     ) -> ds.Dataset | pd.DataFrame:
         """Select the specified columns."""
         columns = self.require_param("columns")
         return shared_transforms.select_columns(data, columns)
 
 
-@ETLStepRegistry.register("sort")
-class SortStep(ETLPipelineStep):
-    """Sort data by specified columns.
+@StepRegistry.register("dataset_sort")
+class DatasetSortStep(PipelineStep):
+    """Sort data by specified columns (supports PyArrow Dataset and DataFrame).
 
     Parameters:
         by: Column name or list of column names to sort by.
@@ -283,82 +134,72 @@ class SortStep(ETLPipelineStep):
                    Can be a single bool or list of bools matching 'by'.
     """
 
-    def execute(
-        self, data: ds.Dataset | pd.DataFrame, _context: ETLPipelineContext
-    ) -> pd.DataFrame:
+    def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
         """Sort the data by specified columns."""
         by = self.require_param("by")
         descending = self.get_param("descending", False)
         return shared_transforms.sort_data(data, by, descending)
 
 
-@ETLStepRegistry.register("to_dataframe")
-class ToDataFrameStep(ETLPipelineStep):
+@StepRegistry.register("to_dataframe")
+class ToDataFrameStep(PipelineStep):
     """Convert a PyArrow Dataset/Table to pandas DataFrame.
 
     This is useful when subsequent steps require DataFrame operations.
     """
 
-    def execute(
-        self, data: ds.Dataset | pd.DataFrame, _context: ETLPipelineContext
-    ) -> pd.DataFrame:
+    def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
         """Convert data to DataFrame."""
         return shared_transforms.to_dataframe(data)
 
 
-@ETLStepRegistry.register("drop_columns")
-class DropColumnsStep(ETLPipelineStep):
-    """Drop specified columns from the dataset.
+@StepRegistry.register("dataset_drop_columns")
+class DatasetDropColumnsStep(PipelineStep):
+    """Drop specified columns from the dataset (supports PyArrow Dataset and DataFrame).
 
     Parameters:
         columns: List of column names to drop.
     """
 
-    def execute(
-        self, data: ds.Dataset | pd.DataFrame, _context: ETLPipelineContext
-    ) -> pd.DataFrame:
+    def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
         """Drop the specified columns."""
         columns = self.require_param("columns")
         return shared_transforms.drop_columns(data, columns)
 
 
-@ETLStepRegistry.register("rename_columns")
-class RenameColumnsStep(ETLPipelineStep):
-    """Rename columns in the dataset.
+@StepRegistry.register("dataset_rename_columns")
+class DatasetRenameColumnsStep(PipelineStep):
+    """Rename columns in the dataset (supports PyArrow Dataset and DataFrame).
 
     Parameters:
         mapping: Dictionary of old_name -> new_name.
     """
 
-    def execute(
-        self, data: ds.Dataset | pd.DataFrame, _context: ETLPipelineContext
-    ) -> pd.DataFrame:
+    def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
         """Rename the columns."""
         mapping = self.require_param("mapping")
         return shared_transforms.rename_columns(data, mapping)
 
 
-@ETLStepRegistry.register("drop_duplicates")
-class DropDuplicatesStep(ETLPipelineStep):
-    """Remove duplicate rows.
+@StepRegistry.register("dataset_drop_duplicates")
+class DatasetDropDuplicatesStep(PipelineStep):
+    """Remove duplicate rows (supports PyArrow Dataset and DataFrame).
 
     Parameters:
         subset: Column names to consider for identifying duplicates (optional).
         keep: Which duplicates to keep ('first', 'last', False).
     """
 
-    def execute(
-        self, data: ds.Dataset | pd.DataFrame, _context: ETLPipelineContext
-    ) -> pd.DataFrame:
+    def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
         """Remove duplicates."""
         subset = self.get_param("subset")
         keep = self.get_param("keep", "first")
         return shared_transforms.drop_duplicates(data, subset, keep)
 
 
-@ETLStepRegistry.register("fill_na")
-class FillNAStep(ETLPipelineStep):
-    """Fill missing values.
+@StepRegistry.register("dataset_fill_na")
+class DatasetFillNAStep(PipelineStep):
+    """Fill missing values (supports PyArrow Dataset and DataFrame).
 
     Parameters:
         value: Value to fill NA with.
@@ -366,9 +207,7 @@ class FillNAStep(ETLPipelineStep):
         columns: Columns to fill (None = all columns).
     """
 
-    def execute(
-        self, data: ds.Dataset | pd.DataFrame, _context: ETLPipelineContext
-    ) -> pd.DataFrame:
+    def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
         """Fill NA values."""
         value = self.get_param("value")
         method = self.get_param("method")
@@ -376,8 +215,8 @@ class FillNAStep(ETLPipelineStep):
         return shared_transforms.fill_na(data, value, method, columns)
 
 
-@ETLStepRegistry.register("future_maturity_to_date")
-class FutureMaturity2Date(ETLPipelineStep):
+@StepRegistry.register("future_maturity_to_date")
+class FutureMaturity2Date(PipelineStep):
     """Convert future maturity codes to actual dates.
 
     Parameters:
@@ -387,9 +226,7 @@ class FutureMaturity2Date(ETLPipelineStep):
         calendar: Business day calendar to use (default: Actual).
     """
 
-    def execute(
-        self, data: ds.Dataset | pd.DataFrame, _context: ETLPipelineContext
-    ) -> pd.DataFrame:
+    def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
         """Convert future maturity codes to dates."""
         code_column = self.require_param("code_column")
         date_column = self.require_param("date_column")
@@ -400,8 +237,8 @@ class FutureMaturity2Date(ETLPipelineStep):
         )
 
 
-@ETLStepRegistry.register("following_bizday")
-class AdjustFollowingBizdays(ETLPipelineStep):
+@StepRegistry.register("following_bizday")
+class AdjustFollowingBizdays(PipelineStep):
     """Adjust dates to the following business day.
 
     Parameters:
@@ -410,9 +247,7 @@ class AdjustFollowingBizdays(ETLPipelineStep):
         calendar: Business day calendar to use (default: Actual).
     """
 
-    def execute(
-        self, data: ds.Dataset | pd.DataFrame, _context: ETLPipelineContext
-    ) -> pd.DataFrame:
+    def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
         """Convert future maturity codes to dates."""
         date_column = self.require_param("date_column")
         adjusted_column = self.require_param("adjusted_column")
@@ -422,8 +257,8 @@ class AdjustFollowingBizdays(ETLPipelineStep):
         )
 
 
-@ETLStepRegistry.register("bizdays")
-class CalculateBizdays(ETLPipelineStep):
+@StepRegistry.register("bizdays")
+class CalculateBizdays(PipelineStep):
     """Calculate business days between two date columns.
 
     Parameters:
@@ -433,9 +268,7 @@ class CalculateBizdays(ETLPipelineStep):
         calendar: Business day calendar to use (default: Actual).
     """
 
-    def execute(
-        self, data: ds.Dataset | pd.DataFrame, _context: ETLPipelineContext
-    ) -> pd.DataFrame:
+    def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
         """Convert future maturity codes to dates."""
         from_column = self.require_param("from_column")
         to_column = self.require_param("to_column")
@@ -446,8 +279,8 @@ class CalculateBizdays(ETLPipelineStep):
         )
 
 
-@ETLStepRegistry.register("implied_rate")
-class CalculateImpliedRate(ETLPipelineStep):
+@StepRegistry.register("implied_rate")
+class CalculateImpliedRate(PipelineStep):
     """Calculate implied interest rate from price.
 
     Parameters:
@@ -458,9 +291,7 @@ class CalculateImpliedRate(ETLPipelineStep):
         forward_price: Forward price used in calculation (default: 100,000).
     """
 
-    def execute(
-        self, data: ds.Dataset | pd.DataFrame, _context: ETLPipelineContext
-    ) -> pd.DataFrame:
+    def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
         """Calculate implied interest rates."""
         price_column = self.require_param("price_column")
         rate_column = self.require_param("rate_column")
@@ -477,8 +308,8 @@ class CalculateImpliedRate(ETLPipelineStep):
         )
 
 
-@ETLStepRegistry.register("flatten_columns")
-class FlattenStep(ETLPipelineStep):
+@StepRegistry.register("flatten_columns")
+class FlattenStep(PipelineStep):
     """Flatten columns by splitting delimited values into separate rows.
 
     This step is useful for exploding columns that contain multiple values
@@ -501,10 +332,22 @@ class FlattenStep(ETLPipelineStep):
           separator: "|"
     """
 
-    def execute(
-        self, data: ds.Dataset | pd.DataFrame, _context: ETLPipelineContext
-    ) -> pd.DataFrame:
+    def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
         """Flatten the specified columns."""
         columns = self.require_param("columns")
         separator = self.get_param("separator", ",")
         return shared_transforms.flatten_column(data, columns, separator)
+
+
+# =============================================================================
+# Backward Compatibility Aliases
+# =============================================================================
+# Register the dataset steps with their original names for backward compatibility
+# with existing YAML templates. Steps like sort, fill_na, rename_columns,
+# drop_columns, select_columns are now defined in transform_steps.py and
+# column_steps.py using shared_transforms, so they work with both DataFrames
+# and Datasets.
+
+# These register the dataset-specific filter step under the simpler name
+StepRegistry.register("filter")(DatasetFilterStep)
+StepRegistry.register("select")(DatasetSelectColumnsStep)
