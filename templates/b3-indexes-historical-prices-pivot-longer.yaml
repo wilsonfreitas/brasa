@@ -1,0 +1,55 @@
+id: b3-indexes-historical-prices-pivot-longer
+description: Creates a longer format of B3 index historical prices
+
+etl:
+  pipeline:
+    # 1. Read the JSON file and extract the "Results" section
+    - step: load
+      input: b3-indexes-historical-prices
+      layer: input
+
+    # 4. Melt/unpivot: transform month01-month12 into rows
+    - step: melt
+      id_vars: [index, day, year]
+      value_vars: [month01, month02, month03, month04, month05, month06, month07, month08, month09, month10, month11, month12]
+      var_name: month
+      value_name: value
+
+    # 5. Extract month number from "month01" -> "01"
+    - step: str_replace
+      column: month
+      pattern: "month"
+      replacement: ""
+
+    # 6. Cast month to integer
+    - step: cast
+      column: month
+      dtype: int
+
+    # 7. Create refdate from year, month, day
+    - step: make_date
+      year_column: year
+      month_column: month
+      day_column: day
+      output: refdate
+
+    # 8. Rename index to symbol
+    - step: rename_columns
+      mapping:
+        index: symbol
+
+    # 9. Select only needed columns
+    - step: select_columns
+      columns: [symbol, refdate, value]
+
+    # 10. Drop rows with NA values in value column
+    - step: drop_na
+      columns: [value]
+
+    # 11. Sort by refdate
+    - step: sort
+      by: refdate
+
+writer:
+  dataset: b3-indexes-historical-prices
+  layer: staging
