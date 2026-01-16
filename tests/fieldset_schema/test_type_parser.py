@@ -208,6 +208,72 @@ def test_numeric_parser_invalid_input():
         parser.parse("abc")
 
 
+# NumericParser - thousands and decimal separators
+def test_numeric_parser_brazilian_format():
+    """Test Brazilian/European format: dot as thousands, comma as decimal."""
+    parser = NumericParser(parameters={"thousands": ".", "decimal": ","})
+    assert parser.parse("1.234.567,89") == 1234567.89
+    assert parser.parse("1.000,00") == 1000.00
+    assert parser.parse("999,99") == 999.99
+
+
+def test_numeric_parser_us_format_explicit():
+    """Test US format with explicit separators."""
+    parser = NumericParser(parameters={"thousands": ",", "decimal": "."})
+    assert parser.parse("1,234,567.89") == 1234567.89
+    assert parser.parse("1,000.00") == 1000.00
+
+
+def test_numeric_parser_decimal_only():
+    """Test comma as decimal without thousands separator."""
+    parser = NumericParser(parameters={"decimal": ","})
+    assert parser.parse("1234,56") == 1234.56
+    assert parser.parse("0,99") == 0.99
+
+
+def test_numeric_parser_thousands_only():
+    """Test thousands separator with default decimal (dot)."""
+    parser = NumericParser(parameters={"thousands": ","})
+    assert parser.parse("1,234,567.89") == 1234567.89
+    assert parser.parse("1,000") == 1000.0
+
+
+def test_numeric_parser_separators_with_dec():
+    """Test separators combined with implied decimal places."""
+    parser = NumericParser(parameters={"thousands": ".", "decimal": ",", "dec": 2})
+    # 1.234.567,89 parsed then divided by 100
+    result = parser.parse("1.234.567,89")
+    assert abs(result - 12345.6789) < 0.0001
+
+
+def test_numeric_parser_separators_with_sign():
+    """Test separators combined with sign parameter."""
+    parser = NumericParser(parameters={"thousands": ".", "decimal": ",", "sign": "-"})
+    assert parser.parse("1.234,56") == -1234.56
+
+
+def test_numeric_parser_same_separator_error():
+    """Test that same separator for thousands and decimal raises error."""
+    parser = NumericParser(parameters={"thousands": ".", "decimal": "."})
+    with pytest.raises(TypeParseError, match="cannot be the same"):
+        parser.parse("1.234.56")
+
+
+def test_numeric_parser_no_separators_in_value():
+    """Test that values without separators still work when separators are configured."""
+    parser = NumericParser(parameters={"thousands": ".", "decimal": ","})
+    assert parser.parse("1234") == 1234.0
+    assert parser.parse("0") == 0.0
+
+
+def test_numeric_parser_factory_with_separators():
+    """Test creating parser via factory with separator parameters."""
+    parser = TypeParserFactory.create_parser('numeric(thousands=".", decimal=",")')
+    assert isinstance(parser, NumericParser)
+    assert parser.parameters == {"thousands": ".", "decimal": ","}
+    assert parser.parse("1.234,56") == 1234.56
+
+
 # IntegerParser
 def test_integer_parser_basic():
     parser = IntegerParser()
