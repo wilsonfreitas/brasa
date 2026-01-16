@@ -30,7 +30,10 @@ class ApplyFieldsStep(PipelineStep):
         from brasa.fieldset_schema import PandasAdapter
 
         errors = self.get_param("errors", "coerce")
+        set_columns = self.get_param("set_columns", False)
         adapter = PandasAdapter(context.fields, errors=errors)
+        if set_columns:
+            data.columns = context.fields.get_field_names()
         return adapter.apply_types(data)
 
 
@@ -300,5 +303,147 @@ class ConcatColumnsStep(PipelineStep):
         data[output] = data[columns[0]].astype(str)
         for col in columns[1:]:
             data[output] = data[output] + separator + data[col].astype(str)
+
+        return data
+
+
+@StepRegistry.register("melt")
+class MeltStep(PipelineStep):
+    """Unpivot a DataFrame from wide to long format.
+
+    Similar to pandas.melt() or R's tidyr::pivot_longer().
+
+    Parameters:
+        id_vars: Column(s) to use as identifier variables
+        value_vars: Column(s) to unpivot (if not specified, uses all columns not in id_vars)
+        var_name: Name for the variable column (default: 'variable')
+        value_name: Name for the value column (default: 'value')
+    """
+
+    def execute(self, data: pd.DataFrame, _context: PipelineContext) -> pd.DataFrame:
+        id_vars = self.get_param("id_vars")
+        value_vars = self.get_param("value_vars")
+        var_name = self.get_param("var_name", "variable")
+        value_name = self.get_param("value_name", "value")
+
+        return pd.melt(
+            data,
+            id_vars=id_vars,
+            value_vars=value_vars,
+            var_name=var_name,
+            value_name=value_name,
+        )
+
+
+@StepRegistry.register("sort")
+class SortStep(PipelineStep):
+    """Sort DataFrame by one or more columns.
+
+    Parameters:
+        by: Column name or list of column names to sort by
+        ascending: Sort ascending (default: True). Can be bool or list of bools.
+        na_position: Where to place NAs ('first' or 'last', default: 'last')
+    """
+
+    def execute(self, data: pd.DataFrame, _context: PipelineContext) -> pd.DataFrame:
+        by = self.require_param("by")
+        ascending = self.get_param("ascending", True)
+        na_position = self.get_param("na_position", "last")
+
+        return data.sort_values(
+            by=by,
+            ascending=ascending,
+            na_position=na_position,
+        ).reset_index(drop=True)
+
+
+@StepRegistry.register("make_date")
+class MakeDateStep(PipelineStep):
+    """Create a date column from year, month, and day components.
+
+    Parameters:
+        year_column: Column containing year values
+        month_column: Column containing month values
+        day_column: Column containing day values
+        output: Name of the output date column (default: 'date')
+        errors: How to handle errors ('raise', 'coerce', 'ignore', default: 'coerce')
+    """
+
+    def execute(self, data: pd.DataFrame, _context: PipelineContext) -> pd.DataFrame:
+        year_col = self.require_param("year_column")
+        month_col = self.require_param("month_column")
+        day_col = self.require_param("day_column")
+        output = self.get_param("output", "date")
+        errors = self.get_param("errors", "coerce")
+
+        data[output] = pd.to_datetime(
+            {
+                "year": data[year_col],
+                "month": data[month_col],
+                "day": data[day_col],
+            },
+            errors=errors,
+        )
+
+        return data
+
+
+@StepRegistry.register("str_replace")
+class StrReplaceStep(PipelineStep):
+    """Replace occurrences of pattern in a string column.
+
+    Parameters:
+        column: Column to apply the replacement
+        pattern: Pattern to search for (string or regex)
+        replacement: Replacement string
+        output: Output column name (default: same as input)
+        regex: Whether pattern is a regex (default: False)
+    """
+
+    def execute(self, data: pd.DataFrame, _context: PipelineContext) -> pd.DataFrame:
+        column = self.require_param("column")
+        pattern = self.require_param("pattern")
+        replacement = self.get_param("replacement", "")
+        output = self.get_param("output", column)
+        regex = self.get_param("regex", False)
+
+        data[output] = data[column].str.replace(pattern, replacement, regex=regex)
+        return data
+
+
+@StepRegistry.register("cast")
+class CastStep(PipelineStep):
+    """Cast column(s) to a specific type.
+
+    Parameters:
+        column: Column name or list of columns to cast
+        dtype: Target data type ('int', 'float', 'str', 'datetime', 'bool')
+        errors: How to handle errors ('raise', 'coerce', 'ignore', default: 'coerce')
+    """
+
+    def execute(self, data: pd.DataFrame, _context: PipelineContext) -> pd.DataFrame:
+        columns = self.require_param("column")
+        dtype = self.require_param("dtype")
+        errors = self.get_param("errors", "coerce")
+
+        if isinstance(columns, str):
+            columns = [columns]
+
+        for col in columns:
+            if col not in data.columns:
+                continue
+
+            if dtype == "int":
+                data[col] = pd.to_numeric(data[col], errors=errors).astype("Int64")
+            elif dtype == "float":
+                data[col] = pd.to_numeric(data[col], errors=errors)
+            elif dtype == "str":
+                data[col] = data[col].astype(str)
+            elif dtype == "datetime":
+                data[col] = pd.to_datetime(data[col], errors=errors)
+            elif dtype == "bool":
+                data[col] = data[col].astype(bool)
+            else:
+                data[col] = data[col].astype(dtype)
 
         return data
