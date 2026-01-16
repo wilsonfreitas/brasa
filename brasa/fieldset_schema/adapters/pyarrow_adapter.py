@@ -95,7 +95,7 @@ class PyArrowAdapter:
         """
         Check if field needs pandas preprocessing.
 
-        Custom date formats and numeric with decimals require preprocessing.
+        Custom date formats and numeric with decimals/separators require preprocessing.
         """
         type_name = field.type_name
 
@@ -105,10 +105,17 @@ class PyArrowAdapter:
         ):
             return True
 
-        # Numeric with decimal places or sign
-        return (
-            type_name == "numeric" and bool(field.parser.parameters.get("dec"))
-        ) or bool(field.parser.parameters.get("sign"))
+        # Numeric with decimal places, sign, or custom separators
+        if type_name == "numeric":
+            params = field.parser.parameters
+            return bool(
+                params.get("dec")
+                or params.get("sign")
+                or params.get("thousands")
+                or params.get("decimal")
+            )
+
+        return False
 
     def _get_pyarrow_type(self, field: Field) -> pa.DataType:
         """

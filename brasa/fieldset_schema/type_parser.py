@@ -142,15 +142,17 @@ class TimeParser(TypeParser):
 
 
 class NumericParser(TypeParser):
-    """Parser for numeric (float) type with optional decimal and sign parameters."""
+    """Parser for numeric (float) type with optional decimal, sign, and separator parameters."""
 
     def parse(self, value: str) -> float:
         """
-        Parse string to float with optional decimal places and sign.
+        Parse string to float with optional decimal places, sign, and separators.
 
         Parameters:
-            - dec: Number of decimal places (default: 0)
+            - dec: Number of implied decimal places (default: 0)
             - sign: Sign character to apply ('+' or '-', default: '+')
+            - thousands: Thousands separator character (default: None)
+            - decimal: Decimal separator character (default: '.')
 
         Args:
             value: String representation of number
@@ -160,16 +162,41 @@ class NumericParser(TypeParser):
 
         Raises:
             TypeParseError: If numeric parsing fails
+
+        Examples:
+            - "1.234.567,89" with thousands=".", decimal="," -> 1234567.89
+            - "1,234,567.89" with thousands="," -> 1234567.89
+            - "1234,56" with decimal="," -> 1234.56
         """
         try:
             # Get parameters
             decimal_places = self.parameters.get("dec", 0)
             sign = self.parameters.get("sign", "+")
+            thousands_sep = self.parameters.get("thousands", None)
+            decimal_sep = self.parameters.get("decimal", ".")
+
+            # Validate separators are different
+            if thousands_sep and thousands_sep == decimal_sep:
+                raise TypeParseError(
+                    f"Thousands separator '{thousands_sep}' cannot be the same as "
+                    f"decimal separator '{decimal_sep}'"
+                )
+
+            # Process the value string
+            processed_value = value
+
+            # Remove thousands separator if specified
+            if thousands_sep:
+                processed_value = processed_value.replace(thousands_sep, "")
+
+            # Replace decimal separator with standard dot if different
+            if decimal_sep != ".":
+                processed_value = processed_value.replace(decimal_sep, ".")
 
             # Parse the numeric value
-            numeric_value = float(value)
+            numeric_value = float(processed_value)
 
-            # Apply decimal places
+            # Apply implied decimal places
             if decimal_places > 0:
                 numeric_value = numeric_value / (10**decimal_places)
 

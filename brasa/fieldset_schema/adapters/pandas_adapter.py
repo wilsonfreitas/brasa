@@ -108,10 +108,17 @@ class PandasAdapter:
             if self.errors != "raise":
                 return True
 
-        # Numeric with decimal places or sign needs converter
-        return type_name == "numeric" and bool(
-            field.parser.parameters.get("dec") or field.parser.parameters.get("sign")
-        )
+        # Numeric with decimal places, sign, or custom separators needs converter
+        if type_name == "numeric":
+            params = field.parser.parameters
+            return bool(
+                params.get("dec")
+                or params.get("sign")
+                or params.get("thousands")
+                or params.get("decimal")
+            )
+
+        return False
 
     def _get_pandas_dtype(self, field: Field) -> str | None:
         """
