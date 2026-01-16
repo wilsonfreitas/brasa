@@ -14,94 +14,79 @@ downloader:
     language: pt-br
     year: ~
     index: ~
-  extra-key: date
 reader:
-  function: brasa.readers.null_reader
-parts:
-  Min:
-    name: min
-    fields:
-      - name: day
-        description: Dia do mês
-      - name: month01
-        description: Valor do mês de janeiro
-      - name: month02
-        description: Valor do mês de fevereiro
-      - name: month03
-        description: Valor do mês de março
-      - name: month04
-        description: Valor do mês de abril
-      - name: month05
-        description: Valor do mês de maio
-      - name: month06
-        description: Valor do mês de junho
-      - name: month07
-        description: Valor do mês de julho
-      - name: month08
-        description: Valor do mês de agosto
-      - name: month09
-        description: Valor do mês de setembro
-      - name: month10
-        description: Valor do mês de outubro
-      - name: month11
-        description: Valor do mês de novembro
-      - name: month12
-        description: Valor do mês de dezembro
-  Max:
-    name: max
-    fields:
-      - name: day
-        description: Dia do mês
-      - name: month01
-        description: Valor do mês de janeiro
-      - name: month02
-        description: Valor do mês de fevereiro
-      - name: month03
-        description: Valor do mês de março
-      - name: month04
-        description: Valor do mês de abril
-      - name: month05
-        description: Valor do mês de maio
-      - name: month06
-        description: Valor do mês de junho
-      - name: month07
-        description: Valor do mês de julho
-      - name: month08
-        description: Valor do mês de agosto
-      - name: month09
-        description: Valor do mês de setembro
-      - name: month10
-        description: Valor do mês de outubro
-      - name: month11
-        description: Valor do mês de novembro
-      - name: month12
-        description: Valor do mês de dezembro
-  Results:
-    name: results
-    fields:
-      - name: day
-        description: Dia do mês
-      - name: month01
-        description: Valor do mês de janeiro
-      - name: month02
-        description: Valor do mês de fevereiro
-      - name: month03
-        description: Valor do mês de março
-      - name: month04
-        description: Valor do mês de abril
-      - name: month05
-        description: Valor do mês de maio
-      - name: month06
-        description: Valor do mês de junho
-      - name: month07
-        description: Valor do mês de julho
-      - name: month08
-        description: Valor do mês de agosto
-      - name: month09
-        description: Valor do mês de setembro
-      - name: month10
-        description: Valor do mês de outubro
-      - name: month11
-        description: Valor do mês de novembro
-      - name: month12
-        description: Valor do mês de dezembro
+  encoding: UTF-8
+  pipeline:
+    # 1. Read the JSON file and extract the "Results" section
+    - step: read_json
+      path: results
+
+    # 2. Add year column from download args
+    - step: add_column
+      name: year
+      from:
+        where: download_args
+        key: year
+
+    # 3. Add index column from download args
+    - step: add_column
+      name: index
+      from:
+        where: download_args
+        key: index
+
+    # 4. Apply field types
+    - step: apply_fields
+      set_columns: true
+      errors: coerce
+
+writer:
+  layer: input
+  partitioning: [index, year]
+
+fields:
+- name: day
+  description: Dia do mês
+  type: integer
+- name: month01
+  description: Coluna do mês de janeiro
+  type: number
+- name: month02
+  description: Coluna do mês de fevereiro
+  type: number
+- name: month03
+  description: Coluna do mês de março
+  type: number
+- name: month04
+  description: Coluna do mês de abril
+  type: number
+- name: month05
+  description: Coluna do mês de maio
+  type: number
+- name: month06
+  description: Coluna do mês de junho
+  type: number
+- name: month07
+  description: Coluna do mês de julho
+  type: number
+- name: month08
+  description: Coluna do mês de agosto
+  type: number
+- name: month09
+  description: Coluna do mês de setembro
+  type: number
+- name: month10
+  description: Coluna do mês de outubro
+  type: number
+- name: month11
+  description: Coluna do mês de novembro
+  type: number
+- name: month12
+  description: Coluna do mês de dezembro
+  type: number
+- name: year
+  description: Ano
+  type: integer
+- name: index
+  description: Nome do índice
+  type: character
