@@ -367,7 +367,7 @@ class CacheManager(Singleton):
 
     def clean_meta_raw_folder(self, meta: CacheMetadata) -> None:
         """Clean the raw download folder for a cache entry."""
-        warn(f"Cleaning meta download {meta.download_args}", stacklevel=2)
+        # warn(f"Cleaning meta download {meta.download_args}", stacklevel=2)
         if meta.download_folder == "":
             return
         folder = self.cache_path(meta.download_folder)
@@ -376,7 +376,7 @@ class CacheManager(Singleton):
 
     def clean_meta_db_folder(self, meta: CacheMetadata) -> None:
         """Clean the database folder for a cache entry."""
-        warn(f"Cleaning meta db {meta.download_args}", stacklevel=2)
+        # warn(f"Cleaning meta db {meta.download_args}", stacklevel=2)
         for processed_fname in meta.processed_files.values():
             full_path = Path(self.cache_path(processed_fname))
             if full_path.is_file():
@@ -461,7 +461,7 @@ class CacheManager(Singleton):
             self.save_trial(meta, True)
         except DuplicatedFolderException as e:
             self.save_trial(meta, True)
-            raise e
+            warn(str(e), stacklevel=2)
         except DownloadException as e:
             self.save_trial(meta, False)
             raise e
