@@ -276,7 +276,7 @@ class B3AddColumnsFromJsonFieldsStep(PipelineStep):
     """Parse B3's JSON fields and add as columns.
 
     Parameters:
-        map: Mapping of column names to JSON paths
+        mapping: Mapping of column names to JSON paths
     """
 
     def execute(self, data: pd.DataFrame, context: PipelineContext) -> pd.DataFrame:
@@ -285,7 +285,7 @@ class B3AddColumnsFromJsonFieldsStep(PipelineStep):
         from pathlib import Path
 
         filepath = context.downloaded_file
-        map_param = self.require_param("map")
+        map_param = self.require_param("mapping")
 
         if str(filepath).endswith(".gz"):
             with gzip.open(filepath, "rt", encoding=context.encoding) as f:

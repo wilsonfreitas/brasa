@@ -27,7 +27,7 @@ reader:
 
     # extract json fields and add as columns
     - step: b3_add_columns_from_json_fields
-      map:
+      mapping:
         # column_name: json_path
         update_date: header.update
         start_month: header.startMonth
