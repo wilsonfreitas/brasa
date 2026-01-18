@@ -9,12 +9,13 @@ import pyarrow.compute as pc
 import pyarrow.dataset as ds
 from bizdays import Calendar, get_option, set_option
 
-from .engine import CacheManager, retrieve_template
+from .engine import CacheManager, DatasetCatalog, DatasetInfo, retrieve_template
 from .fieldset_schema import PyArrowAdapter
 
 __all__ = [
     "BrasaDB",
     "describe",
+    "describe_dataset",
     "get_dataset",
     "get_industry_sectors",
     "get_prices",
@@ -24,6 +25,7 @@ __all__ = [
     "get_template_layer",
     "get_template_partitioning",
     "get_template_schema",
+    "list_datasets",
     "show",
     "write_dataset",
 ]
@@ -273,30 +275,80 @@ def get_template_dataset(template_name: str) -> str | None:
     return None
 
 
+def get_catalog_schema(
+    layer: str, dataset_name: str
+) -> tuple[pyarrow.Schema | None, ds.Partitioning | None]:
+    """Get schema and partitioning from the dataset catalog.
+
+    Args:
+        layer: The data layer (input, staging, curated).
+        dataset_name: The name of the dataset.
+
+    Returns:
+        A tuple of (schema, partitioning) if found in catalog, (None, None) otherwise.
+        The schema includes partition columns if they are not already present.
+    """
+    catalog = DatasetCatalog()
+    info = catalog.get_dataset_info(layer, dataset_name)
+
+    if info is None:
+        return None, None
+
+    schema = info.schema
+    partitioning = None
+
+    if info.partitioning:
+        # Build partitioning with proper types from schema
+        partition_fields = []
+        for col in info.partitioning:
+            if col in schema.names:
+                partition_fields.append(schema.field(col))
+            else:
+                # Default to string if not in schema
+                partition_fields.append(pyarrow.field(col, pyarrow.string()))
+        partitioning = ds.partitioning(pyarrow.schema(partition_fields), flavor="hive")
+
+        # Add partition columns to schema if not present
+        # This ensures partition columns are included when reading the dataset
+        schema_fields = list(schema)
+        for field in partition_fields:
+            if field.name not in schema.names:
+                schema_fields.append(field)
+        if len(schema_fields) > len(schema):
+            schema = pyarrow.schema(schema_fields, metadata=schema.metadata)
+
+    return schema, partitioning
+
+
 def get_dataset(
     name: str,
     schema: pyarrow.Schema | None = None,
     partitioning: ds.Partitioning | list[str] | None = None,
     use_template_schema: bool = True,
     layer: str | None = None,
+    use_catalog_schema: bool = True,
 ) -> ds.Dataset:
     """Load a dataset by name.
 
-    The name can be either a template ID or a dataset name. When use_template_schema
-    is True, the function attempts to load the template to get schema, partitioning,
-    layer, and the actual dataset name (which may differ from template ID).
+    The name can be either a template ID or a dataset name. The function attempts
+    to load schema and partitioning in the following order:
+    1. Explicitly provided schema/partitioning parameters
+    2. Dataset catalog (if use_catalog_schema is True and layer is provided)
+    3. Template definition (if use_template_schema is True)
+    4. Raw parquet metadata (fallback)
 
     Args:
         name: The template ID or dataset name.
-        schema: Optional PyArrow schema to use. If None and use_template_schema is True,
-            attempts to load schema from the template definition.
+        schema: Optional PyArrow schema to use. If None, attempts to load from
+            catalog or template.
         partitioning: Optional partitioning specification. Can be a list of column names
-            or a PyArrow Partitioning object. If None and use_template_schema is True,
-            attempts to load from the template.
+            or a PyArrow Partitioning object.
         use_template_schema: If True (default), automatically loads the schema and
             partitioning from the template when not provided.
         layer: Optional data layer override. If None and use_template_schema is True,
             attempts to load from the template. If layer is provided, it takes precedence.
+        use_catalog_schema: If True (default), attempts to load schema from the
+            dataset catalog when layer is provided and schema is not explicitly set.
 
     Returns:
         PyArrow Dataset.
@@ -305,16 +357,27 @@ def get_dataset(
     dataset_name = name
 
     if use_template_schema:
-        if schema is None:
-            schema = get_template_schema(name)
-        if partitioning is None:
-            partitioning = get_template_partitioning(name, schema)
+        # Try to get layer from template if not provided
         if layer is None:
             layer = get_template_layer(name)
         # Get the actual dataset name from template (may differ from template ID)
         template_dataset = get_template_dataset(name)
         if template_dataset:
             dataset_name = template_dataset
+
+    # Try catalog first if layer is available and schema not provided
+    if use_catalog_schema and layer and schema is None:
+        catalog_schema, catalog_partitioning = get_catalog_schema(layer, dataset_name)
+        if catalog_schema is not None:
+            schema = catalog_schema
+        if catalog_partitioning is not None and partitioning is None:
+            partitioning = catalog_partitioning
+
+    # Fall back to template schema if still not found
+    if use_template_schema and schema is None:
+        schema = get_template_schema(name)
+    if use_template_schema and partitioning is None:
+        partitioning = get_template_partitioning(name, schema)
 
     # Build path with layer if available
     dataset_path = f"{layer}/{dataset_name}" if layer else dataset_name
@@ -325,6 +388,128 @@ def get_dataset(
         format="parquet",
         partitioning=partitioning,
     )
+
+
+def list_datasets(layer: str | None = None) -> list[DatasetInfo]:
+    """List all registered datasets in the catalog.
+
+    Args:
+        layer: Optional filter by data layer (input, staging, curated).
+            If None, returns datasets from all layers.
+
+    Returns:
+        List of DatasetInfo objects containing metadata for each dataset.
+    """
+    catalog = DatasetCatalog()
+    return catalog.list_datasets(layer)
+
+
+def describe_dataset(
+    layer: str, dataset_name: str, compare_template: bool = False
+) -> dict:
+    """Get detailed information about a dataset from the catalog.
+
+    Args:
+        layer: The data layer (input, staging, curated).
+        dataset_name: The name of the dataset.
+        compare_template: If True, includes comparison with template schema.
+
+    Returns:
+        Dictionary containing dataset metadata including:
+        - id: Unique identifier
+        - layer: Data layer
+        - dataset_name: Name of the dataset
+        - schema: List of field definitions (name, type, nullable)
+        - partitioning: List of partition column names
+        - source_template: Source template ID if applicable
+        - created_at: Creation timestamp
+        - updated_at: Last update timestamp
+        - schema_differences: (only if compare_template=True) List of differences
+
+    Raises:
+        ValueError: If the dataset is not found in the catalog.
+    """
+    catalog = DatasetCatalog()
+    info = catalog.get_dataset_info(layer, dataset_name)
+
+    if info is None:
+        raise ValueError(f"Dataset '{layer}/{dataset_name}' not found in catalog")
+
+    result = {
+        "id": info.id,
+        "layer": info.layer,
+        "dataset_name": info.dataset_name,
+        "schema": [
+            {
+                "name": field.name,
+                "type": str(field.type),
+                "nullable": field.nullable,
+            }
+            for field in info.schema
+        ],
+        "partitioning": info.partitioning,
+        "source_template": info.source_template,
+        "created_at": info.created_at.isoformat(),
+        "updated_at": info.updated_at.isoformat(),
+    }
+
+    if compare_template and info.source_template:
+        template_schema = get_template_schema(info.source_template)
+        if template_schema:
+            differences = _compare_schemas(info.schema, template_schema)
+            result["schema_differences"] = differences
+
+    return result
+
+
+def _compare_schemas(
+    catalog_schema: pyarrow.Schema, template_schema: pyarrow.Schema
+) -> list[dict]:
+    """Compare catalog schema with template schema.
+
+    Args:
+        catalog_schema: Schema from the catalog.
+        template_schema: Schema from the template.
+
+    Returns:
+        List of differences, each containing field name and description.
+    """
+    differences = []
+    catalog_fields = {f.name: f for f in catalog_schema}
+    template_fields = {f.name: f for f in template_schema}
+
+    # Check for fields in catalog but not in template
+    for name, field in catalog_fields.items():
+        if name not in template_fields:
+            differences.append(
+                {
+                    "field": name,
+                    "issue": "in_catalog_only",
+                    "catalog_type": str(field.type),
+                }
+            )
+        elif str(field.type) != str(template_fields[name].type):
+            differences.append(
+                {
+                    "field": name,
+                    "issue": "type_mismatch",
+                    "catalog_type": str(field.type),
+                    "template_type": str(template_fields[name].type),
+                }
+            )
+
+    # Check for fields in template but not in catalog
+    for name, field in template_fields.items():
+        if name not in catalog_fields:
+            differences.append(
+                {
+                    "field": name,
+                    "issue": "in_template_only",
+                    "template_type": str(field.type),
+                }
+            )
+
+    return differences
 
 
 def describe(name: str) -> None:
@@ -351,6 +536,7 @@ def write_dataset(
 
     The name can be either a template ID or a dataset name. When a template
     exists, the function uses its configuration for layer and dataset name.
+    Also registers the dataset in the catalog.
 
     Args:
         df: DataFrame to write.
@@ -384,6 +570,17 @@ def write_dataset(
         format=format,
         existing_data_behavior="overwrite_or_ignore",
     )
+
+    # Register dataset in catalog if layer is available
+    if layer:
+        catalog = DatasetCatalog()
+        catalog.register_dataset(
+            layer=layer,
+            dataset_name=dataset_name,
+            schema=tb.schema,
+            partitioning=[],  # write_dataset doesn't use partitioning
+            source_template=name if template_dataset else None,
+        )
 
 
 def _get_equity_symbols(sector=None) -> list[str]:

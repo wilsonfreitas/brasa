@@ -1,5 +1,8 @@
 from .engine import (
     CacheManager,
+    DatasetCatalog,
+    DatasetInfo,
+    MigrationReport,
     TaskReport,
     Verbosity,
     download_marketdata,
@@ -7,15 +10,18 @@ from .engine import (
     process_etl,
     process_marketdata,
     retrieve_template,
+    sync_catalog_from_disk,
 )
 from .queries import (
     BrasaDB,
     describe,
+    describe_dataset,
     get_dataset,
     get_industry_sectors,
     get_prices,
     get_returns,
     get_symbols,
+    list_datasets,
     show,
     write_dataset,
 )
@@ -23,9 +29,13 @@ from .queries import (
 __all__ = [
     "BrasaDB",
     "CacheManager",
+    "DatasetCatalog",
+    "DatasetInfo",
+    "MigrationReport",
     "TaskReport",
     "Verbosity",
     "describe",
+    "describe_dataset",
     "download_marketdata",
     "get_dataset",
     "get_industry_sectors",
@@ -33,9 +43,11 @@ __all__ = [
     "get_prices",
     "get_returns",
     "get_symbols",
+    "list_datasets",
     "process_etl",
     "process_marketdata",
     "retrieve_template",
     "show",
+    "sync_catalog_from_disk",
     "write_dataset",
 ]

@@ -144,6 +144,8 @@ class CacheManager(Singleton):
         Path(self.cache_path(self._db_folder)).mkdir(parents=True, exist_ok=True)
         if not Path(self.cache_path(self.meta_db_filename)).exists():
             self.create_meta_db()
+        # Initialize the dataset catalog table
+        self._init_dataset_catalog()
 
     @property
     def cache_folder(self) -> str:
@@ -181,6 +183,18 @@ class CacheManager(Singleton):
         db_conn = sqlite3.connect(database=self.cache_path(self.meta_db_filename))
         c = db_conn.cursor()
         sql_path = Path(__file__).parent / ".." / ".." / "sql" / "create-meta-db.sql"
+        with sql_path.open() as f:
+            c.executescript(f.read())
+        db_conn.commit()
+        db_conn.close()
+
+    def _init_dataset_catalog(self) -> None:
+        """Initialize the dataset catalog table if it doesn't exist."""
+        db_conn = sqlite3.connect(database=self.cache_path(self.meta_db_filename))
+        c = db_conn.cursor()
+        sql_path = (
+            Path(__file__).parent / ".." / ".." / "sql" / "create-dataset-catalog.sql"
+        )
         with sql_path.open() as f:
             c.executescript(f.read())
         db_conn.commit()

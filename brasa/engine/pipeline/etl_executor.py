@@ -153,7 +153,9 @@ class ETLPipeline:
             # Fallback for templates without writer config
             from brasa.engine.layers import DEFAULT_ETL_LAYER
 
-            output_path = man.db_path(f"{DEFAULT_ETL_LAYER.value}/{template_id}")
+            layer = DEFAULT_ETL_LAYER.value
+            dataset = template_id
+            output_path = man.db_path(f"{layer}/{template_id}")
 
         # Get partitioning from writer
         partitioning = []
@@ -191,6 +193,18 @@ class ETLPipeline:
         else:
             # Write as a single file
             pq.write_table(table, f"{output_path}/data.parquet")
+
+        # Register dataset in catalog
+        from brasa.engine.catalog import DatasetCatalog
+
+        catalog = DatasetCatalog()
+        catalog.register_dataset(
+            layer=layer,
+            dataset_name=dataset,
+            schema=table.schema,
+            partitioning=partitioning if partitioning else [],
+            source_template=template_id,
+        )
 
         logger.info(f"Wrote ETL output to {output_path}")
 

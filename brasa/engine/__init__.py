@@ -32,6 +32,14 @@ from .api import (
 # Cache classes
 from .cache import CacheManager, CacheMetadata
 
+# Catalog classes
+from .catalog import (
+    DatasetCatalog,
+    DatasetInfo,
+    MigrationReport,
+    sync_catalog_from_disk,
+)
+
 # Core utilities
 from .core import (
     Singleton,
@@ -105,6 +113,8 @@ __all__ = [
     "CacheMetadata",
     "CharacterFieldHandler",
     "DataLayer",
+    "DatasetCatalog",
+    "DatasetInfo",
     "DateFieldHandler",
     "DownloadException",
     "DuplicatedFolderException",
@@ -115,6 +125,7 @@ __all__ = [
     "MarketDataReader",
     "MarketDataTemplate",
     "MarketDataWriter",
+    "MigrationReport",
     "NumericFieldHandler",
     "NumericParser",
     "ProgressDisplay",
@@ -147,4 +158,5 @@ __all__ = [
     "retrieve_template",
     "save_parquet_file",
     "save_partitioned_parquet_file",
+    "sync_catalog_from_disk",
 ]

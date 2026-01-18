@@ -76,6 +76,9 @@ def save_partitioned_parquet_file(
     df: pd.DataFrame,
     partition_cols: list[str],
     schema: pa.Schema = None,
+    layer: str | None = None,
+    dataset_name: str | None = None,
+    source_template: str | None = None,
 ) -> None:
     """Save DataFrame as partitioned parquet dataset with optional schema.
 
@@ -86,6 +89,9 @@ def save_partitioned_parquet_file(
         df: DataFrame to save.
         partition_cols: Columns to use for partitioning.
         schema: Optional PyArrow schema for type enforcement.
+        layer: Optional data layer for catalog registration.
+        dataset_name: Optional dataset name for catalog registration.
+        source_template: Optional source template ID for catalog registration.
     """
     if schema:
         tb = pa.Table.from_pandas(df, schema=schema)
@@ -105,6 +111,20 @@ def save_partitioned_parquet_file(
             existing_data_behavior="delete_matching",
         )
     meta.add_processed_file(processed_files_name, folder)
+
+    # Register dataset in catalog if layer and dataset_name are provided
+    if layer and dataset_name:
+        from .catalog import DatasetCatalog
+
+        catalog = DatasetCatalog()
+        # Use the table's schema (preserves actual written types)
+        catalog.register_dataset(
+            layer=layer,
+            dataset_name=dataset_name,
+            schema=tb.schema,
+            partitioning=partition_cols,
+            source_template=source_template,
+        )
 
 
 def _get_schema_from_fields(fields):
@@ -137,6 +157,7 @@ def _process_multi_dataset_output(
         man: CacheManager instance.
     """
     db_folder: dict = man.db_folders(template)
+    layer = template.writer.layer.value
 
     if template.datasets:
         # New approach: use datasets for per-dataset schema and metadata
@@ -147,6 +168,8 @@ def _process_multi_dataset_output(
                     dataset_config.fields if dataset_config.fields else None
                 )
                 folder = man.cache_path(db_folder[output_name])
+                # Extract dataset name from folder path (layer/dataset-name)
+                dataset_name = Path(db_folder[output_name]).name
                 save_partitioned_parquet_file(
                     meta,
                     folder,
@@ -154,6 +177,9 @@ def _process_multi_dataset_output(
                     dx,
                     template.writer.partitioning,
                     schema=schema,
+                    layer=layer,
+                    dataset_name=dataset_name,
+                    source_template=template.id,
                 )
     elif template.reader.multi:
         # Legacy fallback: use multi mapping (XML tag -> output name)
@@ -164,6 +190,8 @@ def _process_multi_dataset_output(
         for name, dx in df.items():
             if dx.shape[0] > 0:
                 pfn = template.reader.multi[name]
+                # Extract dataset name from folder path
+                dataset_name = Path(db_folder[name]).name
                 save_partitioned_parquet_file(
                     meta,
                     db_folder[name],
@@ -171,6 +199,9 @@ def _process_multi_dataset_output(
                     dx,
                     template.writer.partitioning,
                     schema=schema,
+                    layer=layer,
+                    dataset_name=dataset_name,
+                    source_template=template.id,
                 )
 
 
@@ -195,6 +226,16 @@ def _read_marketdata(meta: CacheMetadata) -> None:
             template.fields if hasattr(template, "fields") else None
         )
         folder = man.cache_path(man.db_folder(template))
+        layer = template.writer.layer.value
+        dataset_name = template.writer.dataset
         save_partitioned_parquet_file(
-            meta, folder, "data", df, template.writer.partitioning, schema=schema
+            meta,
+            folder,
+            "data",
+            df,
+            template.writer.partitioning,
+            schema=schema,
+            layer=layer,
+            dataset_name=dataset_name,
+            source_template=template.id,
         )
