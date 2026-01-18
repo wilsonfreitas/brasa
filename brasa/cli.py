@@ -1,9 +1,10 @@
 import argparse
+import sys
 from datetime import datetime
 
 from . import download_marketdata, process_etl, process_marketdata, retrieve_template
 from .engine import CacheManager, Verbosity
-from .queries import BrasaDB
+from .queries import BrasaDB, get_dataset
 from .util import DateRangeParser
 
 
@@ -88,6 +89,25 @@ parser_query.add_argument(
     "-o", "--output", nargs=1, help="SQL query to be executed", default="display"
 )
 
+parser_head = subparsers.add_parser("head", help="show first N rows of a dataset")
+parser_head.add_argument(
+    "dataset",
+    help="dataset name in format layer.dataset (e.g., input.b3-cotahist, staging.b3-cotahist)",
+)
+parser_head.add_argument(
+    "-n",
+    "--lines",
+    type=int,
+    default=10,
+    help="number of rows to display (default: 10)",
+)
+parser_head.add_argument(
+    "-o",
+    "--output",
+    default="display",
+    help="output format: display (default) or file path (.csv, .json, .parquet, .xlsx)",
+)
+
 if __name__ == "__main__":
     args = parser.parse_args()
     if args.command == "setup":
@@ -143,3 +163,46 @@ if __name__ == "__main__":
             q.df().to_orc(output, index=False)
         elif output.endswith(".xls") or output.endswith(".xlsx"):
             q.df().to_excel(output, index=False)
+    elif args.command == "head":
+        # Validate dataset format
+        if "." not in args.dataset:
+            print(
+                "Error: Invalid dataset format. "
+                "Use layer.dataset (e.g., input.b3-cotahist)"
+            )
+            sys.exit(1)
+
+        parts = args.dataset.split(".", 1)
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            print(
+                "Error: Invalid dataset format. "
+                "Use layer.dataset (e.g., input.b3-cotahist)"
+            )
+            sys.exit(1)
+
+        layer, dataset_name = parts
+
+        try:
+            ds = get_dataset(dataset_name, layer=layer)
+            df = ds.head(args.lines).to_pandas()
+        except FileNotFoundError:
+            print(f"Error: Dataset '{layer}.{dataset_name}' not found")
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error: Failed to load dataset '{layer}.{dataset_name}': {e}")
+            sys.exit(1)
+
+        output = args.output
+        if output == "display":
+            print(df.to_string())
+        elif output.endswith(".csv"):
+            df.to_csv(output, sep=",", encoding="utf-8", index=False)
+        elif output.endswith(".json"):
+            df.to_json(output, orient="records", indent=2)
+        elif output.endswith(".parquet"):
+            df.to_parquet(output, index=False)
+        elif output.endswith(".xls") or output.endswith(".xlsx"):
+            df.to_excel(output, index=False)
+        else:
+            print(f"Error: Unsupported output format: {output}")
+            sys.exit(1)
