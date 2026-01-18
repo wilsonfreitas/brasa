@@ -26,6 +26,7 @@ class ApplyFieldsStep(PipelineStep):
 
     Parameters:
         errors: How to handle conversion errors ('raise', 'coerce', 'ignore')
+        set_columns: Whether to set DataFrame columns to field names
     """
 
     def execute(self, data: pd.DataFrame, context: PipelineContext) -> pd.DataFrame:
