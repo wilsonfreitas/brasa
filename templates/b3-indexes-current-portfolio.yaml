@@ -1,20 +1,23 @@
-id: b3-indexes-theoretical-portfolio
+id: b3-indexes-current-portfolio
 filename: ~
 filetype: MCUSTOM
-description: Carteira Teórica dos índices da B3 com pesos e posições
+description: Carteira Teórica dos índices da B3 com pesos e quantidades por segmentos
 locale: pt
 downloader:
-  function: brasa.downloaders.b3_paged_url_encoded_download
-  url: https://sistemaswebb3-listados.b3.com.br/indexProxy/indexCall/GetTheoricalPortfolio
+  function: brasa.downloaders.b3_url_encoded_download
+  validator: brasa.downloaders.validate_json_empty_file
+  url: https://sistemaswebb3-listados.b3.com.br/indexProxy/indexCall/GetPortfolioDay
   format: json
-  encoding: latin1
+  encoding: UTF-8
   download_delay: 1
   args:
     pageNumber: 1
     pageSize: 9999
     language: pt-br
+    segment: 2
     index: ~
   extra-key: date
+
 reader:
   encoding: latin1
   pipeline:
@@ -28,6 +31,7 @@ reader:
         header_part: header.part
         header_theoricalQty: header.theoricalQty
         header_reductor: header.reductor
+        portfolio_date: header.date
 
     - step: add_column
       name: index
@@ -40,15 +44,29 @@ reader:
         where: extra_key
       name: refdate
 
+    - step: rename_columns
+      mapping:
+        cod: symbol
+        asset: corporation_name
+        type: specification_code
+        part: weight
+        partAcum: accum_weight
+        theoricalQty: theoretical_quantity
+        header_part: total_weight
+        header_theoricalQty: total_theoretical_quantity
+        header_reductor: reductor
+
     - step: apply_fields
       errors: coerce
-      set_columns: true
 
 writer:
   layer: input
   partitioning: [refdate, index]
 
 fields:
+- name: segment
+  description: Código da ação
+  type: character
 - name: symbol
   description: Código da ação
   type: character
@@ -58,15 +76,15 @@ fields:
 - name: specification_code
   description: Código de especificação da ação
   type: character
-- name: theoretical_quantity
-  description: Quantidade teórica no índice
-  type: number(thousands=".", decimal=",")
 - name: weight
   description: Peso % no índice
   type: number(thousands=".", decimal=",")
-- name: id_asset
-  description: Contagem
-  type: integer
+- name: accum_weight
+  description: Peso % acumulado
+  type: number(thousands=".", decimal=",")
+- name: theoretical_quantity
+  description: Quantidade teórica no índice
+  type: number(thousands=".", decimal=",")
 - name: total_weight
   description: Peso total % no índice
   type: number(thousands=".", decimal=",")
@@ -76,6 +94,9 @@ fields:
 - name: reductor
   description: Redutor
   type: number(thousands=".", decimal=",")
+- name: portfolio_date
+  description: Data da carteira teórica
+  type: date(format="%d/%m/%y")
 - name: index
   description: Nome do índice
   type: character

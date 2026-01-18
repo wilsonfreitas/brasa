@@ -1,0 +1,12 @@
+id: b3-indexes-current-portfolio-consolidated
+description: Consolidated information on B3 index current portfolios
+
+etl:
+  pipeline:
+    - step: load
+      input: b3-indexes-current-portfolio
+      layer: input
+
+writer:
+  dataset: b3-indexes-current-portfolio
+  layer: staging
