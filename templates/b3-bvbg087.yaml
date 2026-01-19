@@ -13,18 +13,14 @@ downloader:
     refdate: ~
 reader:
   locale: en
-  function: brasa.readers.read_b3_bvbg087
-  # Legacy function still used for backward compatibility
-  multi:
-    IndxInf: indexes_info
-    IOPVInf: iopv_info
-    BDRInf: bdr_info
   pipeline:
     steps:
       - b3_read_bvbg087_xml
       - apply_fields_multi
+
 writer:
   partitioning: [refdate]
+
 datasets:
   indexes_info:
     tag: IndxInf
