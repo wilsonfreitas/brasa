@@ -3,6 +3,7 @@ filename: ~
 filetype: CUSTOM
 description: Arquivo de Preços de Mercado
 calendar: Brazil/B3
+
 downloader:
   function: brasa.downloaders.datetime_download
   url: https://www.b3.com.br/pesquisapregao/download?filelist=IN%y%m%d.zip
@@ -11,10 +12,393 @@ downloader:
     refdate: ~
 reader:
   locale: en
-  function: brasa.readers.read_b3_bvbg028
-  multi:
-    EqtyInf: equities
-    OptnOnEqtsInf: options_on_equities
-    FutrCtrctsInf: future_contracts
-fields:
-  - name: ~
+  pipeline:
+    steps:
+      - b3_read_bvbg028_xml
+      - apply_fields_multi
+
+writer:
+  partitioning: [refdate]
+
+datasets:
+  equities:
+    tag: EqtyInf
+    fields:
+      # Header fields (common)
+      - name: refdate
+        description: Reference date
+        tag: RptParams/RptDtAndTm/Dt
+        type: date
+      - name: security_id
+        description: Security ID
+        tag: FinInstrmId/OthrId/Id
+        type: string
+      - name: security_proprietary
+        description: Security proprietary code
+        tag: FinInstrmId/OthrId/Tp/Prtry
+        type: string
+      - name: security_market
+        description: Security market code
+        tag: FinInstrmId/PlcOfListg/MktIdrCd
+        type: string
+      - name: instrument_asset
+        description: Instrument asset code
+        tag: FinInstrmAttrCmon/Asst
+        type: string
+      - name: instrument_asset_description
+        description: Instrument asset description
+        tag: FinInstrmAttrCmon/AsstDesc
+        type: string
+      - name: instrument_market
+        description: Instrument market code
+        tag: FinInstrmAttrCmon/Mkt
+        type: string
+      - name: instrument_segment
+        description: Instrument segment code
+        tag: FinInstrmAttrCmon/Sgmt
+        type: string
+      - name: instrument_description
+        description: Instrument description
+        tag: FinInstrmAttrCmon/Desc
+        type: string
+      # EqtyInf specific fields
+      - name: security_category
+        description: Security category
+        tag: InstrmInf/EqtyInf/SctyCtgy
+        type: string
+      - name: isin
+        description: ISIN code
+        tag: InstrmInf/EqtyInf/ISIN
+        type: string
+      - name: distribution_id
+        description: Distribution ID
+        tag: InstrmInf/EqtyInf/DstrbtnId
+        type: integer
+      - name: cfi_code
+        description: CFI code
+        tag: InstrmInf/EqtyInf/CFICd
+        type: string
+      - name: specification_code
+        description: Specification code
+        tag: InstrmInf/EqtyInf/SpcfctnCd
+        type: string
+      - name: corporation_name
+        description: Corporation name
+        tag: InstrmInf/EqtyInf/CrpnNm
+        type: string
+      - name: symbol
+        description: Ticker symbol
+        tag: InstrmInf/EqtyInf/TckrSymb
+        type: string
+      - name: payment_type
+        description: Payment type
+        tag: InstrmInf/EqtyInf/PmtTp
+        type: string
+      - name: allocation_lot_size
+        description: Allocation round lot size
+        tag: InstrmInf/EqtyInf/AllcnRndLot
+        type: integer
+      - name: price_factor
+        description: Price factor
+        tag: InstrmInf/EqtyInf/PricFctr
+        type: numeric
+      - name: trading_start_date
+        description: Trading start date
+        tag: InstrmInf/EqtyInf/TradgStartDt
+        type: date
+      - name: trading_end_date
+        description: Trading end date
+        tag: InstrmInf/EqtyInf/TradgEndDt
+        type: date
+      - name: corporate_action_start_date
+        description: Corporate action start date
+        tag: InstrmInf/EqtyInf/CorpActnStartDt
+        type: date
+      - name: ex_distribution_number
+        description: Ex-distribution number
+        tag: InstrmInf/EqtyInf/EXDstrbtnNb
+        type: integer
+      - name: custody_treatment_type
+        description: Custody treatment type
+        tag: InstrmInf/EqtyInf/CtdyTrtmntTp
+        type: string
+      - name: trading_currency
+        description: Trading currency
+        tag: InstrmInf/EqtyInf/TradgCcy
+        type: string
+      - name: market_capitalisation
+        description: Market capitalisation
+        tag: InstrmInf/EqtyInf/MktCptlstn
+        type: numeric
+      - name: close
+        description: Close price (last price)
+        tag: InstrmInf/EqtyInf/LastPric
+        type: numeric
+      - name: open
+        description: Open price (first price)
+        tag: InstrmInf/EqtyInf/FrstPric
+        type: numeric
+      - name: governance_indicator
+        description: Governance indicator
+        tag: InstrmInf/EqtyInf/GovnInd
+        type: string
+      - name: days_to_settlement
+        description: Days to settlement
+        tag: InstrmInf/EqtyInf/DaysToSttlm
+        type: integer
+      - name: right_issue_price
+        description: Right issue price
+        tag: InstrmInf/EqtyInf/RghtsIssePric
+        type: numeric
+
+  options_on_equities:
+    tag: OptnOnEqtsInf
+    fields:
+      # Header fields (common)
+      - name: refdate
+        description: Reference date
+        tag: RptParams/RptDtAndTm/Dt
+        type: date
+      - name: security_id
+        description: Security ID
+        tag: FinInstrmId/OthrId/Id
+        type: string
+      - name: security_proprietary
+        description: Security proprietary code
+        tag: FinInstrmId/OthrId/Tp/Prtry
+        type: string
+      - name: security_market
+        description: Security market code
+        tag: FinInstrmId/PlcOfListg/MktIdrCd
+        type: string
+      - name: instrument_asset
+        description: Instrument asset code
+        tag: FinInstrmAttrCmon/Asst
+        type: string
+      - name: instrument_asset_description
+        description: Instrument asset description
+        tag: FinInstrmAttrCmon/AsstDesc
+        type: string
+      - name: instrument_market
+        description: Instrument market code
+        tag: FinInstrmAttrCmon/Mkt
+        type: string
+      - name: instrument_segment
+        description: Instrument segment code
+        tag: FinInstrmAttrCmon/Sgmt
+        type: string
+      - name: instrument_description
+        description: Instrument description
+        tag: FinInstrmAttrCmon/Desc
+        type: string
+      # OptnOnEqtsInf specific fields
+      - name: security_category
+        description: Security category
+        tag: InstrmInf/OptnOnEqtsInf/SctyCtgy
+        type: string
+      - name: isin
+        description: ISIN code
+        tag: InstrmInf/OptnOnEqtsInf/ISIN
+        type: string
+      - name: symbol
+        description: Ticker symbol
+        tag: InstrmInf/OptnOnEqtsInf/TckrSymb
+        type: string
+      - name: exercise_price
+        description: Exercise price
+        tag: InstrmInf/OptnOnEqtsInf/ExrcPric
+        type: numeric
+      - name: option_style
+        description: Option style (American/European)
+        tag: InstrmInf/OptnOnEqtsInf/OptnStyle
+        type: string
+      - name: maturity_date
+        description: Maturity/expiration date
+        tag: InstrmInf/OptnOnEqtsInf/XprtnDt
+        type: date
+      - name: option_type
+        description: Option type (Call/Put)
+        tag: InstrmInf/OptnOnEqtsInf/OptnTp
+        type: string
+      - name: underlying_security_id
+        description: Underlying security ID
+        tag: InstrmInf/OptnOnEqtsInf/UndrlygInstrmId/OthrId/Id
+        type: string
+      - name: underlying_security_proprietary
+        description: Underlying security proprietary code
+        tag: InstrmInf/OptnOnEqtsInf/UndrlygInstrmId/OthrId/Tp/Prtry
+        type: string
+      - name: underlying_security_market
+        description: Underlying security market code
+        tag: InstrmInf/OptnOnEqtsInf/UndrlygInstrmId/OthrId/PlcOfListg/MktIdrCd
+        type: string
+      - name: protection_flag
+        description: Protection flag
+        tag: InstrmInf/OptnOnEqtsInf/PrtcnFlg
+        type: string
+      - name: premium_upfront_indicator
+        description: Premium upfront indicator
+        tag: InstrmInf/OptnOnEqtsInf/PrmUpfrntInd
+        type: string
+      - name: trading_start_date
+        description: Trading start date
+        tag: InstrmInf/OptnOnEqtsInf/TradgStartDt
+        type: date
+      - name: trading_end_date
+        description: Trading end date
+        tag: InstrmInf/OptnOnEqtsInf/TradgEndDt
+        type: date
+      - name: payment_type
+        description: Payment type
+        tag: InstrmInf/OptnOnEqtsInf/PmtTp
+        type: string
+      - name: allocation_lot_size
+        description: Allocation round lot size
+        tag: InstrmInf/OptnOnEqtsInf/AllcnRndLot
+        type: integer
+      - name: price_factor
+        description: Price factor
+        tag: InstrmInf/OptnOnEqtsInf/PricFctr
+        type: numeric
+      - name: trading_currency
+        description: Trading currency
+        tag: InstrmInf/OptnOnEqtsInf/TradgCcy
+        type: string
+      - name: days_to_settlement
+        description: Days to settlement
+        tag: InstrmInf/OptnOnEqtsInf/DaysToSttlm
+        type: integer
+      - name: delivery_type
+        description: Delivery type
+        tag: InstrmInf/OptnOnEqtsInf/DlvryTp
+        type: string
+      - name: automatic_exercise_indicator
+        description: Automatic exercise indicator
+        tag: InstrmInf/OptnOnEqtsInf/AutomtcExrcInd
+        type: string
+
+  future_contracts:
+    tag: FutrCtrctsInf
+    fields:
+      # Header fields (common)
+      - name: refdate
+        description: Reference date
+        tag: RptParams/RptDtAndTm/Dt
+        type: date
+      - name: security_id
+        description: Security ID
+        tag: FinInstrmId/OthrId/Id
+        type: string
+      - name: security_proprietary
+        description: Security proprietary code
+        tag: FinInstrmId/OthrId/Tp/Prtry
+        type: string
+      - name: security_market
+        description: Security market code
+        tag: FinInstrmId/PlcOfListg/MktIdrCd
+        type: string
+      - name: instrument_asset
+        description: Instrument asset code
+        tag: FinInstrmAttrCmon/Asst
+        type: string
+      - name: instrument_asset_description
+        description: Instrument asset description
+        tag: FinInstrmAttrCmon/AsstDesc
+        type: string
+      - name: instrument_market
+        description: Instrument market code
+        tag: FinInstrmAttrCmon/Mkt
+        type: string
+      - name: instrument_segment
+        description: Instrument segment code
+        tag: FinInstrmAttrCmon/Sgmt
+        type: string
+      - name: instrument_description
+        description: Instrument description
+        tag: FinInstrmAttrCmon/Desc
+        type: string
+      # FutrCtrctsInf specific fields
+      - name: security_category
+        description: Security category
+        tag: InstrmInf/FutrCtrctsInf/SctyCtgy
+        type: string
+      - name: maturity_date
+        description: Maturity/expiration date
+        tag: InstrmInf/FutrCtrctsInf/XprtnDt
+        type: date
+      - name: symbol
+        description: Ticker symbol
+        tag: InstrmInf/FutrCtrctsInf/TckrSymb
+        type: string
+      - name: expiration_code
+        description: Expiration code
+        tag: InstrmInf/FutrCtrctsInf/XprtnCd
+        type: string
+      - name: trading_start_date
+        description: Trading start date
+        tag: InstrmInf/FutrCtrctsInf/TradgStartDt
+        type: date
+      - name: trading_end_date
+        description: Trading end date
+        tag: InstrmInf/FutrCtrctsInf/TradgEndDt
+        type: date
+      - name: value_type_code
+        description: Value type code
+        tag: InstrmInf/FutrCtrctsInf/ValTpCd
+        type: string
+      - name: isin
+        description: ISIN code
+        tag: InstrmInf/FutrCtrctsInf/ISIN
+        type: string
+      - name: cfi_code
+        description: CFI code
+        tag: InstrmInf/FutrCtrctsInf/CFICd
+        type: string
+      - name: delivery_type
+        description: Delivery type
+        tag: InstrmInf/FutrCtrctsInf/DlvryTp
+        type: string
+      - name: payment_type
+        description: Payment type
+        tag: InstrmInf/FutrCtrctsInf/PmtTp
+        type: string
+      - name: contract_multiplier
+        description: Contract multiplier
+        tag: InstrmInf/FutrCtrctsInf/CtrctMltplr
+        type: numeric
+      - name: asset_settlement_indicator
+        description: Asset quotation quantity
+        tag: InstrmInf/FutrCtrctsInf/AsstQtnQty
+        type: numeric
+      - name: allocation_lot_size
+        description: Allocation round lot size
+        tag: InstrmInf/FutrCtrctsInf/AllcnRndLot
+        type: integer
+      - name: trading_currency
+        description: Trading currency
+        tag: InstrmInf/FutrCtrctsInf/TradgCcy
+        type: string
+      - name: underlying_security_id
+        description: Underlying security ID
+        tag: InstrmInf/FutrCtrctsInf/UndrlygInstrmId/OthrId/Id
+        type: string
+      - name: underlying_security_proprietary
+        description: Underlying security proprietary code
+        tag: InstrmInf/FutrCtrctsInf/UndrlygInstrmId/OthrId/Tp/Prtry
+        type: string
+      - name: underlying_security_market
+        description: Underlying security market code
+        tag: InstrmInf/FutrCtrctsInf/UndrlygInstrmId/OthrId/PlcOfListg/MktIdrCd
+        type: string
+      - name: withdrawal_days
+        description: Withdrawal days
+        tag: InstrmInf/FutrCtrctsInf/WdrwlDays
+        type: integer
+      - name: working_days
+        description: Working days
+        tag: InstrmInf/FutrCtrctsInf/WrkgDays
+        type: integer
+      - name: calendar_days
+        description: Calendar days
+        tag: InstrmInf/FutrCtrctsInf/ClnrDays
+        type: integer

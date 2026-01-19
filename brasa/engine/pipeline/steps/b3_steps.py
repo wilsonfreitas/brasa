@@ -177,6 +177,138 @@ class B3ReadBVBG086XmlStep(PipelineStep):
         return pd.DataFrame(instruments)
 
 
+@StepRegistry.register("b3_read_bvbg028_xml")
+class B3ReadBVBG028XmlStep(PipelineStep):
+    """Read and parse B3 BVBG028 gzipped XML file.
+
+    Parses the file ONCE and returns Dict[str, DataFrame] for each
+    instrument type. The output keys are the dataset output names (e.g., 'equities')
+    rather than the XML tags (e.g., 'EqtyInf').
+
+    The BVBG028 file contains market prices information including:
+    - EqtyInf: Equities information
+    - OptnOnEqtsInf: Options on equities information
+    - FutrCtrctsInf: Future contracts information
+
+    Each field in the dataset fieldset should have a 'tag' attribute
+    specifying the XML path to extract the value from.
+
+    Parameters:
+        None (uses datasets configuration from context)
+    """
+
+    NS_052 = "urn:bvmf.052.01.xsd"
+    NS_100 = "urn:bvmf.100.02.xsd"
+
+    def _smart_find(self, node, xpath: str, ns: dict) -> str | None:
+        """Safely find an element and return its text."""
+        try:
+            element = node.find(xpath, ns)
+            return (
+                element.text.strip() if element is not None and element.text else None
+            )
+        except Exception:
+            return None
+
+    def _build_field_tags(self, fieldset) -> dict[str, str]:
+        """Build field name to XML tag mapping from fieldset."""
+        tags: dict[str, str] = {}
+        if fieldset:
+            for field in fieldset:
+                tag = field.get_attribute("tag")
+                if tag:
+                    tags[field.name] = tag
+        return tags
+
+    def _get_instrument_type(self, node, ns: dict) -> str | None:
+        """Get the instrument type from the InstrmInf child tag."""
+        instrm_inf = node.find("InstrmInf", ns)
+        if instrm_inf is not None and len(instrm_inf) > 0:
+            # Get the first child tag name, removing namespace
+            child = instrm_inf[0]
+            # Extract tag name without namespace (format: {namespace}tagname)
+            tag = child.tag
+            if "}" in tag:
+                return tag.split("}")[1]
+            return tag
+        return None
+
+    def execute(self, _data: Any, context: PipelineContext) -> dict[str, pd.DataFrame]:
+        filepath = context.downloaded_file
+        logger.debug(f"Reading BVBG028 XML file: {filepath}")
+
+        # Parse the gzipped XML
+        with gzip.open(filepath) as f:
+            tree = etree.parse(f)
+
+        exchange = tree.getroot()[0][0]
+        ns_052 = {None: self.NS_052}
+        ns_100 = {None: self.NS_100}
+
+        # Extract creation date from BizGrpDtls
+        td_xpath = etree.ETXPath(f"//{{{self.NS_052}}}BizGrpDtls")
+        td = td_xpath(exchange)
+        if len(td) == 0:
+            logger.error("Invalid XML: tag BizGrpDtls not found")
+            raise ValueError("Invalid XML: tag BizGrpDtls not found")
+
+        creation_date = td[0].find("CreDtAndTm", ns_052).text[:10]
+        logger.debug(f"Creation date extracted: {creation_date}")
+
+        # Build a mapping from XML tag to (output_name, field_tags)
+        tag_to_dataset: dict[str, tuple[str, dict[str, str]]] = {}
+        if context.datasets:
+            for output_name, dataset_config in context.datasets.items():
+                xml_tag = dataset_config.tag
+                fieldset = dataset_config.fields
+                field_tags = self._build_field_tags(fieldset)
+                tag_to_dataset[xml_tag] = (output_name, field_tags)
+                logger.debug(
+                    f"Mapped {xml_tag} -> {output_name} with {len(field_tags)} fields"
+                )
+
+        # Initialize results dict with empty lists for each dataset
+        results: dict[str, list[dict[str, Any]]] = {
+            output_name: [] for output_name, _ in tag_to_dataset.values()
+        }
+
+        # Find all instrument nodes
+        instrm_nodes = exchange.findall(
+            f"{{{self.NS_052}}}BizGrp/{{{self.NS_100}}}Document/{{{self.NS_100}}}Instrm"
+        )
+        logger.debug(f"Found {len(instrm_nodes)} instrument nodes")
+
+        # Parse each instrument node
+        for node in instrm_nodes:
+            instr_type = self._get_instrument_type(node, ns_100)
+            if instr_type is None or instr_type not in tag_to_dataset:
+                continue
+
+            output_name, field_tags = tag_to_dataset[instr_type]
+            data: dict[str, Any] = {
+                "creation_date": creation_date,
+            }
+
+            # Extract fields based on tag mapping
+            for field_name, xpath in field_tags.items():
+                if field_name == "refdate":
+                    # refdate is extracted from RptParams/RptDtAndTm/Dt
+                    data[field_name] = self._smart_find(node, xpath, ns_100)
+                else:
+                    data[field_name] = self._smart_find(node, xpath, ns_100)
+
+            results[output_name].append(data)
+
+        # Convert lists to DataFrames
+        df_results: dict[str, pd.DataFrame] = {}
+        for output_name, records in results.items():
+            df_results[output_name] = pd.DataFrame(records)
+            logger.debug(f"Parsed {len(records)} records for {output_name}")
+
+        logger.info(f"Parsed BVBG028 with {len(df_results)} datasets")
+        return df_results
+
+
 @StepRegistry.register("b3_read_bvbg087_xml")
 class B3ReadBVBG087XmlStep(PipelineStep):
     """Read and parse B3 BVBG087 gzipped XML file.
