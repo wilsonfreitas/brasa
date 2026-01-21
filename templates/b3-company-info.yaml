@@ -16,127 +16,183 @@ downloader:
 reader:
   function: brasa.readers.read_b3_company_info
   multi:
-    Info: report
+    Info: info
     CashDividends: cash_dividends
     StockDividends: stock_dividends
     Subscriptions: subscriptions
-parts:
-  Info:
-    name: info
+  pipeline:
+    steps:
+      - step: b3_read_company_info_json
+      - step: add_column_multi
+        name: issuingCompany
+        from:
+          where: download_args
+          key: issuingCompany
+      - step: add_column_multi
+        from:
+          where: extra_key
+        name: refdate
+      - step: apply_fields_multi
+writer:
+  partitioning: [issuingCompany, refdate]
+
+datasets:
+  info:
+    tag: ~
     fields:
-      - name: stock_capital
+      - name: stockCapital
         description: Capital da companhia em ações
-      - name: quoted_per_share_since
+        type: 'numeric(thousands=".", decimal=",")'
+      - name: quotedPerSharSince
         description: Data de início de cotação
-        handler:
-          type: Date
-          format: "%d/%m/%Y"
-      - name: common_shares_form
+        type: 'date(format="%d/%m/%Y")'
+      - name: commonSharesForm
         description: Forma das ações ordinárias
-      - name: preferred_shares_form
+        type: string
+      - name: preferredSharesForm
         description: Forma das ações preferenciais
-      - name: has_commom
+        type: string
+      - name: hasCommom
         description: Forma das ações ordinárias
-      - name: has_preferred
+        type: string
+      - name: hasPreferred
         description: Forma das ações preferenciais
-      - name: round_lot
+        type: string
+      - name: roundLot
         description: Lote padrão de negociação
-      - name: trading_name
+        type: integer
+      - name: tradingName
         description: Nome da empresa
-      - name: number_common_shares
+        type: string
+      - name: numberCommonShares
         description: Número total de ações ordinárias
-      - name: number_preferred_shares
+        type: 'numeric(thousands=".", decimal=",")'
+      - name: numberPreferredShares
         description: Número total de ações preferenciais
-      - name: total_number_shares
+        type: 'numeric(thousands=".", decimal=",")'
+      - name: totalNumberShares
         description: Número total de ações
+        type: 'numeric(thousands=".", decimal=",")'
       - name: code
         description: Código da empresa
+        type: string
       - name: codeCVM
         description: Código CVM da empresa
+        type: string
       - name: segment
         description: Segmento do mercado de capitais (Novo Mercado, ...)
-  CashDividends:
-    name: cashDividends
+        type: string
+      - name: issuingCompany
+        description: Código da empresa (sem o número)
+        type: string
+      - name: refdate
+        description: Data de referência
+        type: date
+
+  cash_dividends:
+    tag: cashDividends
     fields:
-      - name: asset_issued
+      - name: assetIssued
         description: Código do ativo emitido
-      - name: payment_date
+        type: string
+      - name: paymentDate
         description: Data de início de pagamento do provento
-        handler:
-          type: Date
-          format: "%d/%m/%Y"
+        type: 'date(format="%d/%m/%Y")'
       - name: rate
         description: Valor do provento (R$)
-      - name: related_to
+        type: 'numeric(thousands=".", decimal=",")'
+      - name: relatedTo
         description: Período de referência do provento
-      - name: approved_on
+        type: string
+      - name: approvedOn
         description: Data em que foi deliberado
-        handler:
-          type: Date
-          format: "%d/%m/%Y"
-      - name: isin_code
+        type: 'date(format="%d/%m/%Y")'
+      - name: isinCode
         description: Código ISIN da companhia
+        type: string
       - name: label
         description: Tipo de provento
-      - name: last_date_prior
+        type: string
+      - name: lastDatePrior
         description: Data COM (última data antes da ação ficar EX do provento)
-        handler:
-          type: Date
-          format: "%d/%m/%Y"
+        type: 'date(format="%d/%m/%Y")'
       - name: remarks
         description: Comentários
-  StockDividends:
-    name: stockDividends
+        type: string
+      - name: issuingCompany
+        description: Código da empresa (sem o número)
+        type: string
+      - name: refdate
+        description: Data de referência
+        type: date
+
+  stock_dividends:
+    tag: stockDividends
     fields:
-      - name: asset_issued
+      - name: assetIssued
         description: Código do ativo emitido
+        type: string
       - name: factor
         description: Percentual ou fator de grupamento
-      - name: approved_on
+        type: 'numeric(thousands=".", decimal=",")'
+      - name: approvedOn
         description: Data em que foi deliberado
-        handler:
-          type: Date
-          format: "%d/%m/%Y"
-      - name: isin_code
+        type: 'date(format="%d/%m/%Y")'
+      - name: isinCode
         description: Código ISIN
+        type: string
       - name: label
         description: Tipo do provento
-      - name: last_date_prior
+        type: string
+      - name: lastDatePrior
         description: Data COM (última data antes da ação ficar EX do provento)
-        handler:
-          type: Date
-          format: "%d/%m/%Y"
+        type: 'date(format="%d/%m/%Y")'
       - name: remarks
         description: Comentários
-  Subscriptions:
-    name: subscriptions
+        type: string
+      - name: issuingCompany
+        description: Código da empresa (sem o número)
+        type: string
+      - name: refdate
+        description: Data de referência
+        type: date
+
+  subscriptions:
+    tag: subscriptions
     fields:
-      - name: asset_issued
+      - name: assetIssued
         description: Código do ativo emitido
+        type: string
       - name: percentage
         description: Percentual
-      - name: price_unit
+        type: 'numeric(thousands=".", decimal=",")'
+      - name: priceUnit
         description: Preço Emissão (R$)
-      - name: trading_period
+        type: 'numeric(thousands=".", decimal=",")'
+      - name: tradingPeriod
         description: Negociação de Direitos
-      - name: subscription_date
+        type: string
+      - name: subscriptionDate
         description: Data limite para subscrição
-        handler:
-          type: Date
-          format: "%d/%m/%Y"
-      - name: approved_on
+        type: 'date(format="%d/%m/%Y")'
+      - name: approvedOn
         description: Data em que foi deliberado
-        handler:
-          type: Date
-          format: "%d/%m/%Y"
-      - name: isin_code
+        type: 'date(format="%d/%m/%Y")'
+      - name: isinCode
         description: Código ISIN
+        type: string
       - name: label
         description: Tipo do evento
-      - name: last_date_prior
+        type: string
+      - name: lastDatePrior
         description: Data COM (última data antes da ação ficar EX do provento)
-        handler:
-          type: Date
-          format: "%d/%m/%Y"
+        type: 'date(format="%d/%m/%Y")'
       - name: remarks
         description: Comentários
+        type: string
+      - name: issuingCompany
+        description: Código da empresa (sem o número)
+        type: string
+      - name: refdate
+        description: Data de referência
+        type: date

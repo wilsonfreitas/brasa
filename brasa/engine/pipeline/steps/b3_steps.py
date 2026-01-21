@@ -403,6 +403,62 @@ class B3ReadBVBG087XmlStep(PipelineStep):
         return results
 
 
+@StepRegistry.register("b3_read_company_info_json")
+class B3ReadCompanyInfoJsonStep(PipelineStep):
+    """Read and parse B3 company info gzipped JSON file.
+
+    Parses the file and returns Dict[str, DataFrame] for each
+    dataset type. The output keys are the dataset output names.
+
+    The company info file contains:
+    - info: Main company information
+    - cash_dividends: Cash dividend events
+    - stock_dividends: Stock dividend events
+    - subscriptions: Subscription events
+
+    Parameters:
+        None (uses datasets configuration from context)
+    """
+
+    def execute(self, _data: Any, context: PipelineContext) -> dict[str, pd.DataFrame]:
+        import json
+
+        filepath = context.downloaded_file
+        logger.debug(f"Reading B3 company info JSON file: {filepath}")
+
+        # Parse the gzipped JSON
+        with gzip.open(filepath) as f:
+            obj = json.load(f)
+
+        results: dict[str, pd.DataFrame] = {}
+
+        if not context.datasets:
+            logger.warning("No datasets defined in context, returning empty results")
+            return results
+
+        # Nested array keys to drop from main info
+        nested_keys = {"cashDividends", "stockDividends", "subscriptions"}
+
+        for output_name, dataset_config in context.datasets.items():
+            json_key = dataset_config.tag
+
+            if json_key is None:
+                # Main info dataset - use root object minus nested arrays
+                df = pd.DataFrame(obj)
+                cols_to_drop = [col for col in nested_keys if col in df.columns]
+                df = df.drop(columns=cols_to_drop, errors="ignore")
+            else:
+                # Nested array dataset
+                nested_data = obj[0].get(json_key, [])
+                df = pd.DataFrame(nested_data)
+
+            results[output_name] = df
+            logger.debug(f"Parsed {len(df)} records for {output_name}")
+
+        logger.info(f"Parsed company info with {len(results)} datasets")
+        return results
+
+
 @StepRegistry.register("b3_add_columns_from_json_fields")
 class B3AddColumnsFromJsonFieldsStep(PipelineStep):
     """Parse B3's JSON fields and add as columns.

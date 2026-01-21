@@ -89,33 +89,68 @@ class AddColumnStep(PipelineStep):
     Parameters:
         name: Name of the new column
         value: Static value to assign (optional)
-        from_context: Key to get value from context.intermediate_results (optional)
-        from_download_args: Key to get value from meta.download_args (optional)
-        use_extra_key: Boolean flag to use meta.extra_key as value (optional)
+        from: Dictionary with 'where' and 'key' to get value dynamically (optional)
+            - where: 'context', 'download_args', or 'extra_key'
+            - key: The key to look up (not needed for 'extra_key')
     """
 
-    def execute(self, data: pd.DataFrame, context: PipelineContext) -> pd.DataFrame:
-        name = self.require_param("name")
+    def _resolve_value(self, context: PipelineContext) -> Any:
+        """Resolve the column value from params or context.
 
+        Returns:
+            The resolved value to assign to the column.
+
+        Raises:
+            ValueError: If no valid value source is provided.
+        """
         if "value" in self.params:
-            value = self.params["value"]
+            return self.params["value"]
         elif "from" in self.params:
             from_param = self.params["from"]
             where = from_param["where"]
             if where == "context":
                 key = from_param["key"]
-                value = context.get_result(key)
+                return context.get_result(key)
             elif where == "download_args":
                 key = from_param["key"]
-                value = context.meta.download_args.get(key)
+                return context.meta.download_args.get(key)
             elif where == "extra_key":
-                value = context.meta.extra_key
+                return context.meta.extra_key
             else:
                 raise ValueError(f"Unknown 'from.where' value: {where}")
         else:
             raise ValueError("add_column requires 'value', or 'from' parameter")
 
+    def execute(self, data: pd.DataFrame, context: PipelineContext) -> pd.DataFrame:
+        name = self.require_param("name")
+        value = self._resolve_value(context)
         data[name] = value
+        return data
+
+
+@StepRegistry.register("add_column_multi")
+class AddColumnMultiStep(AddColumnStep):
+    """Add a new column to multiple DataFrames in a dictionary.
+
+    Works the same way as add_column but operates on a dict of DataFrames.
+
+    Parameters:
+        name: Name of the new column
+        value: Static value to assign (optional)
+        from: Dictionary with 'where' and 'key' to get value dynamically (optional)
+            - where: 'context', 'download_args', or 'extra_key'
+            - key: The key to look up (not needed for 'extra_key')
+    """
+
+    def execute(
+        self, data: dict[str, pd.DataFrame], context: PipelineContext
+    ) -> dict[str, pd.DataFrame]:
+        name = self.require_param("name")
+        value = self._resolve_value(context)
+
+        for df in data.values():
+            df[name] = value
+
         return data
 
 
