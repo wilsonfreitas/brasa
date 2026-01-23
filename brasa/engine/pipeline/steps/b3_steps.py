@@ -459,6 +459,49 @@ class B3ReadCompanyInfoJsonStep(PipelineStep):
         return results
 
 
+@StepRegistry.register("b3_read_company_details_json")
+class B3ReadCompanyDetailsJsonStep(PipelineStep):
+    """Read and parse B3 company details gzipped JSON file.
+
+    Reads the JSON and expands the otherCodes nested array by duplicating
+    rows. Each row gets a code and isin from the otherCodes array.
+
+    Parameters:
+        None
+    """
+
+    def execute(self, _data: Any, context: PipelineContext) -> pd.DataFrame:
+        import json
+
+        filepath = context.downloaded_file
+        logger.debug(f"Reading B3 company details JSON file: {filepath}")
+
+        # Parse the gzipped JSON
+        with gzip.open(filepath) as f:
+            obj = json.load(f)
+
+        # Create DataFrame from JSON
+        df = pd.DataFrame(obj) if isinstance(obj, list) else pd.DataFrame([obj])
+
+        # Expand otherCodes: duplicate rows for each code/isin pair
+        if "otherCodes" in df.columns and df["otherCodes"].iloc[0] is not None:
+            other_codes = df["otherCodes"].iloc[0]
+            codes = [d["code"] for d in other_codes]
+            isins = [d["isin"] for d in other_codes]
+            df = pd.concat([df] * len(codes), ignore_index=True)
+            df["code"] = codes
+            df["isin"] = isins
+        else:
+            df["code"] = np.nan
+            df["isin"] = np.nan
+
+        # Drop the nested otherCodes column
+        df = df.drop(columns=["otherCodes"], errors="ignore")
+
+        logger.info(f"Parsed company details with {len(df)} rows")
+        return df
+
+
 @StepRegistry.register("b3_add_columns_from_json_fields")
 class B3AddColumnsFromJsonFieldsStep(PipelineStep):
     """Parse B3's JSON fields and add as columns.
