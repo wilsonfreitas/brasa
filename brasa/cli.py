@@ -1,7 +1,10 @@
 import argparse
 import json
+import shutil
 import sys
 from datetime import datetime
+
+import pandas as pd
 
 from . import download_marketdata, process_etl, process_marketdata, retrieve_template
 from .engine import CacheManager, Verbosity, sync_catalog_from_disk
@@ -38,6 +41,69 @@ def get_verbosity(args: argparse.Namespace) -> Verbosity:
     elif getattr(args, "quiet", False):
         return Verbosity.QUIET
     return Verbosity.NORMAL
+
+
+def _get_terminal_width(override_width: int | None = None) -> int:
+    """Get terminal width for display.
+
+    Args:
+        override_width: Manual width override. If provided, uses this value.
+
+    Returns:
+        Terminal width in characters.
+    """
+    if override_width is not None:
+        return override_width
+    try:
+        return shutil.get_terminal_size().columns
+    except (AttributeError, ValueError):
+        return 80  # Fallback default
+
+
+def _format_dataframe_for_display(
+    df: pd.DataFrame,
+    width: int | None = None,
+    max_colwidth: int = 50,
+    columns: list[str] | None = None,
+    wrap: bool = False,
+) -> str:
+    """Format a DataFrame for terminal display.
+
+    Args:
+        df: DataFrame to format.
+        width: Terminal width. If None, auto-detects.
+        max_colwidth: Maximum width for each column content.
+        columns: List of columns to display. If None, displays all.
+        wrap: If True, wraps columns across multiple rows.
+
+    Returns:
+        Formatted string representation of the DataFrame.
+    """
+    terminal_width = _get_terminal_width(width)
+
+    # Filter columns if specified
+    if columns:
+        available_cols = [c for c in columns if c in df.columns]
+        if available_cols:
+            df = df[available_cols]
+
+    if wrap:
+        # Wrap columns across multiple rows
+        return df.to_string(
+            line_width=terminal_width,
+            max_colwidth=max_colwidth,
+        )
+    else:
+        # No wrapping: each row on single line, truncated to terminal width
+        output = df.to_string(line_width=None, max_colwidth=max_colwidth)
+        lines = output.split("\n")
+        truncated_lines = []
+        for line in lines:
+            if len(line) > terminal_width:
+                truncated_lines.append(line[: terminal_width - 3] + "...")
+            else:
+                truncated_lines.append(line)
+        return "\n".join(truncated_lines)
 
 
 parser = argparse.ArgumentParser(
@@ -107,6 +173,30 @@ parser_head.add_argument(
     "--output",
     default="display",
     help="output format: display (default) or file path (.csv, .json, .parquet, .xlsx)",
+)
+parser_head.add_argument(
+    "-w",
+    "--width",
+    type=int,
+    default=None,
+    help="terminal width override (default: auto-detect)",
+)
+parser_head.add_argument(
+    "--max-colwidth",
+    type=int,
+    default=50,
+    help="maximum width for column content (default: 50)",
+)
+parser_head.add_argument(
+    "-c",
+    "--columns",
+    nargs="+",
+    help="specific columns to display (space-separated)",
+)
+parser_head.add_argument(
+    "--wrap",
+    action="store_true",
+    help="wrap columns across multiple rows instead of truncating",
 )
 
 # Dataset catalog commands
@@ -379,7 +469,15 @@ if __name__ == "__main__":
 
         output = args.output
         if output == "display":
-            print(df.to_string())
+            print(
+                _format_dataframe_for_display(
+                    df,
+                    width=args.width,
+                    max_colwidth=args.max_colwidth,
+                    columns=args.columns,
+                    wrap=args.wrap,
+                )
+            )
         elif output.endswith(".csv"):
             df.to_csv(output, sep=",", encoding="utf-8", index=False)
         elif output.endswith(".json"):
