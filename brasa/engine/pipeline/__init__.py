@@ -56,9 +56,6 @@ from .context_protocol import PipelineContextProtocol
 # ETL Pipeline components
 from .etl_context import ETLPipelineContext
 from .etl_executor import ETLPipeline
-
-# Backward compatibility - ETLPipelineStep is now just PipelineStep
-from .etl_steps import ETLPipelineStep
 from .executor import ReaderPipeline
 from .registry import StepRegistry
 from .step import PipelineStep
@@ -71,7 +68,6 @@ __all__ = [
     # ETL pipeline
     "ETLPipeline",
     "ETLPipelineContext",
-    "ETLPipelineStep",  # Backward compat alias for PipelineStep
     "ETLStepRegistry",  # Backward compat alias for StepRegistry
     # Reader pipeline
     "PipelineContext",

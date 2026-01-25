@@ -21,10 +21,6 @@ from . import shared_transforms
 from .registry import StepRegistry
 from .step import PipelineStep
 
-# Backward compatibility alias - ETLPipelineStep is now just PipelineStep
-ETLPipelineStep = PipelineStep
-
-
 # =============================================================================
 # Built-in ETL Steps
 # =============================================================================

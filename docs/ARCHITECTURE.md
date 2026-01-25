@@ -48,6 +48,7 @@ Brasa follows a modular, template-driven architecture that separates concerns ac
 ┌─────────────────────────────────────────────────────────────┐
 │                    ETL Layer                                 │
 │  - etl.py: Transformation functions                         │
+│  - PipelineStep-based ETL pipelines                          │
 │  - Derived datasets creation                                │
 └─────────────────────────────────────────────────────────────┘
                             ↓

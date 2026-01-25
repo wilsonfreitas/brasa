@@ -114,14 +114,14 @@ class ETLPipelineContext:
     intermediate_results: dict[str, Any] = field(default_factory=dict)
 ```
 
-### 4. ETLPipelineStep (Base Class)
+### 4. PipelineStep (Base Class)
 
-Location: `brasa/engine/pipeline/etl_steps.py`
+Location: `brasa/engine/pipeline/step.py`
 
 Abstract base class for all ETL steps:
 
 ```python
-class ETLPipelineStep(ABC):
+class PipelineStep(ABC):
     name: str = ""
 
     @abstractmethod
@@ -141,7 +141,7 @@ Registry pattern for step discovery:
 
 ```python
 @ETLStepRegistry.register("load")
-class LoadDatasetStep(ETLPipelineStep):
+class LoadDatasetStep(PipelineStep):
     def execute(self, data, context):
         return get_dataset(self.require_param("input"))
 ```
@@ -307,7 +307,7 @@ print(template.etl.get_input_datasets())  # ['b3-futures-settlement-prices']
 
 ### Phase 1: Core Infrastructure ✅
 - ETLPipelineContext
-- ETLPipelineStep base class
+- PipelineStep base class
 - ETLStepRegistry
 - ETLPipeline executor
 - Steps: load, filter, select, sort, to_dataframe
