@@ -15,7 +15,7 @@ import pyarrow.dataset as pads
 import pyarrow.parquet as pq
 
 from brasa.engine.cache import CacheManager
-from brasa.fieldset_schema.adapters import PyArrowAdapter
+from brasa.fieldsets.adapters import PyArrowAdapter
 
 from .etl_context import ETLPipelineContext
 from .registry import StepRegistry
@@ -23,7 +23,7 @@ from .step import PipelineStep
 
 if TYPE_CHECKING:
     from brasa.engine.template import MarketDataWriter
-    from brasa.fieldset_schema import Fieldset
+    from brasa.fieldsets import Fieldset
 
 logger = logging.getLogger(__name__)
 

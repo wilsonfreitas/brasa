@@ -386,7 +386,7 @@ class Fieldset:
         this method can optionally accept the raw fields list from the template YAML
         to extract type information directly.
 
-        Maps template field types to fieldset_schema type specifications:
+        Maps template field types to fieldsets type specifications:
         - 'date' -> 'date'
         - 'character' -> 'character'
         - 'integer' -> 'integer'
@@ -424,7 +424,7 @@ class Fieldset:
                 # Normalize type name (case-insensitive)
                 # raw_type = raw_type.lower()
 
-                # Map template types to fieldset_schema types
+                # Map template types to fieldsets types
                 if raw_type == "character":
                     raw_type = "string"
                 elif raw_type == "posixct":
@@ -447,7 +447,7 @@ class Fieldset:
                 # Fall back to handler class inspection
                 handler_class = template_field.handler.__class__.__name__
 
-                # Map handler class names to fieldset_schema types
+                # Map handler class names to fieldsets types
                 type_map = {
                     "DateFieldHandler": "date",
                     "NumericFieldHandler": "numeric",

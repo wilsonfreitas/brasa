@@ -20,7 +20,7 @@ import pytest
 
 from brasa.engine.pipeline import StepRegistry
 from brasa.engine.template import DatasetConfig
-from brasa.fieldset_schema import Field, Fieldset
+from brasa.fieldsets import Field, Fieldset
 
 
 @pytest.fixture

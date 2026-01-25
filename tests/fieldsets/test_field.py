@@ -2,8 +2,8 @@ from datetime import date
 
 import pytest
 
-from brasa.fieldset_schema.exceptions import FieldError, TypeParseError
-from brasa.fieldset_schema.field import Field
+from brasa.fieldsets.exceptions import FieldError, TypeParseError
+from brasa.fieldsets.field import Field
 
 
 def test_field_creation_basic():

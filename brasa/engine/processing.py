@@ -10,7 +10,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from brasa.fieldset_schema.adapters import PyArrowAdapter
+from brasa.fieldsets.adapters import PyArrowAdapter
 
 from .cache import CacheManager, CacheMetadata
 from .template import retrieve_template

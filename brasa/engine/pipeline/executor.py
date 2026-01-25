@@ -17,7 +17,7 @@ from .registry import StepRegistry
 if TYPE_CHECKING:
     from brasa.engine.cache import CacheMetadata
     from brasa.engine.template import DatasetConfig
-    from brasa.fieldset_schema import Fieldset
+    from brasa.fieldsets import Fieldset
 
     from .step import PipelineStep
 

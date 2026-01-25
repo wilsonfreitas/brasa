@@ -33,7 +33,7 @@ class ApplyFieldsStep(PipelineStep):
         if context.fields is None:
             return data
 
-        from brasa.fieldset_schema import PandasAdapter
+        from brasa.fieldsets import PandasAdapter
 
         errors = self.get_param("errors", "coerce")
         set_columns = self.get_param("set_columns", False)
@@ -62,7 +62,7 @@ class ApplyFieldsMultiStep(PipelineStep):
                 f"apply_fields_multi expects Dict[str, DataFrame], got {type(data).__name__}"
             )
 
-        from brasa.fieldset_schema import PandasAdapter
+        from brasa.fieldsets import PandasAdapter
 
         errors = self.get_param("errors", "coerce")
         result: dict[str, pd.DataFrame] = {}

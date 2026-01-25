@@ -1,8 +1,8 @@
 import pytest
 import yaml
 
-from brasa.fieldset_schema.exceptions import FieldsetError
-from brasa.fieldset_schema.fieldset import Fieldset
+from brasa.fieldsets.exceptions import FieldsetError
+from brasa.fieldsets.fieldset import Fieldset
 
 
 def test_fieldset_from_yaml_string(sample_fieldset_yaml_content):

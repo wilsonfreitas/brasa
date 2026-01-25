@@ -2,8 +2,8 @@ from datetime import date, datetime, time
 
 import pytest
 
-from brasa.fieldset_schema.exceptions import TypeDefinitionError, TypeParseError
-from brasa.fieldset_schema.type_parser import (
+from brasa.fieldsets.exceptions import TypeDefinitionError, TypeParseError
+from brasa.fieldsets.type_parser import (
     BooleanParser,
     DateParser,
     DateTimeParser,

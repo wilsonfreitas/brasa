@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 
 from ..engine import CacheManager, CacheMetadata, MarketDataReader, retrieve_template
-from ..fieldset_schema import Fieldset
-from ..fieldset_schema.adapters import PandasAdapter
+from ..fieldsets import Fieldset
+from ..fieldsets.adapters import PandasAdapter
 from ..parsers.b3.bvbg028 import BVBG028Parser
 from ..parsers.b3.bvbg086 import BVBG086Parser
 from ..parsers.b3.bvbg087 import BVBG087Parser
@@ -304,7 +304,7 @@ def read_b3_bvbg086(meta: CacheMetadata) -> pd.DataFrame:
         template.fields, raw_fields=template.template.get("fields")
     )
 
-    # Apply type conversions using fieldset_schema
+    # Apply type conversions using fieldsets
     adapter = PandasAdapter(fieldset, errors="coerce")
     df = adapter.apply_types(df)
 
@@ -393,7 +393,7 @@ def read_b3_futures_settlement_prices(meta: CacheMetadata) -> pd.DataFrame:
     #     raw_fields=template.template.get('fields')
     # )
 
-    # Apply type conversions using fieldset_schema
+    # Apply type conversions using fieldsets
     adapter = PandasAdapter(template.fields, errors="coerce")
     df = adapter.apply_types(df)
 

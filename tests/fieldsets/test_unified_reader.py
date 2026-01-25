@@ -5,8 +5,8 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
-from brasa.fieldset_schema import Field, Fieldset
-from brasa.fieldset_schema.adapters.unified_reader import FieldsetReader
+from brasa.fieldsets import Field, Fieldset
+from brasa.fieldsets.adapters.unified_reader import FieldsetReader
 
 
 @pytest.fixture

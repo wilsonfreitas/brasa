@@ -1,12 +1,12 @@
 """
-Tests for integration between fieldset_schema and template system.
+Tests for integration between fieldsets and template system.
 """
 
 import pandas as pd
 
 from brasa.engine import TemplateFields, retrieve_template
-from brasa.fieldset_schema import Field, Fieldset
-from brasa.fieldset_schema.adapters import PandasAdapter
+from brasa.fieldsets import Field, Fieldset
+from brasa.fieldsets.adapters import PandasAdapter
 
 
 class TestFromTemplateFields:

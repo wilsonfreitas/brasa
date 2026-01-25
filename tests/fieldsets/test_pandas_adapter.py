@@ -4,8 +4,8 @@ from datetime import date, datetime, time
 import pandas as pd
 import pytest
 
-from brasa.fieldset_schema import Field, Fieldset
-from brasa.fieldset_schema.adapters.pandas_adapter import PandasAdapter
+from brasa.fieldsets import Field, Fieldset
+from brasa.fieldsets.adapters.pandas_adapter import PandasAdapter
 
 
 @pytest.fixture

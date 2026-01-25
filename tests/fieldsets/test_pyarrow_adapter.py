@@ -4,8 +4,8 @@ from datetime import date, datetime, time
 import pyarrow as pa
 import pytest
 
-from brasa.fieldset_schema import Field, Fieldset
-from brasa.fieldset_schema.adapters.pyarrow_adapter import PyArrowAdapter
+from brasa.fieldsets import Field, Fieldset
+from brasa.fieldsets.adapters.pyarrow_adapter import PyArrowAdapter
 
 
 @pytest.fixture

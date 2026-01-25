@@ -6,7 +6,7 @@ import pandas as pd
 import pyarrow as pa
 
 from brasa.engine import retrieve_template
-from brasa.fieldset_schema.adapters import PyArrowAdapter
+from brasa.fieldsets.adapters import PyArrowAdapter
 
 
 class TestEngineSchemaGeneration:

@@ -14,8 +14,8 @@ from typing import IO, TYPE_CHECKING, Any
 import pandas as pd
 import yaml
 
-from brasa.fieldset_schema import Fieldset
-from brasa.fieldset_schema.field import Field
+from brasa.fieldsets import Fieldset
+from brasa.fieldsets.field import Field
 
 from .core import load_function_by_name
 from .layers import DEFAULT_ETL_LAYER, DEFAULT_LAYER, DataLayer

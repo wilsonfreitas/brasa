@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from brasa.engine.template import MarketDataWriter
-    from brasa.fieldset_schema import Fieldset
+    from brasa.fieldsets import Fieldset
 
 
 @dataclass

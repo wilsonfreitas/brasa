@@ -10,7 +10,7 @@ import pyarrow.dataset as ds
 from bizdays import Calendar, get_option, set_option
 
 from .engine import CacheManager, DatasetCatalog, DatasetInfo, retrieve_template
-from .fieldset_schema import PyArrowAdapter
+from .fieldsets import PyArrowAdapter
 
 __all__ = [
     "BrasaDB",

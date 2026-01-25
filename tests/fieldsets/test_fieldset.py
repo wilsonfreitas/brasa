@@ -2,9 +2,9 @@ from datetime import date
 
 import pytest
 
-from brasa.fieldset_schema.exceptions import FieldsetError, TypeParseError
-from brasa.fieldset_schema.field import Field
-from brasa.fieldset_schema.fieldset import Fieldset
+from brasa.fieldsets.exceptions import FieldsetError, TypeParseError
+from brasa.fieldsets.field import Field
+from brasa.fieldsets.fieldset import Fieldset
 
 
 @pytest.fixture

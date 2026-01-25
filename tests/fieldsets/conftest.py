@@ -1,6 +1,6 @@
 import pytest
 
-from brasa.fieldset_schema import (
+from brasa.fieldsets import (
     Field,
     Fieldset,
 )
