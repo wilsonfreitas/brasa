@@ -12,35 +12,37 @@ from brasa.engine import (
     get_marketdata,
     retrieve_template,
 )
-from brasa.fieldset_schema import Fieldset
+from brasa.fieldsets import Fieldset
 
 
 def test_load_template():
-    tpl = MarketDataTemplate("templates/b3-cdi.yaml")
+    tpl = MarketDataTemplate("templates/bcb-sgs-data.yaml")
 
     assert tpl.has_downloader
-    assert ~tpl.has_reader
+    assert tpl.has_reader
 
 
 def test_template_load_fields():
-    tpl = MarketDataTemplate("templates/b3-cdi.yaml")
+    tpl = MarketDataTemplate("templates/bcb-sgs-data.yaml")
 
     assert tpl.has_downloader
     assert tpl.has_reader
     # Template.fields is now a Fieldset
     assert isinstance(tpl.fields, Fieldset)
-    assert len(tpl.fields) == 4
-    assert tpl.fields["dataTaxa"].name == "dataTaxa"
-    assert tpl.fields["dataTaxa"].description == "Data de divulgação da taxa DI"
+    assert len(tpl.fields) == 3
+    assert tpl.fields["refdate"].name == "refdate"
+    assert tpl.fields["refdate"].description == "Data de referência"
     # Field now has type_name instead of handler
-    assert tpl.fields["dataTaxa"].type_name == "date"
+    assert tpl.fields["refdate"].type_name == "date"
+    assert tpl.fields["value"].type_name == "numeric"
+    assert tpl.fields["code"].type_name == "integer"
 
 
 def test_retrieve_temlate():
-    tpl = retrieve_template("b3-cdi")
+    tpl = retrieve_template("bcb-sgs-data")
     assert tpl is not None
     assert isinstance(tpl, MarketDataTemplate)
-    assert tpl.id == "b3-cdi"
+    assert tpl.id == "bcb-sgs-data"
 
 
 @pytest.mark.skip(
@@ -49,13 +51,13 @@ def test_retrieve_temlate():
 def test_get_marketdata():
     df = get_marketdata("b3-futures-settlement-prices", refdate=datetime(2023, 5, 19))
     assert isinstance(df, pd.DataFrame)
-    df = get_marketdata("b3-cdi")
+    df = get_marketdata("bcb-sgs-data", code=12, refdate=datetime(2023, 5, 19))
     assert isinstance(df, dict)
 
 
 def test_save_empty_metadata():
-    meta = CacheMetadata("b3-cdi")
-    assert meta.id == "63142dbef63c0537fb3c2f37dac2fbb6"
+    meta = CacheMetadata("bcb-sgs-data")
+    assert meta.id == "fef009a135f746ed3216a0b87358422f"
 
     man = CacheManager()
     assert not man.has_meta(meta)
@@ -65,11 +67,9 @@ def test_save_empty_metadata():
     man.remove_meta(meta)
 
 
-@pytest.mark.skip(
-    reason="External API issue: www2.cetip.com.br DNS resolution fails - domain no longer exists (CETIP was acquired by B3)"
-)
+@pytest.mark.skip(reason="External API issue: SGS endpoint is unstable in CI")
 def test_metadata_fulfilment():
-    meta = CacheMetadata("b3-cdi")
+    meta = CacheMetadata("bcb-sgs-data")
     assert len(meta.downloaded_files) == 0
 
     _download_marketdata(meta)
@@ -82,8 +82,8 @@ def test_metadata_fulfilment():
     assert df is not None
     man.save_meta(meta)
 
-    tpl = retrieve_template("b3-cdi")
-    meta2 = CacheMetadata("b3-cdi")
+    tpl = retrieve_template("bcb-sgs-data")
+    meta2 = CacheMetadata("bcb-sgs-data")
     meta2.extra_key = tpl.downloader.extra_key
 
     man.load_meta(meta2)

@@ -45,11 +45,7 @@ Unified Step Registry:
 
 # Import built-in steps to register them
 # Shared transforms for code reuse between pipelines
-from . import (
-    etl_steps,  # noqa: F401 - registers ETL steps
-    shared_transforms,
-    steps,  # noqa: F401 - registers reader steps
-)
+from . import steps  # noqa: F401 - registers steps
 from .context import PipelineContext
 from .context_protocol import PipelineContextProtocol
 
@@ -59,6 +55,7 @@ from .etl_executor import ETLPipeline
 from .executor import ReaderPipeline
 from .registry import StepRegistry
 from .step import PipelineStep
+from .steps import shared_transforms
 
 # Backward compatibility alias for ETLStepRegistry
 # New code should use StepRegistry directly

@@ -11,7 +11,7 @@ functionality that will be implemented as part of the BVBG087 migration.
 import pytest
 
 from brasa.engine.template import retrieve_template
-from brasa.fieldset_schema import Fieldset
+from brasa.fieldsets import Fieldset
 
 
 class TestTemplateWithSingleFields:
@@ -198,10 +198,10 @@ class TestBackwardCompatibility:
         assert len(tpl.fields) > 0
 
     def test_cdi_template_loads(self):
-        """Test that CDI template (simple template) loads correctly."""
-        tpl = retrieve_template("b3-cdi")
+        """Test that simple template loads correctly."""
+        tpl = retrieve_template("bcb-sgs-data")
 
-        assert tpl.id == "b3-cdi"
+        assert tpl.id == "bcb-sgs-data"
         assert tpl.has_downloader
 
     def test_futures_settlement_template_loads(self):

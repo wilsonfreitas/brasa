@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from brasa.engine.pipeline.context import PipelineContext
-from brasa.fieldset_schema import Fieldset
+from brasa.fieldsets import Fieldset
 
 
 @pytest.fixture
@@ -28,7 +28,7 @@ def mock_meta():
 @pytest.fixture
 def sample_fieldset():
     """Create a sample Fieldset for testing."""
-    from brasa.fieldset_schema import Field
+    from brasa.fieldsets import Field
 
     fieldset = Fieldset()
     fieldset.add_fields(

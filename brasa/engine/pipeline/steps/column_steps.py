@@ -45,7 +45,7 @@ class RenameColumnsStep(PipelineStep):
     """
 
     def execute(self, data: pd.DataFrame, _context: Any) -> pd.DataFrame:
-        from .. import shared_transforms
+        from . import shared_transforms
 
         mapping = self.require_param("mapping")
         return shared_transforms.rename_columns(data, mapping)
@@ -60,7 +60,7 @@ class SelectColumnsStep(PipelineStep):
     """
 
     def execute(self, data: pd.DataFrame, _context: Any) -> pd.DataFrame:
-        from .. import shared_transforms
+        from . import shared_transforms
 
         columns = self.require_param("columns")
         return shared_transforms.select_columns(data, columns)
@@ -76,7 +76,7 @@ class DropColumnsStep(PipelineStep):
     """
 
     def execute(self, data: pd.DataFrame, _context: Any) -> pd.DataFrame:
-        from .. import shared_transforms
+        from . import shared_transforms
 
         columns = self.require_param("columns")
         return shared_transforms.drop_columns(data, columns)

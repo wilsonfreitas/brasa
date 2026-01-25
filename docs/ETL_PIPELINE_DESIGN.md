@@ -66,7 +66,7 @@ else:
 
 ### 1. Shared Transforms (Code Reuse Layer)
 
-Location: `brasa/engine/pipeline/shared_transforms.py`
+Location: `brasa/engine/pipeline/steps/shared_transforms.py`
 
 Provides reusable transformation functions that work with both reader and ETL pipelines:
 
@@ -135,7 +135,7 @@ class PipelineStep(ABC):
 
 ### 3. ETLStepRegistry
 
-Location: `brasa/engine/pipeline/etl_steps.py`
+Location: `brasa/engine/pipeline/steps/etl_steps.py`
 
 Registry pattern for step discovery:
 
@@ -358,12 +358,12 @@ brasa/engine/pipeline/
 ├── context_protocol.py     # Common interface for contexts (NEW)
 ├── etl_context.py          # ETL pipeline context (NEW)
 ├── etl_executor.py         # ETL pipeline executor (NEW)
-├── etl_steps.py            # ETL step base + registry + built-ins (NEW)
-├── shared_transforms.py    # Shared transformation functions (NEW)
 ├── executor.py         # Reader pipeline executor
 ├── registry.py         # Reader step registry
 ├── step.py             # Reader step base class
-└── steps/              # Reader step implementations
+└── steps/              # Reader + ETL step implementations
+  ├── etl_steps.py    # ETL step base + registry + built-ins (NEW)
+  └── shared_transforms.py  # Shared transformation functions (NEW)
 
 templates/
 ├── b3-futures.yaml                    # Pipeline ETL example (NEW)

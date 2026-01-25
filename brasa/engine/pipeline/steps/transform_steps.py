@@ -10,11 +10,10 @@ from typing import Any
 
 import pandas as pd
 
-from brasa.engine.pipeline.shared_transforms import to_dataframe
-
 from ..context import PipelineContext
 from ..registry import StepRegistry
 from ..step import PipelineStep
+from .shared_transforms import to_dataframe
 
 
 @StepRegistry.register("apply_fields")
@@ -168,7 +167,7 @@ class FillNaStep(PipelineStep):
     """
 
     def execute(self, data: pd.DataFrame, _context: Any) -> pd.DataFrame:
-        from .. import shared_transforms
+        from . import shared_transforms
 
         columns = self.get_param("columns")
         value = self.get_param("value")
@@ -187,7 +186,7 @@ class DropDuplicatesStep(PipelineStep):
     """
 
     def execute(self, data: pd.DataFrame, _context: Any) -> pd.DataFrame:
-        from .. import shared_transforms
+        from . import shared_transforms
 
         subset = self.get_param("subset")
         keep = self.get_param("keep", "first")
@@ -359,7 +358,7 @@ class SortStep(PipelineStep):
     """
 
     def execute(self, data: pd.DataFrame, _context: Any) -> pd.DataFrame:
-        from .. import shared_transforms
+        from . import shared_transforms
 
         by = self.require_param("by")
         ascending = self.get_param("ascending")
