@@ -114,7 +114,7 @@ brasa/
 ├── util.py              # Utility functions
 ├── downloaders/         # HTTP/API download clients
 ├── engine/              # Core engine (cache, templates, processing)
-├── fieldset_schema/     # Field schema definitions
+├── fieldsets/           # Field schema definitions
 ├── parsers/             # Data parsers (B3, ANBIMA, etc.)
 └── readers/             # Generic file readers
 
