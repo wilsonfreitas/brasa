@@ -5,6 +5,7 @@ Steps that allow running custom Python functions within the pipeline.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 import pandas as pd
@@ -143,3 +144,59 @@ class ExecCodeStep(PipelineStep):
             raise ValueError("exec_code step must assign a value to 'result'")
 
         return result
+
+
+@StepRegistry.register("store_result")
+class StoreResultStep(PipelineStep):
+    """Store the current data in the pipeline context.
+
+    Parameters:
+        name: Key to store the current data under.
+    """
+
+    def execute(self, data: Any, context: PipelineContext) -> Any:
+        name = self.require_param("name")
+        context.store_result(name, data)
+        return data
+
+
+@StepRegistry.register("load_result")
+class LoadResultStep(PipelineStep):
+    """Load a stored result from the pipeline context.
+
+    Parameters:
+        name: Key to retrieve from context.
+    """
+
+    def execute(self, _data: Any, context: PipelineContext) -> Any:
+        name = self.require_param("name")
+        value = context.get_result(name)
+        if value is None:
+            raise ValueError(f"No stored result for key '{name}'")
+        return value
+
+
+@StepRegistry.register("legacy_etl_output")
+class LegacyETLOutputStep(PipelineStep):
+    """Run a legacy ETL function and return its output dataset.
+
+    This step executes the legacy ETL function using a lightweight handler,
+    then loads the generated dataset and returns it as a DataFrame.
+
+    Parameters:
+        function: Fully qualified ETL function name.
+        args: Mapping of ETL function arguments.
+    """
+
+    def execute(self, _data: Any, context: PipelineContext) -> pd.DataFrame:
+        from brasa.queries import get_dataset
+
+        function = self.require_param("function")
+        args = self.get_param("args", {})
+
+        handler = SimpleNamespace(template_id=context.template_id, **args)
+        func = _load_function(function)
+        func(handler)
+
+        dataset = get_dataset(context.template_id)
+        return dataset.to_table().to_pandas()
