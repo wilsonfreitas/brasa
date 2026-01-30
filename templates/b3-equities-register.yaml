@@ -1,38 +1,150 @@
 id: b3-equities-register
 description: Dataset de dados cadastrais de ações
+
 etl:
-  function: brasa.etl.copy_dataset_and_drop_duplicates
-  futures_dataset: b3-bvbg028-equities
-  columns:
-    - refdate
-    - security_id
-    - security_proprietary
-    - security_market
-    - instrument_asset
-    - instrument_asset_description
-    - instrument_market
-    - instrument_segment
-    - instrument_description
-    - security_category
-    - isin
-    - distribution_id
-    - cfi_code
-    - specification_code
-    - corporation_name
-    - symbol
-    - payment_type
-    - allocation_lot_size
-    - price_factor
-    - trading_start_date
-    - trading_end_date
-    - corporate_action_start_date
-    - ex_distribution_number
-    - custody_treatment_type
-    - trading_currency
-    - market_capitalisation
-    - close
-    - open
-    - days_to_settlement
-    - right_issue_price
-    - instrument_type
-    - governance_indicator
+  pipeline:
+    - step: load
+      input: b3-bvbg028-equities
+      layer: staging
+
+    - step: select
+      columns:
+        - refdate
+        - security_id
+        - security_proprietary
+        - security_market
+        - instrument_asset
+        - instrument_asset_description
+        - instrument_market
+        - instrument_segment
+        - instrument_description
+        - security_category
+        - isin
+        - distribution_id
+        - cfi_code
+        - specification_code
+        - corporation_name
+        - symbol
+        - payment_type
+        - allocation_lot_size
+        - price_factor
+        - trading_start_date
+        - trading_end_date
+        - corporate_action_start_date
+        - ex_distribution_number
+        - custody_treatment_type
+        - trading_currency
+        - market_capitalisation
+        - close
+        - open
+        - days_to_settlement
+        - right_issue_price
+        - instrument_type
+        - governance_indicator
+
+    - step: apply_fields
+      errors: coerce
+
+    - step: drop_duplicates
+      keep: first
+
+writer:
+  partitioning: [refdate]
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: security_id
+    description: Security ID
+    type: string
+  - name: security_proprietary
+    description: Security proprietary code
+    type: string
+  - name: security_market
+    description: Security market code
+    type: string
+  - name: instrument_asset
+    description: Instrument asset code
+    type: string
+  - name: instrument_asset_description
+    description: Instrument asset description
+    type: string
+  - name: instrument_market
+    description: Instrument market code
+    type: string
+  - name: instrument_segment
+    description: Instrument segment code
+    type: string
+  - name: instrument_description
+    description: Instrument description
+    type: string
+  - name: security_category
+    description: Security category
+    type: string
+  - name: isin
+    description: ISIN code
+    type: string
+  - name: distribution_id
+    description: Distribution ID
+    type: integer
+  - name: cfi_code
+    description: CFI code
+    type: string
+  - name: specification_code
+    description: Specification code
+    type: string
+  - name: corporation_name
+    description: Corporation name
+    type: string
+  - name: symbol
+    description: Ticker symbol
+    type: string
+  - name: payment_type
+    description: Payment type
+    type: string
+  - name: allocation_lot_size
+    description: Allocation round lot size
+    type: integer
+  - name: price_factor
+    description: Price factor
+    type: numeric
+  - name: trading_start_date
+    description: Trading start date
+    type: date
+  - name: trading_end_date
+    description: Trading end date
+    type: date
+  - name: corporate_action_start_date
+    description: Corporate action start date
+    type: date
+  - name: ex_distribution_number
+    description: Ex-distribution number
+    type: integer
+  - name: custody_treatment_type
+    description: Custody treatment type
+    type: string
+  - name: trading_currency
+    description: Trading currency
+    type: string
+  - name: market_capitalisation
+    description: Market capitalisation
+    type: numeric
+  - name: close
+    description: Close price (last price)
+    type: numeric
+  - name: open
+    description: Open price (first price)
+    type: numeric
+  - name: days_to_settlement
+    description: Days to settlement
+    type: integer
+  - name: right_issue_price
+    description: Right issue price
+    type: numeric
+  - name: instrument_type
+    description: Instrument type
+    type: string
+  - name: governance_indicator
+    description: Governance indicator
+    type: string

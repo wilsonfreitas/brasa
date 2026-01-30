@@ -1,30 +1,122 @@
 id: b3-futures-register
 description: Dataset de dados cadastrais de contratos futuros da B3
+
 etl:
-  function: brasa.etl.copy_dataset_and_drop_duplicates
-  futures_dataset: b3-bvbg028-future_contracts
-  columns:
-    - symbol
-    - security_id
-    - security_proprietary
-    - security_market
-    - security_category
-    - instrument_asset
-    - expiration_code
-    - instrument_asset_description
-    - instrument_market
-    - instrument_segment
-    - instrument_description
-    - maturity_date
-    - trading_start_date
-    - trading_end_date
-    - value_type_code
-    - delivery_type
-    - payment_type
-    - trading_currency
-    - isin
-    - contract_multiplier
-    - asset_settlement_indicator
-    - allocation_lot_size
-    - underlying_security_id
-    - underlying_security_proprietary
+  pipeline:
+    - step: load
+      input: b3-bvbg028-future_contracts
+      layer: staging
+
+    - step: select
+      columns:
+        - refdate
+        - symbol
+        - security_id
+        - security_proprietary
+        - security_market
+        - security_category
+        - instrument_asset
+        - expiration_code
+        - instrument_asset_description
+        - instrument_market
+        - instrument_segment
+        - instrument_description
+        - maturity_date
+        - trading_start_date
+        - trading_end_date
+        - value_type_code
+        - delivery_type
+        - payment_type
+        - trading_currency
+        - isin
+        - contract_multiplier
+        - asset_settlement_indicator
+        - allocation_lot_size
+        - underlying_security_id
+        - underlying_security_proprietary
+
+    - step: apply_fields
+      errors: coerce
+
+    - step: drop_duplicates
+      keep: first
+
+writer:
+  partitioning: [refdate]
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Ticker symbol
+    type: string
+  - name: security_id
+    description: Security ID
+    type: string
+  - name: security_proprietary
+    description: Security proprietary code
+    type: string
+  - name: security_market
+    description: Security market code
+    type: string
+  - name: security_category
+    description: Security category
+    type: string
+  - name: instrument_asset
+    description: Instrument asset code
+    type: string
+  - name: expiration_code
+    description: Expiration code
+    type: string
+  - name: instrument_asset_description
+    description: Instrument asset description
+    type: string
+  - name: instrument_market
+    description: Instrument market code
+    type: string
+  - name: instrument_segment
+    description: Instrument segment code
+    type: string
+  - name: instrument_description
+    description: Instrument description
+    type: string
+  - name: maturity_date
+    description: Maturity/expiration date
+    type: date
+  - name: trading_start_date
+    description: Trading start date
+    type: date
+  - name: trading_end_date
+    description: Trading end date
+    type: date
+  - name: value_type_code
+    description: Value type code
+    type: string
+  - name: delivery_type
+    description: Delivery type
+    type: string
+  - name: payment_type
+    description: Payment type
+    type: string
+  - name: trading_currency
+    description: Trading currency
+    type: string
+  - name: isin
+    description: ISIN code
+    type: string
+  - name: contract_multiplier
+    description: Contract multiplier
+    type: numeric
+  - name: asset_settlement_indicator
+    description: Asset quotation quantity
+    type: numeric
+  - name: allocation_lot_size
+    description: Allocation round lot size
+    type: integer
+  - name: underlying_security_id
+    description: Underlying security ID
+    type: string
+  - name: underlying_security_proprietary
+    description: Underlying security proprietary code
+    type: string
