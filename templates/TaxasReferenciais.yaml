@@ -1,8 +1,5 @@
 id: TaxasReferenciais
-filename: ~
-filetype: CUSTOM
 description: Taxas referenciais
-locale: pt
 calendar: Brazil/ANBIMA
 downloader:
   verify_ssl: false
@@ -11,6 +8,7 @@ downloader:
   format: html
   encoding: latin1
 reader:
+  locale: pt
   function: curve_read
 fields:
   - name: refdate

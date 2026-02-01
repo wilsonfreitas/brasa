@@ -1,8 +1,5 @@
 id: bcb-sgs-data
-filename: ~
-filetype: MCUSTOM
 description: Obtém dados de séries temporais do SGS (Sistema Gerenciador de Séries Temporais) do Banco Central do Brasil.
-locale: pt
 downloader:
   function: brasa.downloaders.bcb_sgs_download
   validator: brasa.downloaders.validate_json_empty_file
@@ -11,6 +8,7 @@ downloader:
     code: ~
     refdate: ~
 reader:
+  locale: pt
   function: brasa.readers.read_bcb_sgs_data
 writer:
   partitioning: [refdate, code]

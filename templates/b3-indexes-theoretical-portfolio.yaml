@@ -1,8 +1,5 @@
 id: b3-indexes-theoretical-portfolio
-filename: ~
-filetype: MCUSTOM
 description: Carteira Teórica dos índices da B3 com pesos e posições
-locale: pt
 downloader:
   function: brasa.downloaders.b3_paged_url_encoded_download
   url: https://sistemaswebb3-listados.b3.com.br/indexProxy/indexCall/GetTheoricalPortfolio
@@ -16,6 +13,7 @@ downloader:
     index: ~
   extra-key: date
 reader:
+  locale: pt
   encoding: latin1
   pipeline:
     - step: read_json

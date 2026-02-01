@@ -2,7 +2,6 @@ id: CenariosSpot
 filename: ~
 filetype: MCSV
 separator: ;
-locale: pt
 description: Arquivos de cenários do tipo spot
 downloader:
   function: brasa.downloaders.datetime_download
@@ -10,6 +9,8 @@ downloader:
   format: zip
   args:
     refdate: ~
+reader:
+  locale: pt
 parts:
   Header:
     pattern: ^01

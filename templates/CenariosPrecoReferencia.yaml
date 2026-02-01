@@ -1,6 +1,4 @@
 id: CenariosPrecoReferencia
-filename: ~
-filetype: MCSV
 description: Arquivos de cenários do tipo preço de referência
 downloader:
   function: brasa.downloaders.datetime_download

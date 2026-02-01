@@ -1,8 +1,5 @@
 id: b3-cash-dividends
-filename: ~
-filetype: CUSTOM
 description: Listagem de dividendos em dinheiro
-locale: pt
 downloader:
   function: brasa.downloaders.b3_paged_url_encoded_download
   url: https://sistemaswebb3-listados.b3.com.br/listedCompaniesProxy/CompanyCall/GetListedCashDividends
@@ -15,6 +12,7 @@ downloader:
     pageSize: 200
   extra-key: date
 reader:
+  locale: pt
   function: brasa.readers.read_b3_cash_dividends
 fields:
   - name: typeStock

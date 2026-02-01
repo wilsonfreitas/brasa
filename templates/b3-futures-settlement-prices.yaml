@@ -1,8 +1,5 @@
 id: b3-futures-settlement-prices
-filename: ~
-filetype: CUSTOM
 description: Preços de Ajustes Diários de Contratos Futuros da B3
-locale: pt
 downloader:
   verify_ssl: false
   function: brasa.downloaders.settlement_prices_download
@@ -12,6 +9,7 @@ downloader:
   args:
     refdate: ~
 reader:
+  locale: pt
   encoding: latin1
   decimal: ","
   thousands: "."

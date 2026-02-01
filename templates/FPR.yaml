@@ -1,15 +1,14 @@
 id: FPR
-filename: FatoresPrimitivosRisco.txt
-filetype: MCSV
 description: Fatores primarios de risco
 separator: ;
-locale: pt
 downloader:
   function: brasa.downloaders.datetime_download
   url: https://www.b3.com.br/pesquisapregao/download?filelist=FP%y%m%d.zip
   format: zip
   args:
     refdate: ~
+reader:
+  locale: pt
 parts:
   Header:
     index: 1

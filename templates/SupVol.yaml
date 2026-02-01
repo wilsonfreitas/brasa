@@ -1,9 +1,8 @@
 id: SupVol
-filename: SupVol.txt
-filetype: MCSV
 description: Superfície de Volatilidade por Delta de Opções sobre Derivativos
 separator: ;
-locale: pt
+reader:
+  locale: pt
 parts:
   Header:
     index: 1

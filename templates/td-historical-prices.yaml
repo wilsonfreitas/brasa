@@ -1,6 +1,4 @@
 id: td-historical-prices
-filename: ~
-filetype: CUSTOM
 description: Tesouro Direto preços e taxas históricas
 downloader:
   verify_ssl: false

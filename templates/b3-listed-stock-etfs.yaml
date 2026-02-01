@@ -1,8 +1,5 @@
 id: b3-listed-stock-etfs
-filename: ~
-filetype: CUSTOM
 description: Listagem de ETFs de renda variável negociados na B3
-locale: pt
 downloader:
   function: brasa.downloaders.b3_paged_url_encoded_download
   url: https://sistemaswebb3-listados.b3.com.br/fundsProxy/fundsCall/GetListedFundsSIG
@@ -13,6 +10,7 @@ downloader:
     pageSize: 100
   extra-key: date
 reader:
+  locale: pt
   function: brasa.readers.read_b3_listed_funds
 fields:
   - name: segment

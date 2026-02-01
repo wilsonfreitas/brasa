@@ -1,10 +1,7 @@
 # Pipeline-based version of b3-futures-settlement-prices template
 # This template demonstrates the new pipeline approach for reading data
 id: b3-futures-settlement-prices-pipeline
-filename: ~
-filetype: CUSTOM
 description: Preços de Ajustes Diários de Contratos Futuros (Pipeline Version)
-locale: pt
 downloader:
   verify_ssl: false
   function: brasa.downloaders.settlement_prices_download
@@ -14,6 +11,7 @@ downloader:
   args:
     refdate: ~
 reader:
+  locale: pt
   encoding: latin1
   decimal: ","
   thousands: "."

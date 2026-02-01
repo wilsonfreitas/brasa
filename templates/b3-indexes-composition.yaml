@@ -1,8 +1,5 @@
 id: b3-indexes-composition
-filename: ~
-filetype: CUSTOM
 description: Composição dos índices da B3
-locale: pt
 downloader:
   function: brasa.downloaders.b3_paged_url_encoded_download
   verifyssl: false
@@ -14,6 +11,7 @@ downloader:
     pageSize: 9999
   extra-key: date
 reader:
+  locale: pt
   function: brasa.readers.read_b3_indexes_composition
   encoding: latin1
   pipeline:
