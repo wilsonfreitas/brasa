@@ -205,6 +205,13 @@ poetry run mypy brasa/
 
 - `BRASA_DATA_PATH`: Custom cache directory path (default: `.brasa-cache/`)
 
+## Template System
+
+For working with YAML template configurations (in `templates/` directory), refer to the dedicated instruction file:
+- **Templates**: See `.github/instructions/templates.instructions.md` for pipeline-based template configuration
+- **Full specification**: `docs/TEMPLATES.md` contains complete template system documentation
+- Always use pipeline-based templates (not function-based) for new code
+
 ## Code Review Checklist
 
 - [ ] Type hints added
@@ -215,3 +222,4 @@ poetry run mypy brasa/
 - [ ] No hardcoded values (use constants or config)
 - [ ] Proper error handling
 - [ ] Uses `pathlib.Path` instead of string paths
+- [ ] Templates follow pipeline-based pattern (if applicable)
