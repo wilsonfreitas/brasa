@@ -8,13 +8,15 @@ Brasa's behavior can be configured through:
 3. Python code parameters
 4. Calendar settings
 
+> **📚 For Template Configuration Details:** See [TEMPLATES.md](TEMPLATES.md) for comprehensive guidance on pipeline-based templates (the **recommended modern approach** using `reader.pipeline`, `etl.pipeline`, and typed `fields`/`datasets`). This guide documents the legacy function-based approach. Both approaches are supported, but new templates should use the pipeline approach.
+
 ## Environment Variables
 
 ### BRASA_DATA_PATH
 
 Controls where brasa stores cached data.
 
-**Default**: `.brasa-cache` in current working directory
+**Default**: `.brasa-cache` in current working directory. But always check for the environment variable BRASA_DATA_PATH.
 
 **Usage**:
 ```bash
@@ -47,9 +49,6 @@ Templates are YAML files in the `templates/` directory that define how to downlo
 ```yaml
 id: unique-template-id
 description: Human-readable description
-filename: BASE_FILENAME_PATTERN
-filetype: MFWF|CSV|JSON|HTML|XML
-locale: en|pt_BR
 
 downloader:
   function: brasa.downloaders.{function_name}
@@ -65,12 +64,9 @@ downloader:
     param2: default     # Optional with default value
 
 reader:
-  function: brasa.readers.{function_name}
   encoding: utf-8
-  output-filename-format: "%Y-%m-%d"
-  multi:                # For multi-part outputs
-    part_name1: dataset_name1
-    part_name2: dataset_name2
+  pipeline:
+    - step: step1
 
 writer:
   partitioning:
@@ -80,20 +76,15 @@ writer:
 fields:                 # For simple file formats
   - name: field_name
     description: Field description
-    width: 10          # For fixed-width files
-    handler:
-      type: numeric|character|date|posixct
-      format: "%Y%m%d"  # For date fields
+    type: numeric|character|date(format="%Y%m%d")|posixct
 
-parts:                  # For multi-part files (MFWF)
-  PartName:
-    pattern: ^regex_pattern
+datasets:                  # For multiple datasets
+  dataset_name:
+    tag: tag
     fields:
       - name: field_name
         description: Description
-        width: 10
-        handler:
-          type: numeric|character|date
+        type: numeric|character|date
 
 etl:                    # For ETL-only templates
   function: brasa.etl.{function_name}
