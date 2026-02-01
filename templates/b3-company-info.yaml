@@ -1,8 +1,6 @@
 id: b3-company-info
-filename: ~
-filetype: MCUSTOM
 description: Informação suplementar das companhias listadas na Bolsa
-locale: pt
+
 downloader:
   function: brasa.downloaders.b3_url_encoded_download
   validator: brasa.downloaders.validate_json_empty_file
@@ -13,13 +11,9 @@ downloader:
     issuingCompany: ~
     language: pt-br
   extra-key: date
+
 reader:
-  function: brasa.readers.read_b3_company_info
-  multi:
-    Info: info
-    CashDividends: cash_dividends
-    StockDividends: stock_dividends
-    Subscriptions: subscriptions
+  locale: pt
   pipeline:
     steps:
       - step: b3_read_company_info_json
@@ -33,6 +27,7 @@ reader:
           where: extra_key
         name: refdate
       - step: apply_fields_multi
+
 writer:
   partitioning: [issuingCompany, refdate]
 
