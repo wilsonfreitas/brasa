@@ -112,9 +112,7 @@ class DatasetSelectColumnsStep(PipelineStep):
         columns: List of column names to select.
     """
 
-    def execute(
-        self, data: ds.Dataset | pd.DataFrame, _context: Any
-    ) -> ds.Dataset | pd.DataFrame:
+    def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
         """Select the specified columns."""
         columns = self.require_param("columns")
         return shared_transforms.select_columns(data, columns)

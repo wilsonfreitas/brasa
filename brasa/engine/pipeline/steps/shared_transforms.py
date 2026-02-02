@@ -66,7 +66,7 @@ def filter_data(
 def select_columns(
     data: ds.Dataset | pd.DataFrame,
     columns: list[str],
-) -> ds.Dataset | pd.DataFrame:
+) -> pd.DataFrame:
     """Select specific columns from the dataset.
 
     Args:
@@ -74,11 +74,11 @@ def select_columns(
         columns: List of column names to select.
 
     Returns:
-        Dataset or DataFrame with only selected columns.
+        DataFrame with only selected columns.
     """
     if isinstance(data, ds.Dataset):
         # For datasets, use scanner with column projection
-        return data.scanner(columns=columns).to_table()
+        return data.to_table(columns=columns).to_pandas()
     elif isinstance(data, pd.DataFrame):
         return data[columns]
     else:
