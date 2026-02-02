@@ -5,7 +5,7 @@ etl:
   pipeline:
     - step: load
       input: b3-bvbg028-equities
-      layer: staging
+      layer: input
 
     - step: select
       columns:
@@ -39,17 +39,13 @@ etl:
         - open
         - days_to_settlement
         - right_issue_price
-        - instrument_type
         - governance_indicator
-
-    - step: apply_fields
-      errors: coerce
 
     - step: drop_duplicates
       keep: first
 
 writer:
-  partitioning: [refdate]
+  layer: staging
 
 fields:
   - name: refdate
@@ -142,9 +138,6 @@ fields:
   - name: right_issue_price
     description: Right issue price
     type: numeric
-  - name: instrument_type
-    description: Instrument type
-    type: string
   - name: governance_indicator
     description: Governance indicator
     type: string

@@ -5,7 +5,7 @@ etl:
   pipeline:
     - step: load
       input: b3-bvbg028-future_contracts
-      layer: staging
+      layer: input
 
     - step: select
       columns:
@@ -35,14 +35,11 @@ etl:
         - underlying_security_id
         - underlying_security_proprietary
 
-    - step: apply_fields
-      errors: coerce
-
     - step: drop_duplicates
       keep: first
 
 writer:
-  partitioning: [refdate]
+  layer: staging
 
 fields:
   - name: refdate
