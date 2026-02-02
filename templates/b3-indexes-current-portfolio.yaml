@@ -6,7 +6,7 @@ downloader:
   url: https://sistemaswebb3-listados.b3.com.br/indexProxy/indexCall/GetPortfolioDay
   format: json
   encoding: UTF-8
-  download_delay: 1
+  download_delay: 1.5
   args:
     pageNumber: 1
     pageSize: 9999
