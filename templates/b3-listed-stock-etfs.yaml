@@ -2,24 +2,85 @@ id: b3-listed-stock-etfs
 description: Listagem de ETFs de renda variável negociados na B3
 downloader:
   function: brasa.downloaders.b3_paged_url_encoded_download
-  url: https://sistemaswebb3-listados.b3.com.br/fundsProxy/fundsCall/GetListedFundsSIG
+  url: https://sistemaswebb3-listados.b3.com.br/fundsListedProxy/Search/GetListFunds
   format: json
   args:
-    typeFund: 20
+    language: pt-br
+    typeFund: ETF
     pageNumber: 1
-    pageSize: 100
+    pageSize: 999
   extra-key: date
+
 reader:
   locale: pt
-  function: brasa.readers.read_b3_listed_funds
+  pipeline:
+    - step: read_json
+      path: results
+
+    - step: set_column
+      value: ETF
+      name: type
+
+    - step: set_column
+      value: -1
+      name: id
+      only_if_missing: true
+
+    - step: add_column
+      from:
+        where: extra_key
+      name: refdate
+
+    - step: rename_columns
+      mapping:
+        id: fund_id
+        fundName: fund_name
+        tradingName: trading_name
+        companyName: trading_name
+
+    - step: select_columns
+      columns:
+        - fund_id
+        - type
+        - acronym
+        - fund_name
+        - trading_name
+        - refdate
+
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: input
+  partitioning: [refdate]
+
 fields:
-  - name: segment
-    description: Segmento
+  - name: fund_id
+    description: ID
+    type: string
+  - name: type
+    description: Tipo de Fundo
+    type: string
   - name: acronym
-    description: Acrônimo
-  - name: fundName
+    description: Acrônimo - símbolo de negociação sem os números finais
+    type: string
+  - name: fund_name
     description: Nome do ETF
-  - name: companyName
-    description: Descrição do ETF
-  - name: cnpj
-    description: CNPJ
+    type: string
+  - name: trading_name
+    description: Nome de Negociação
+    type: string
+  - name: refdate
+    description: Data de Referência
+    type: date
+
+  # - name: segment
+  #   description: Segmento
+  # - name: acronym
+  #   description: Acrônimo
+  # - name: fundName
+  #   description: Nome do ETF
+  # - name: companyName
+  #   description: Descrição do ETF
+  # - name: cnpj
+  #   description: CNPJ
