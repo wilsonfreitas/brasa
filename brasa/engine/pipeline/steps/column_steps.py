@@ -92,6 +92,7 @@ class AddColumnStep(PipelineStep):
         from: Dictionary with 'where' and 'key' to get value dynamically (optional)
             - where: 'context', 'download_args', or 'extra_key'
             - key: The key to look up (not needed for 'extra_key')
+        only_if_missing: Whether to only set the column if it doesn't already exist (default: False)
     """
 
     def _resolve_value(self, context: PipelineContext) -> Any:
@@ -124,7 +125,12 @@ class AddColumnStep(PipelineStep):
     def execute(self, data: pd.DataFrame, context: PipelineContext) -> pd.DataFrame:
         name = self.require_param("name")
         value = self._resolve_value(context)
-        data[name] = value
+        only_if_missing = self.get_param("only_if_missing", False)
+        if only_if_missing:
+            if name not in data.columns:
+                data[name] = value
+        else:
+            data[name] = value
         return data
 
 
@@ -140,6 +146,7 @@ class AddColumnMultiStep(AddColumnStep):
         from: Dictionary with 'where' and 'key' to get value dynamically (optional)
             - where: 'context', 'download_args', or 'extra_key'
             - key: The key to look up (not needed for 'extra_key')
+        only_if_missing: Whether to only set the column if it doesn't already exist (default: False)
     """
 
     def execute(
@@ -147,11 +154,20 @@ class AddColumnMultiStep(AddColumnStep):
     ) -> dict[str, pd.DataFrame]:
         name = self.require_param("name")
         value = self._resolve_value(context)
-
-        for df in data.values():
-            df[name] = value
+        only_if_missing = self.get_param("only_if_missing", False)
+        if only_if_missing:
+            for df in data.values():
+                if name not in df.columns:
+                    df[name] = value
+        else:
+            for df in data.values():
+                df[name] = value
 
         return data
+
+
+StepRegistry.register("set_column")(AddColumnStep)
+StepRegistry.register("set_column_multi")(AddColumnMultiStep)
 
 
 @StepRegistry.register("reorder_columns")
