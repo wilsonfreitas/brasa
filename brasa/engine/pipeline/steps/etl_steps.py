@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Any
 
 import pandas as pd
+import pyarrow
 import pyarrow.dataset as ds
 
 from brasa.engine.pipeline.context import PipelineContext
@@ -87,6 +88,74 @@ class LoadDatasetStep(PipelineStep):
             layer=layer_name,
             partitioning=partitioning,
         )
+
+
+@StepRegistry.register("concat_datasets")
+class ConcatDatasetsStep(PipelineStep):
+    """Concatenate multiple datasets into a single DataFrame.
+
+    This step loads multiple datasets from the same layer and concatenates
+    them vertically (stacking rows). All datasets must have compatible schemas.
+
+    Parameters:
+        inputs: List of dataset names to concatenate.
+        layer: Data layer to load datasets from
+               (e.g., 'input', 'staging', 'curated').
+        columns: Optional list of column names to select from each
+                dataset before concatenating. If not provided, all
+                columns are included (schemas must match).
+
+    Examples:
+        # Concatenate all columns from multiple datasets
+        - step: concat_datasets
+          inputs:
+            - b3-listed-fixed-income-etfs
+            - b3-listed-stock-etfs
+            - b3-listed-reits
+          layer: input
+
+        # Concatenate only specific columns
+        - step: concat_datasets
+          inputs:
+            - dataset-a
+            - dataset-b
+          layer: staging
+          columns: [refdate, symbol, value]
+    """
+
+    def execute(self, _data: Any, _context: Any) -> pd.DataFrame:
+        """Concatenate the specified datasets.
+
+        Args:
+            _data: Ignored (this step loads data independently).
+            _context: Pipeline context.
+
+        Returns:
+            Concatenated pandas DataFrame.
+        """
+        from brasa.queries import get_dataset
+
+        inputs = self.require_param("inputs")
+        layer = self.require_param("layer")
+        columns = self.get_param("columns")
+
+        if not inputs:
+            raise ValueError("concat_datasets requires at least one input dataset")
+
+        tables = []
+        for dataset_name in inputs:
+            if columns:
+                tb = (
+                    get_dataset(dataset_name, layer=layer)
+                    .scanner(columns=columns)
+                    .to_table()
+                )
+            else:
+                tb = get_dataset(dataset_name, layer=layer).to_table()
+            tables.append(tb)
+
+        concatenated = pyarrow.concat_tables(tables)
+        return concatenated.to_pandas()
 
 
 @StepRegistry.register("dataset_filter")

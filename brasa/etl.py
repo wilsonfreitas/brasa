@@ -894,6 +894,27 @@ def create_b3_equity_symbols_properties(handler: MarketDataETL):
 
 
 def create_b3_listed_funds(handler: MarketDataETL):
+    """Create consolidated B3 listed funds dataset.
+
+    .. deprecated::
+        This function is deprecated. The b3-listed-funds template now uses
+        pipeline-based ETL with the concat_datasets step. This function is
+        kept for backward compatibility only.
+
+    Note:
+        This function expects outdated column names (fundName, typeFund) that
+        no longer exist in source datasets. Use the pipeline-based template
+        instead.
+    """
+    import warnings
+
+    warnings.warn(
+        "create_b3_listed_funds is deprecated. "
+        "The b3-listed-funds template now uses pipeline-based ETL.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     tables = []
     cols = ["refdate", "acronym", "fundName", "typeFund"]
     for ds in handler.datasets:

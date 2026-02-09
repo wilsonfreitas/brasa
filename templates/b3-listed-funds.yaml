@@ -1,8 +1,53 @@
 id: b3-listed-funds
-description: Fundos listados na B3, renda variável, renda fixa e imobiliários
+description: Fundos listados na B3, renda variável, renda fixa, imobiliários e criptomoedas
 etl:
-  function: brasa.etl.create_b3_listed_funds
-  datasets:
-    - b3-listed-fixed-income-etfs
-    - b3-listed-stock-etfs
-    - b3-listed-reits
+  pipeline:
+    - step: concat_datasets
+      inputs:
+        - b3-listed-fixed-income-etfs
+        - b3-listed-stock-etfs
+        - b3-listed-reits
+        - b3-listed-cripto-etfs
+      layer: input
+
+    - step: apply_lambda
+      column: acronym
+      expression: "x + '11'"
+      output: symbol
+
+    - step: rename_columns
+      mapping:
+        acronym: asset_name
+        type: fund_type
+
+    - step: select_fields
+
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+  partitioning: [refdate]
+
+fields:
+  - name: refdate
+    description: Data de Referência
+    type: date
+  - name: asset_name
+    description: Acrônimo - símbolo de negociação sem os números finais
+    type: string
+  - name: symbol
+    description: Símbolo completo de negociação
+    type: string
+  - name: fund_name
+    description: Nome do Fundo
+    type: string
+  - name: fund_type
+    description: Tipo de Fundo (ETF, ETF-RF, ETF-FII, ETF-CRIPTO)
+    type: string
+  - name: fund_id
+    description: ID do Fundo
+    type: string
+  - name: trading_name
+    description: Nome de Negociação
+    type: string
