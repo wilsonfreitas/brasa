@@ -7,33 +7,7 @@ etl:
       input: b3-bvbg028-future_contracts
       layer: input
 
-    - step: select
-      columns:
-        - refdate
-        - symbol
-        - security_id
-        - security_proprietary
-        - security_market
-        - security_category
-        - instrument_asset
-        - expiration_code
-        - instrument_asset_description
-        - instrument_market
-        - instrument_segment
-        - instrument_description
-        - maturity_date
-        - trading_start_date
-        - trading_end_date
-        - value_type_code
-        - delivery_type
-        - payment_type
-        - trading_currency
-        - isin
-        - contract_multiplier
-        - asset_settlement_indicator
-        - allocation_lot_size
-        - underlying_security_id
-        - underlying_security_proprietary
+    - step: select_fields
 
     - step: drop_duplicates
       keep: first

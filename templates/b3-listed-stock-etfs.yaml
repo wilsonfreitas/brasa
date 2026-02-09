@@ -38,14 +38,7 @@ reader:
         tradingName: trading_name
         companyName: trading_name
 
-    - step: select_columns
-      columns:
-        - fund_id
-        - type
-        - acronym
-        - fund_name
-        - trading_name
-        - refdate
+    - step: select_fields
 
     - step: apply_fields
       errors: coerce

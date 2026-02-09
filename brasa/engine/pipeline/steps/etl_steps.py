@@ -17,6 +17,8 @@ from typing import Any
 import pandas as pd
 import pyarrow.dataset as ds
 
+from brasa.engine.pipeline.context import PipelineContext
+
 from ..registry import StepRegistry
 from ..step import PipelineStep
 from . import shared_transforms
@@ -115,6 +117,26 @@ class DatasetSelectColumnsStep(PipelineStep):
     def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
         """Select the specified columns."""
         columns = self.require_param("columns")
+        return shared_transforms.select_columns(data, columns)
+
+
+@StepRegistry.register("select_fields")
+class DatasetSelectFieldsStep(PipelineStep):
+    """Select specific columns from the dataset (supports PyArrow Dataset and DataFrame) based on field names.
+
+    This step is similar to 'dataset_select' but is designed to work with field names in PyArrow Datasets,
+    which may differ from column names in DataFrames. It ensures compatibility when working directly with PyArrow Datasets."""
+
+    def execute(
+        self, data: ds.Dataset | pd.DataFrame, context: PipelineContext
+    ) -> pd.DataFrame:
+        """Select the specified columns."""
+        if context.fields is None:
+            raise ValueError(
+                "PipelineContext must have 'fields' defined for select_fields step."
+            )
+
+        columns = context.fields.get_field_names()
         return shared_transforms.select_columns(data, columns)
 
 
