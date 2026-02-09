@@ -1,3 +1,8 @@
+---
+description: 'Brasa template configuration instructions: guidelines for creating and modifying YAML templates that define data processing pipelines, field schemas, and validation rules for ETL workflows.'
+applyTo: '**/*.yaml, **/*.yml'
+---
+
 # Template Configuration Instructions
 
 ## Overview
