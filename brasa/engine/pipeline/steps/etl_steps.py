@@ -167,9 +167,7 @@ class DatasetFilterStep(PipelineStep):
                Can be a single value or list of values (IN clause).
     """
 
-    def execute(
-        self, data: ds.Dataset | pd.DataFrame, _context: Any
-    ) -> ds.Dataset | pd.DataFrame:
+    def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
         """Filter the data based on the where clause."""
         where = self.require_param("where")
         return shared_transforms.filter_data(data, where)
