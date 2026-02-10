@@ -177,19 +177,129 @@ class MarketDataETL:
         """Get dependencies for graph building."""
 ```
 
-## Built-in Steps (Phase 1)
+## Available Pipeline Steps
 
-| Step | Description | Parameters |
-|------|-------------|------------|
-| `load` | Load a dataset by name | `input`: dataset name |
-| `filter` | Filter rows | `where`: dict of column → value(s) |
-| `select` | Select columns | `columns`: list of column names |
-| `sort` | Sort rows | `by`: column(s), `descending`: bool |
-| `to_dataframe` | Convert to pandas | (none) |
-| `drop_columns` | Remove columns | `columns`: list of column names |
-| `rename_columns` | Rename columns | `mapping`: dict of old → new |
-| `drop_duplicates` | Remove duplicate rows | `subset`: columns, `keep`: first/last |
-| `fill_na` | Fill missing values | `value`, `method`, `columns` |
+All steps are registered in the unified `StepRegistry` and can be used in both reader and ETL pipelines. Steps are organized by category for easier reference.
+
+### Data Loading Steps (ETL)
+
+| Step | Input Type | Output Type | Uses Context | Description | Parameters |
+|------|------------|-------------|--------------|-------------|------------|
+| `load` | Any (ignored) | Dataset | No | Load a dataset by name (template or explicit) | `template`: template name OR `input`: dataset name, `layer`: data layer, `partitioning`: partitioning scheme |
+| `concat_datasets` | Any (ignored) | DataFrame | No | Concatenate multiple datasets vertically | `inputs`: list of dataset names, `layer`: data layer, `columns`: optional column filter |
+| `dataset_filter` | Dataset/DataFrame | DataFrame | No | Filter rows in a Dataset or DataFrame | `where`: dict of column → value(s) for equality filtering |
+| `dataset_select` | Dataset/DataFrame | DataFrame | No | Select specific columns from Dataset/DataFrame | `columns`: list of column names |
+| `select_fields` | Dataset/DataFrame | DataFrame | Yes | Select columns based on field names from template | (uses `context.fields`) |
+| `dataset_sort` | Dataset/DataFrame | DataFrame | No | Sort data by columns | `by`: column(s), `descending`: bool or list |
+| `to_dataframe` | Dataset/DataFrame | DataFrame | No | Convert PyArrow Dataset to pandas DataFrame | (none) |
+| `dataset_drop_columns` | Dataset/DataFrame | DataFrame | No | Drop columns from Dataset/DataFrame | `columns`: list of column names |
+| `dataset_rename_columns` | Dataset/DataFrame | DataFrame | No | Rename columns in Dataset/DataFrame | `mapping`: dict of old → new |
+| `dataset_drop_duplicates` | Dataset/DataFrame | DataFrame | No | Remove duplicate rows | `subset`: columns to check, `keep`: 'first'/'last'/False |
+| `dataset_fill_na` | Dataset/DataFrame | DataFrame | No | Fill missing values | `value`: fill value, `method`: 'ffill'/'bfill', `columns`: optional |
+
+### Data Loading Steps (I/O)
+
+| Step | Input Type | Output Type | Uses Context | Description | Parameters |
+|------|------------|-------------|--------------|-------------|------------|
+| `read_csv` | Any (ignored) | DataFrame | Yes | Read CSV file into DataFrame | `separator`: field separator, `skip`: rows to skip, `header`: header row, `names`: column names, `converters`: column converters |
+| `read_fwf` | Any (ignored) | DataFrame | Yes | Read fixed-width format file | `colspecs`: list of (start, end) tuples, `names`: column names, `skip`: rows to skip |
+| `read_json` | Any (ignored) | DataFrame | Yes | Read JSON file into DataFrame | `orient`: JSON orientation, `path`: JSON path to extract |
+| `read_excel` | Any (ignored) | DataFrame | Yes | Read Excel file into DataFrame | `sheet`: sheet name/index, `skip`: rows to skip, `header`: header row |
+
+### HTML Steps
+
+| Step | Input Type | Output Type | Uses Context | Description | Parameters |
+|------|------------|-------------|--------------|-------------|------------|
+| `read_html` | Any (ignored) | List[DataFrame] | Yes | Read HTML tables into list of DataFrames | `attrs`: HTML attributes dict, `match`: regex to match table text, `flavor`: parser to use |
+| `select_table` | List[DataFrame] | DataFrame | No | Select a single table from list | `index`: table index (default: 0) |
+| `first_table` | List[DataFrame] | DataFrame | No | Select the first table from list | (none) |
+| `parse_html_element` | Any | Any | Yes | Parse HTML element using XPath | `xpath`: XPath expression, `attribute`: attribute to extract, `store_as`: context storage name |
+
+### Column Manipulation Steps
+
+| Step | Input Type | Output Type | Uses Context | Description | Parameters |
+|------|------------|-------------|--------------|-------------|------------|
+| `set_columns` | DataFrame | DataFrame | No | Set column names for DataFrame | `names`: list of column names |
+| `rename_columns` | DataFrame | DataFrame | No | Rename columns using mapping | `mapping`: dict of old → new names |
+| `select_columns` | DataFrame | DataFrame | No | Select specific columns | `columns`: list of column names |
+| `drop_columns` | DataFrame | DataFrame | No | Drop columns from data | `columns`: list of columns to drop, `errors`: 'raise'/'ignore' |
+| `add_column` | DataFrame | DataFrame | Yes | Add a new column with static or dynamic value | `name`: column name, `value`: static value OR `from`: dict with 'where'/'key', `only_if_missing`: bool |
+| `add_column_multi` | Dict[str, DataFrame] | Dict[str, DataFrame] | Yes | Add column to multiple DataFrames in dict | (same as `add_column`) |
+| `set_column` | DataFrame | DataFrame | Yes | Alias for `add_column` | (same as `add_column`) |
+| `set_column_multi` | Dict[str, DataFrame] | Dict[str, DataFrame] | Yes | Alias for `add_column_multi` | (same as `add_column_multi`) |
+| `reorder_columns` | DataFrame | DataFrame | No | Reorder columns in specific order | `order`: list of column names, `keep_rest`: keep unlisted columns |
+
+### Row Filtering & Transformation Steps
+
+| Step | Input Type | Output Type | Uses Context | Description | Parameters |
+|------|------------|-------------|--------------|-------------|------------|
+| `filter_rows` | DataFrame | DataFrame | No | Filter rows based on condition | `column`: column to filter, `operator`: comparison operator, `value`: comparison value |
+| `drop_duplicates` | DataFrame | DataFrame | No | Remove duplicate rows | `subset`: columns to check, `keep`: 'first'/'last'/False |
+| `drop_na` | DataFrame | DataFrame | No | Drop rows with NA/NaN values | `columns`: columns to check, `how`: 'any'/'all' |
+| `sort` | DataFrame | DataFrame | No | Sort data by columns | `by`: column(s), `ascending`: bool/list OR `descending`: bool/list, `na_position`: 'first'/'last' |
+| `melt` | DataFrame | DataFrame | No | Unpivot DataFrame from wide to long | `id_vars`: identifier columns, `value_vars`: columns to unpivot, `var_name`: variable column name, `value_name`: value column name |
+
+### Type Conversion & Parsing Steps
+
+| Step | Input Type | Output Type | Uses Context | Description | Parameters |
+|------|------------|-------------|--------------|-------------|------------|
+| `apply_fields` | DataFrame | DataFrame | Yes | Apply field definitions to DataFrame | `errors`: 'raise'/'coerce'/'ignore', `set_columns`: bool |
+| `apply_fields_multi` | Dict[str, DataFrame] | Dict[str, DataFrame] | Yes | Apply fields to multiple DataFrames | `errors`: 'raise'/'coerce'/'ignore' |
+| `parse_numeric` | DataFrame | DataFrame | Yes | Parse string columns as numeric | `columns`: list of columns, `errors`: error handling |
+| `parse_date` | DataFrame | DataFrame | No | Parse string columns as dates | `columns`: list of columns, `format`: date format, `errors`: error handling |
+| `parse_datetime` | DataFrame | DataFrame | No | Parse string columns as datetime | `columns`: list of columns, `format`: datetime format, `errors`: error handling |
+| `cast` | DataFrame | DataFrame | No | Cast columns to specific type | `column`: column(s) to cast, `dtype`: target type, `errors`: error handling |
+| `make_date` | DataFrame | DataFrame | No | Create date from year/month/day components | `year_column`: year column, `month_column`: month column, `day_column`: day column, `output`: output name, `errors`: error handling |
+
+### Data Transformation Steps
+
+| Step | Input Type | Output Type | Uses Context | Description | Parameters |
+|------|------------|-------------|--------------|-------------|------------|
+| `fill_na` | DataFrame | DataFrame | No | Fill NA/NaN values | `columns`: columns to fill, `value`: fill value, `method`: 'ffill'/'bfill' |
+| `forward_fill_column` | DataFrame | DataFrame | No | Forward fill values in column | `column`: column to fill, `condition`: condition to check |
+| `extract_regex` | DataFrame | DataFrame | No | Extract values using regex | `column`: source column, `pattern`: regex pattern, `output`: output column, `group`: capture group index |
+| `concat_columns` | DataFrame | DataFrame | No | Concatenate multiple columns | `columns`: list of columns, `output`: output column, `separator`: separator string |
+| `str_replace` | DataFrame | DataFrame | No | Replace pattern in string column | `column`: column to process, `pattern`: search pattern, `replacement`: replacement string, `output`: output column, `regex`: bool |
+
+### B3-Specific Steps
+
+| Step | Input Type | Output Type | Uses Context | Description | Parameters |
+|------|------------|-------------|--------------|-------------|------------|
+| `b3_parse_refdate_from_html` | DataFrame | DataFrame | Yes | Parse reference date from B3 HTML | `xpath`: XPath expression, `attribute`: attribute name, `store_as`: context storage name |
+| `b3_forward_fill_commodity` | DataFrame | DataFrame | No | Forward fill commodity names in table | `column`: column name (default: 'commodity') |
+| `b3_extract_commodity_code` | DataFrame | DataFrame | No | Extract commodity code from name | `column`: column to process (default: 'commodity') |
+| `b3_create_symbol` | DataFrame | DataFrame | No | Create futures symbol from parts | `commodity_column`: commodity column, `maturity_column`: maturity column, `output_column`: output name |
+| `b3_read_bvbg086_xml` | Any (ignored) | DataFrame | Yes | Read B3 BVBG086 XML file (price reports) | (uses field tags from context) |
+| `b3_read_bvbg028_xml` | Any (ignored) | Dict[str, DataFrame] | Yes | Read B3 BVBG028 XML file (multi-dataset) | (uses datasets config from context) |
+| `b3_read_bvbg087_xml` | Any (ignored) | Dict[str, DataFrame] | Yes | Read B3 BVBG087 XML file (indexes) | (uses datasets config from context) |
+| `b3_read_company_info_json` | Any (ignored) | Dict[str, DataFrame] | Yes | Read B3 company info JSON | (uses datasets config from context) |
+| `b3_read_company_details_json` | Any (ignored) | DataFrame | Yes | Read B3 company details JSON | (none) |
+| `b3_add_columns_from_json_fields` | DataFrame | DataFrame | Yes | Parse JSON fields and add as columns | `mapping`: dict of column → JSON path |
+
+### Custom Function Steps
+
+| Step | Input Type | Output Type | Uses Context | Description | Parameters |
+|------|------------|-------------|--------------|-------------|------------|
+| `custom` | Any | Any | Yes | Execute custom function with data and context | `function`: fully qualified function name |
+| `custom_simple` | Any | Any | No | Execute simple custom function (data only) | `function`: fully qualified function name |
+| `legacy_reader` | Any (ignored) | DataFrame | Yes | Execute legacy reader function | `function`: fully qualified function name |
+| `apply_lambda` | DataFrame | DataFrame | No | Apply lambda expression to column | `column`: column to process, `expression`: Python expression, `output`: output column, `axis`: 0/1 |
+| `exec_code` | DataFrame | DataFrame | Yes | Execute arbitrary Python code | `code`: Python code (must assign to 'result') |
+
+### Notes
+
+- **Input Type**: The type of data the step expects to receive from the previous step. "Any (ignored)" means the step doesn't use the incoming data (typically first steps in a pipeline).
+- **Output Type**: The type of data the step returns. Common types:
+  - `DataFrame`: pandas DataFrame
+  - `Dataset`: PyArrow Dataset
+  - `Dataset/DataFrame`: Accepts and returns either type
+  - `List[DataFrame]`: List of DataFrames (from HTML parsing)
+  - `Dict[str, DataFrame]`: Dictionary mapping dataset names to DataFrames (multi-output)
+- **Uses Context**: Whether the step needs access to the pipeline context for metadata, configuration, or side effects (e.g., storing intermediate results, accessing file paths, field definitions).
+- **Dataset vs DataFrame**: Steps prefixed with `dataset_` work with both PyArrow Datasets and pandas DataFrames. Other steps typically require DataFrames.
+- **Multi-output steps**: Some B3 steps (e.g., `b3_read_bvbg028_xml`) return `Dict[str, DataFrame]` for multi-dataset processing.
+- **Context access**: Steps like `add_column` can access pipeline context for dynamic values from `download_args`, `extra_key`, or stored intermediate results.
+- **Field-aware steps**: Steps like `apply_fields` use the template's fieldset definition from the context.
 
 ## Sharing Code Between Reader and ETL Pipelines
 

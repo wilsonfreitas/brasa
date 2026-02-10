@@ -11,7 +11,7 @@ This instruction file guides agents when working with brasa's template system fo
 
 ## Reference Documentation
 
-The complete template system documentation is available in [docs/TEMPLATES.md](../../docs/TEMPLATES.md). Agents should refer to that document for detailed specifications.
+The complete template system documentation is available in [docs/TEMPLATES.md](../../docs/TEMPLATES.md). For detailed information about pipeline design and architecture, see [docs/ETL_PIPELINE_DESIGN.md](../../docs/ETL_PIPELINE_DESIGN.md). Agents should refer to these documents for detailed specifications.
 
 ## Key Principles
 

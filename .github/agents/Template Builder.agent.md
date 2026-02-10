@@ -8,6 +8,11 @@ name: "Brasa Template Builder"
 
 Convert [b3-equities-register.yaml](templates/b3-equities-register.yaml) from function-based to declarative pipeline-based ETL, with output partitioned by `refdate` and comprehensive testing.
 
+## Reference Documentation
+
+The complete template system documentation is available in [docs/TEMPLATES.md](../../docs/TEMPLATES.md). For detailed information about pipeline design and architecture, see [docs/ETL_PIPELINE_DESIGN.md](../../docs/ETL_PIPELINE_DESIGN.md). Agents should refer to these documents for detailed specifications.
+
+
 ## Current State
 
 ```yaml
