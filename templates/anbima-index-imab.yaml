@@ -1,0 +1,60 @@
+id: anbima-index-imab
+description: Historico do indice IMA Geral (ANBIMA)
+downloader:
+  verify_ssl: false
+  function: brasa.downloaders.simple_download
+  url: https://s3-data-prd-use1-precos.s3.us-east-1.amazonaws.com/arquivos/indices-historico/IMAGERAL-HISTORICO.xls
+  format: xls
+reader:
+  locale: pt
+  pipeline:
+    - step: read_excel
+      sheet: Historico
+    - step: rename_columns
+      mapping:
+        "Índice": index_name
+        "Data de Referência": refdate
+        "Número Índice": index_number
+        "Variação Diária (%)": daily_return_pct
+        "Variação no Mês (%)": month_return_pct
+        "Variação no Ano (%)": year_return_pct
+        "Variação 12 Meses (%)": return_12m_pct
+        "Variação 24 Meses (%)": return_24m_pct
+        "Duration (d.u.)": duration_du
+        "PMR": pmr
+    - step: apply_fields
+      errors: coerce
+writer:
+  layer: input
+  partitioning: [index_name]
+fields:
+- name: index_name
+  description: Nome do indice
+  type: character
+- name: refdate
+  description: Data de referencia
+  type: date(format="%Y-%m-%d")
+- name: index_number
+  description: Numero indice
+  type: number
+- name: daily_return_pct
+  description: Variacao diaria em percentual
+  type: number
+- name: month_return_pct
+  description: Variacao no mes em percentual
+  type: number
+- name: year_return_pct
+  description: Variacao no ano em percentual
+  type: number
+- name: return_12m_pct
+  description: Variacao em 12 meses em percentual
+  type: number
+- name: return_24m_pct
+  description: Variacao em 24 meses em percentual
+  type: number
+- name: duration_du
+  description: Duration em dias uteis
+  type: number
+- name: pmr
+  description: Prazo medio de repactuacao
+  type: number
