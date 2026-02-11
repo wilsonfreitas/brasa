@@ -132,3 +132,4 @@ data/big-files/OpcoesAcoesEmAberto.zip
 legacy/
 .brasa-cache/
 .vscode/launch.json
+templates/compiled/*.yaml

@@ -40,6 +40,7 @@ writer:
 3. **Implicit step chaining** - Output of step N is input to step N+1
 4. **Dependencies from `input` parameters** - Each step declares its source
 5. **Writer controls output** - `writer.partitioning` determines file structure
+6. **Template inheritance** - Templates can extend base templates using `extends:` keyword (see [TEMPLATES.md#template-inheritance](TEMPLATES.md#template-inheritance))
 
 ## Architecture
 

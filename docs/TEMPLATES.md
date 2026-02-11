@@ -11,13 +11,17 @@ This document provides comprehensive guidance on **pipeline-based templates** in
 1. [Overview](#overview)
    - [Template Types Taxonomy](#template-types-taxonomy)
    - [Validation Rules by Type](#validation-rules-by-type)
-2. [Download & Read Templates (Single Dataset)](#download--read-templates-single-dataset)
-3. [Download & Read Templates (Multi-Dataset)](#download--read-templates-multi-dataset)
-4. [ETL Templates (Single Dataset)](#etl-templates-single-dataset)
-5. [Field Schema & Type System](#field-schema--type-system)
-6. [Pipeline Steps Reference](#pipeline-steps-reference)
-7. [Common Pitfalls & Best Practices](#common-pitfalls--best-practices)
-8. [Architecture & Processing Flow](#architecture--processing-flow)
+2. [Template Inheritance](#template-inheritance)
+   - [Inheritance Rules](#inheritance-rules)
+   - [Merge Semantics](#merge-semantics)
+   - [Using the Template Compiler](#using-the-template-compiler)
+3. [Download & Read Templates (Single Dataset)](#download--read-templates-single-dataset)
+4. [Download & Read Templates (Multi-Dataset)](#download--read-templates-multi-dataset)
+5. [ETL Templates (Single Dataset)](#etl-templates-single-dataset)
+6. [Field Schema & Type System](#field-schema--type-system)
+7. [Pipeline Steps Reference](#pipeline-steps-reference)
+8. [Common Pitfalls & Best Practices](#common-pitfalls--best-practices)
+9. [Architecture & Processing Flow](#architecture--processing-flow)
 
 ---
 
@@ -62,6 +66,207 @@ Brasa supports **four distinct template types** based on their purpose and outpu
 | **Required sections** | `downloader:`, `reader:` | `etl:` |
 | **Processing flow** | download → read pipeline → validate → save | load → etl pipeline → validate → save |
 | **Output layer** | Usually `input` | Usually `staging` or `curated` |
+
+---
+
+## Template Inheritance
+
+Template inheritance enables **code reuse and DRY principles** across templates by allowing child templates to extend base templates. This is **optional** and fully backward-compatible—existing templates work unchanged.
+
+### Inheritance Rules
+
+1. **`extends` keyword**: Child templates declare their parent using `extends: <parent-template-id>`
+2. **Recursive resolution**: Inheritance chains are resolved depth-first (grandparent → parent → child)
+3. **Deep merge for maps**: Nested mappings (e.g., `downloader:`, `reader:`) are merged recursively
+4. **Keyed merge for lists**: Arrays like `fields:`, `datasets:`, and `reader.pipeline:` merge by key:
+   - `fields:` merge by `name`
+   - `datasets:` merge by dataset key (e.g., `indexes_info`)
+   - `pipeline:` merge by `step` name
+5. **Child overrides parent**: When the same key exists in both parent and child, child wins
+6. **Optional feature**: Templates without `extends` behave exactly as before
+
+### Merge Semantics
+
+#### Map (Dictionary) Deep Merge
+
+Nested mappings are merged recursively, with child values overriding parent values:
+
+```yaml
+# base.yaml
+downloader:
+  verify_ssl: false
+  encoding: utf-8
+  args:
+    param1: value1
+
+# child.yaml
+extends: base
+downloader:
+  encoding: latin1
+  args:
+    param2: value2
+
+# Result after compilation:
+downloader:
+  verify_ssl: false
+  encoding: latin1  # child overrides
+  args:
+    param1: value1  # from parent
+    param2: value2  # from child
+```
+
+#### List Keyed Merge
+
+Lists are merged by their identifying key field. Items with the same key are merged; unique items are combined:
+
+**Fields merge by `name`:**
+
+```yaml
+# base.yaml
+fields:
+  - name: refdate
+    type: date[%Y-%m-%d]
+  - name: symbol
+    type: character
+
+# child.yaml
+extends: base
+fields:
+  - name: symbol
+    description: Ticker symbol  # adds description to existing field
+  - name: price
+    type: number
+
+# Result:
+fields:
+  - name: refdate
+    type: date[%Y-%m-%d]
+  - name: symbol
+    type: character
+    description: Ticker symbol  # merged
+  - name: price
+    type: number  # new field from child
+```
+
+**Pipeline steps merge by `step`:**
+
+```yaml
+# base.yaml
+reader:
+  pipeline:
+    - step: read_csv
+      separator: ","
+    - step: select_columns
+      columns: [date, price]
+
+# child.yaml
+extends: base
+reader:
+  pipeline:
+    - step: read_csv
+      separator: ";"  # override separator
+    - step: apply_fields  # new step
+
+# Result:
+reader:
+  pipeline:
+    - step: read_csv
+      separator: ";"  # child overrides
+    - step: select_columns
+      columns: [date, price]
+    - step: apply_fields  # added from child
+```
+
+**Datasets merge by dataset key:**
+
+```yaml
+# base.yaml
+datasets:
+  indexes_info:
+    tag: IndxInf
+    fields:
+      - name: code
+        type: character
+
+# child.yaml
+extends: base
+datasets:
+  indexes_info:
+    fields:
+      - name: name
+        type: character
+  composition:
+    tag: IndxCompnts
+    fields:
+      - name: ticker
+        type: character
+
+# Result:
+datasets:
+  indexes_info:  # merged
+    tag: IndxInf
+    fields:
+      - name: code
+        type: character
+      - name: name
+        type: character
+  composition:  # new dataset
+    tag: IndxCompnts
+    fields:
+      - name: ticker
+        type: character
+```
+
+### Using the Template Compiler
+
+The template compiler resolves `extends` references and generates fully-expanded YAML files.
+
+#### Compilation Workflow
+
+```bash
+# Compile all templates with inheritance
+poetry run python -m brasa.cli compile-templates
+
+# Compile specific templates
+poetry run python -m brasa.cli compile-templates b3-futures-di1 b3-curves-di1
+
+# Output directory (preserves filenames)
+# templates/ → templates/compiled/
+```
+
+#### Runtime Behavior
+
+By default, the runtime loader reads from the original `templates/` directory. To use compiled templates:
+
+```python
+import brasa
+
+# Use compiled templates (if available)
+brasa.get_marketdata("b3-futures-di1", compiled=True)
+```
+
+Or via environment variable:
+
+```bash
+export BRASA_USE_COMPILED_TEMPLATES=1
+poetry run python script.py
+```
+
+### Schema Extension
+
+The `extends` key is **optional** and can appear in any template type:
+
+```yaml
+extends: <parent-template-id>  # Optional: inherit from parent
+id: <template-id>
+description: <description>
+# ... rest of template
+```
+
+**Validation:**
+- Parent template must exist in the `templates/` directory
+- Circular inheritance is not allowed
+- Runtime templates ignore `extends` (preprocessing only)
 
 ---
 

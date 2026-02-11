@@ -1,0 +1,5 @@
+id: b3-futures-base
+description: Base template for B3 futures ETL processing
+etl:
+  futures_dataset: b3-futures-settlement-prices
+  maturity_day: first day

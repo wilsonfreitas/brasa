@@ -2,10 +2,15 @@
 
 This module handles loading and representing YAML template configurations
 that define how to download, read, and write market data from various sources.
+
+Environment variables:
+    BRASA_USE_COMPILED_TEMPLATES: If set to '1' or 'true', load templates
+        from the compiled directory (templates/compiled) instead of templates/.
 """
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -433,13 +438,32 @@ class MarketDataTemplate:
 _template_cache: dict[str, MarketDataTemplate] = {}
 
 
-def _get_templates_dir() -> Path:
+def _get_templates_dir(use_compiled: bool | None = None) -> Path:
     """Get the path to the templates directory.
 
+    Args:
+        use_compiled: If True, returns the compiled templates directory.
+            If None, checks the BRASA_USE_COMPILED_TEMPLATES environment variable.
+
     Returns:
-        Path to the templates directory.
+        Path to the templates directory (or compiled subdirectory).
     """
-    return (Path(__file__).parent / ".." / ".." / "templates").resolve()
+    base_dir = (Path(__file__).parent / ".." / ".." / "templates").resolve()
+
+    # Determine whether to use compiled templates
+    if use_compiled is None:
+        env_value = os.environ.get("BRASA_USE_COMPILED_TEMPLATES", "").lower()
+        use_compiled = env_value in ("1", "true", "yes")
+
+    if use_compiled:
+        compiled_dir = base_dir / "compiled"
+        # Only use compiled directory if it exists
+        if compiled_dir.exists():
+            return compiled_dir
+        # Fall back to base directory if compiled doesn't exist
+        return base_dir
+
+    return base_dir
 
 
 def list_templates() -> list[str]:
@@ -460,11 +484,15 @@ def clear_template_cache() -> None:
     _template_cache.clear()
 
 
-def reload_template(template_name: str) -> MarketDataTemplate:
+def reload_template(
+    template_name: str, use_compiled: bool | None = None
+) -> MarketDataTemplate:
     """Force reload a template from disk, bypassing the cache.
 
     Args:
         template_name: Name of the template (without .yaml extension).
+        use_compiled: If True, load from compiled templates directory.
+            If None, checks BRASA_USE_COMPILED_TEMPLATES environment variable.
 
     Returns:
         Freshly loaded MarketDataTemplate instance.
@@ -472,14 +500,20 @@ def reload_template(template_name: str) -> MarketDataTemplate:
     Raises:
         ValueError: If the template is not found or has ID mismatch.
     """
-    # Remove from cache if present
+    # Remove from cache if present (both compiled and non-compiled versions)
+    cache_key = f"{template_name}:compiled={use_compiled}"
+    if cache_key in _template_cache:
+        del _template_cache[cache_key]
+    # Also remove the legacy cache key for backward compatibility
     if template_name in _template_cache:
         del _template_cache[template_name]
     # Load fresh
-    return retrieve_template(template_name)
+    return retrieve_template(template_name, use_compiled)
 
 
-def retrieve_template(template_name: str) -> MarketDataTemplate:
+def retrieve_template(
+    template_name: str, use_compiled: bool | None = None
+) -> MarketDataTemplate:
     """Load a template by name from the templates directory.
 
     Templates are cached after first load. Use reload_template() to force
@@ -487,6 +521,8 @@ def retrieve_template(template_name: str) -> MarketDataTemplate:
 
     Args:
         template_name: Name of the template (without .yaml extension).
+        use_compiled: If True, load from compiled templates directory.
+            If None, checks BRASA_USE_COMPILED_TEMPLATES environment variable.
 
     Returns:
         Loaded MarketDataTemplate instance.
@@ -495,11 +531,14 @@ def retrieve_template(template_name: str) -> MarketDataTemplate:
         ValueError: If the template is not found or if the template ID
             does not match the filename.
     """
-    # Return cached template if available
-    if template_name in _template_cache:
-        return _template_cache[template_name]
+    # Build cache key that includes compilation status
+    cache_key = f"{template_name}:compiled={use_compiled}"
 
-    templates_dir = _get_templates_dir()
+    # Return cached template if available
+    if cache_key in _template_cache:
+        return _template_cache[cache_key]
+
+    templates_dir = _get_templates_dir(use_compiled)
     template_path = templates_dir / f"{template_name}.yaml"
 
     if not template_path.exists():
@@ -522,5 +561,5 @@ def retrieve_template(template_name: str) -> MarketDataTemplate:
         )
 
     # Cache the template
-    _template_cache[template_name] = template
+    _template_cache[cache_key] = template
     return template

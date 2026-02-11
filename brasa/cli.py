@@ -3,11 +3,13 @@ import json
 import shutil
 import sys
 from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
 
 from . import download_marketdata, process_etl, process_marketdata, retrieve_template
 from .engine import CacheManager, Verbosity, sync_catalog_from_disk
+from .engine.compiler import compile_templates
 from .queries import BrasaDB, describe_dataset, get_dataset, list_datasets
 from .util import DateRangeParser
 
@@ -264,6 +266,28 @@ parser_sync_catalog.add_argument(
     choices=["text", "json"],
     default="text",
     help="output format (default: text)",
+)
+
+parser_compile_templates = subparsers.add_parser(
+    "compile-templates",
+    help="compile templates with inheritance to expanded YAML files",
+)
+parser_compile_templates.add_argument(
+    "template",
+    nargs="*",
+    help="specific template names to compile (default: all templates)",
+)
+parser_compile_templates.add_argument(
+    "-o",
+    "--output",
+    default="templates/compiled",
+    help="output directory for compiled templates (default: templates/compiled)",
+)
+parser_compile_templates.add_argument(
+    "-v",
+    "--verbose",
+    action="store_true",
+    help="show detailed output",
 )
 
 
@@ -557,3 +581,34 @@ if __name__ == "__main__":
 
         if args.dry_run:
             print("\nRun without --dry-run to apply changes.")
+
+    elif args.command == "compile-templates":
+        # Get templates directory (assumes default location)
+        templates_dir = Path("templates")
+        if not templates_dir.exists():
+            print(f"Error: Templates directory not found at {templates_dir}")
+            sys.exit(1)
+
+        output_dir = Path(args.output)
+
+        # Determine which templates to compile
+        template_ids = args.template if args.template else None
+
+        if args.verbose:
+            if template_ids:
+                print(f"Compiling templates: {', '.join(template_ids)}")
+            else:
+                print("Compiling all templates...")
+            print(f"Output directory: {output_dir}")
+
+        try:
+            num_compiled = compile_templates(templates_dir, output_dir, template_ids)
+
+            if args.verbose:
+                print(f"\nSuccessfully compiled {num_compiled} template(s)")
+            else:
+                print(f"Compiled {num_compiled} template(s) to {output_dir}")
+
+        except Exception as e:
+            print(f"Error during compilation: {e}")
+            sys.exit(1)
