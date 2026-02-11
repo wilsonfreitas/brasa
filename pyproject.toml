@@ -23,6 +23,7 @@ beautifulsoup4 = "^4.12.2"
 python-bcb = "^0.3.2"
 duckdb = "^1.2.0"
 rich = "^13.0.0"
+openpyxl = "^3.1.5"
 
 
 [tool.poetry.group.dev.dependencies]
