@@ -58,18 +58,40 @@ class ReadCsvStep(PipelineStep):
 class ReadFwfStep(PipelineStep):
     """Read a fixed-width format file into a DataFrame.
 
+    Supports both plain and gzip-compressed files.
+
+    Derives column specifications from field widths if available in context.
+    Widths are extracted from field.get_attribute('width') to build colspecs.
+
     Parameters:
-        colspecs: List of (start, end) tuples for column positions
-        names: Column names to use
+        colspecs: List of (start, end) tuples for column positions (optional if fields with width available)
+        names: Column names to use (optional if fields available)
         skip: Number of rows to skip (default: 0)
     """
 
     def execute(self, _data: Any, context: PipelineContext) -> pd.DataFrame:
+        import gzip
+
         filepath = context.downloaded_file
 
         colspecs = self.get_param("colspecs")
         names = self.get_param("names")
         skip = self.get_param("skip", 0)
+
+        # Derive colspecs and names from fields if not provided
+        if not colspecs and context.fields:
+            colspecs = []
+            names = []
+            position = 0
+            for field in context.fields:
+                width = field.get_attribute("width")
+                if width is None:
+                    raise ValueError(
+                        f"Field '{field.name}' missing 'width' attribute for read_fwf"
+                    )
+                colspecs.append((position, position + width))
+                names.append(field.name)
+                position += width
 
         kwargs: dict[str, Any] = {
             "encoding": context.encoding,
@@ -82,7 +104,12 @@ class ReadFwfStep(PipelineStep):
         if names:
             kwargs["names"] = names
 
-        return pd.read_fwf(filepath, **kwargs)
+        # Handle gzip-compressed files
+        if str(filepath).endswith(".gz"):
+            with gzip.open(filepath, "rt", encoding=context.encoding) as f:
+                return pd.read_fwf(f, **kwargs)
+        else:
+            return pd.read_fwf(filepath, **kwargs)
 
 
 @StepRegistry.register("read_json")
