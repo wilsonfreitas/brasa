@@ -13,7 +13,6 @@ downloader:
 
 reader:
   locale: pt
-  function: brasa.readers.read_b3_company_details
   pipeline:
     steps:
       - step: b3_read_company_details_json
