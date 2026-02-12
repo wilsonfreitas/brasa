@@ -17,9 +17,9 @@ reader:
 
     # Keep only type "01" records (historical prices)
     - step: filter_rows
-      column: tipo_registro
+      column: regtype
       operator: eq
-      value: "01"
+      value: 1
 
     # Apply field type conversions from field definitions
     - step: apply_fields
@@ -27,110 +27,110 @@ reader:
 
 writer:
   layer: input
-  partitioning: [data_referencia]
+  partitioning: [refdate]
 
 fields:
-  - name: tipo_registro
+  - name: regtype
     description: Tipo de registro
-    type: character
+    type: integer
     width: 2
-  - name: data_referencia
+  - name: refdate
     description: Data do pregão
-    type: date(format="%Y%m%d")
+    type: date(format='%Y%m%d')
     width: 8
-  - name: cod_bdi
+  - name: bdi_code
     description: Código BDI
-    type: character
+    type: integer
     width: 2
-  - name: cod_negociacao
+  - name: symbol
     description: Código de negociação do papel
     type: character
     width: 12
-  - name: tipo_mercado
+  - name: instrument_market
     description: Tipo de mercado
     type: integer
     width: 3
-  - name: nome_empresa
+  - name: corporation_name
     description: Nome resumido da empresa emissora do papel
     type: character
     width: 12
-  - name: especificacao
+  - name: specification_code
     description: Especificação do papel
     type: character
     width: 10
-  - name: num_dias_mercado_termo
+  - name: days_to_settlement
     description: Prazo em dias do mercado a termo
     type: integer
     width: 3
-  - name: cod_moeda
+  - name: trading_currency
     description: Moeda de referência
     type: character
     width: 4
-  - name: preco_abertura
+  - name: open
     description: Preço de abertura do papel
-    type: number(dec=2)
+    type: numeric(dec=2.0)
     width: 13
-  - name: preco_max
+  - name: high
     description: Preço máximo do papel
-    type: number(dec=2)
+    type: numeric(dec=2.0)
     width: 13
-  - name: preco_min
+  - name: low
     description: Preço mínimo do papel
-    type: number(dec=2)
+    type: numeric(dec=2.0)
     width: 13
-  - name: preco_med
+  - name: average
     description: Preço médio do papel
-    type: number(dec=2)
+    type: numeric(dec=2.0)
     width: 13
-  - name: preco_ult
+  - name: close
     description: Preço último negócio efetuado com o papel
-    type: number(dec=2)
+    type: numeric(dec=2.0)
     width: 13
-  - name: preco_melhor_oferta_compra
+  - name: best_bid
     description: Preço da melhor oferta de compra do papel
-    type: number(dec=2)
+    type: numeric(dec=2.0)
     width: 13
-  - name: preco_melhor_oferta_venda
+  - name: best_ask
     description: Preço da melhor oferta de venda do papel
-    type: number(dec=2)
+    type: numeric(dec=2.0)
     width: 13
-  - name: qtd_negocios
+  - name: trade_quantity
     description: Número de negócios efetuados com o papel
     type: integer
     width: 5
-  - name: qtd_titulos_negociados
+  - name: traded_contracts
     description: Quantidade total de títulos negociados neste papel
     type: integer
     width: 18
-  - name: volume_titulos_negociados
+  - name: volume
     description: Volume total de títulos negociados neste papel
-    type: number(dec=2)
+    type: numeric(dec=2.0)
     width: 18
-  - name: preco_exercicio
+  - name: strike_price
     description: Preço de exercício para o mercado de opções ou valor do contrato para o mercado de termo secundário
-    type: number(dec=2)
+    type: numeric(dec=2.0)
     width: 13
-  - name: indicador_correcao_preco_exercicio
+  - name: strike_price_adjustment_indicator
     description: Indicador de correção de preços de exercícios ou valores de contrato para os mercados de opções, termo secundário ou futuro
     type: character
     width: 1
-  - name: data_vencimento
+  - name: maturity_date
     description: Data do vencimento para os mercados de opções, termo secundário ou futuro
-    type: date(format="%Y%m%d")
+    type: date(format='%Y%m%d')
     width: 8
-  - name: fator_cot
+  - name: allocation_lot_size
     description: Fator de cotação do papel
     type: integer
     width: 7
-  - name: preco_exercicio_pontos
+  - name: strike_price_in_points
     description: Preço de exercício em pontos para opções referenciadas em dólar ou valor de contrato em pontos para termo secundário
-    type: number(dec=6)
+    type: numeric(dec=6.0)
     width: 13
-  - name: cod_isin
+  - name: isin
     description: Código do papel no sistema ISIN
     type: character
     width: 12
-  - name: num_dist
+  - name: distribution_id
     description: Número de distribuição do papel
     type: integer
     width: 3
