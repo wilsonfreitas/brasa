@@ -67,6 +67,8 @@ class ReadFwfStep(PipelineStep):
         colspecs: List of (start, end) tuples for column positions (optional if fields with width available)
         names: Column names to use (optional if fields available)
         skip: Number of rows to skip (default: 0)
+        dtype: Data type for columns. Can be a single type (e.g., str) or a dict mapping
+            column names to types. (optional)
     """
 
     def execute(self, _data: Any, context: PipelineContext) -> pd.DataFrame:
@@ -77,6 +79,7 @@ class ReadFwfStep(PipelineStep):
         colspecs = self.get_param("colspecs")
         names = self.get_param("names")
         skip = self.get_param("skip", 0)
+        dtype = self.get_param("dtype")
 
         # Derive colspecs and names from fields if not provided
         if not colspecs and context.fields:
@@ -103,6 +106,8 @@ class ReadFwfStep(PipelineStep):
             kwargs["colspecs"] = [tuple(cs) for cs in colspecs]
         if names:
             kwargs["names"] = names
+        if dtype is not None:
+            kwargs["dtype"] = dtype
 
         # Handle gzip-compressed files
         if str(filepath).endswith(".gz"):
