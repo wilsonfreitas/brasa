@@ -14,12 +14,13 @@ reader:
   pipeline:
     # Read fixed-width format file using widths derived from field definitions
     - step: read_fwf
+      dtype: str
 
     # Keep only type "01" records (historical prices)
     - step: filter_rows
       column: regtype
       operator: eq
-      value: 1
+      value: '01'
 
     # Apply field type conversions from field definitions
     - step: apply_fields
@@ -32,7 +33,7 @@ writer:
 fields:
   - name: regtype
     description: Tipo de registro
-    type: integer
+    type: character
     width: 2
   - name: refdate
     description: Data do pregão
