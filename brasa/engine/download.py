@@ -12,8 +12,102 @@ from pathlib import Path
 from brasa.util import generate_checksum_from_file, unzip_recursive
 
 from .cache import CacheManager, CacheMetadata
-from .exceptions import DownloadException, DuplicatedFolderException
+from .exceptions import (
+    DownloadException,
+    DuplicatedFolderException,
+    InvalidContentException,
+)
 from .template import retrieve_template
+
+
+def _process_downloaded_format(
+    template: object,
+    file_rel_path: str,
+    man: CacheManager,
+    meta: CacheMetadata,
+) -> list:
+    """Process downloaded file based on format (zip, base64, or raw).
+
+    Args:
+        template: Template with downloader configuration.
+        file_rel_path: Relative path to downloaded file.
+        man: Cache manager instance.
+        meta: Cache metadata object.
+
+    Returns:
+        List of processed file paths.
+
+    Raises:
+        Exception: If zip file is empty.
+    """
+    downloaded_files = []
+    if template.downloader.format == "zip":
+        filenames = unzip_recursive(man.cache_path(file_rel_path))
+        if len(filenames) == 0:
+            raise Exception("Market data download failed: empty zip file")
+        for filename in filenames:
+            fname = Path(filename).name
+            _file_rel_path = str(Path(meta.download_folder) / fname)
+            shutil.move(filename, man.cache_path(_file_rel_path))
+            downloaded_files.append(_file_rel_path)
+        Path(man.cache_path(file_rel_path)).unlink()
+    elif template.downloader.format == "base64":
+        with Path(man.cache_path(file_rel_path)).open("rb") as fp:
+            fname = f"decoded.{template.downloader.decoded_format}"
+            _file_rel_path = str(Path(meta.download_folder) / fname)
+            with Path(man.cache_path(_file_rel_path)).open("wb") as fp_dest:
+                base64.decode(fp, fp_dest)
+            downloaded_files.append(_file_rel_path)
+        Path(man.cache_path(file_rel_path)).unlink()
+    else:
+        downloaded_files.append(file_rel_path)
+    return downloaded_files
+
+
+def _validate_downloaded_files(
+    template: object,
+    files: list,
+    man: CacheManager,
+) -> None:
+    """Validate downloaded files.
+
+    Args:
+        template: Template with downloader configuration.
+        files: List of file paths to validate.
+        man: Cache manager instance.
+
+    Raises:
+        InvalidContentException: If validation fails.
+    """
+    for fname in files:
+        try:
+            template.downloader.validate(man.cache_path(fname))
+        except Exception as e:
+            raise InvalidContentException(
+                f"Downloaded content validation failed for {fname}: {e!s}"
+            ) from e
+
+
+def _gzip_downloaded_files(
+    files: list,
+    man: CacheManager,
+    meta: CacheMetadata,
+) -> None:
+    """Compress downloaded files with gzip.
+
+    Args:
+        files: List of file paths to compress.
+        man: Cache manager instance.
+        meta: Cache metadata object.
+    """
+    files_to_gzip = list(files)
+    for fname in files_to_gzip:
+        _fname = man.cache_path(fname)
+        with Path(_fname).open("rb") as f_in, gzip.open(_fname + ".gz", "wb") as f_out:
+            shutil.copyfileobj(f_in, f_out)
+        meta.add_downloaded_file(fname + ".gz")
+        meta.remove_downloaded_file(fname)
+        Path(_fname).unlink()
 
 
 def _download_marketdata(meta: CacheMetadata, **kwargs):
@@ -58,40 +152,7 @@ def _download_marketdata(meta: CacheMetadata, **kwargs):
         shutil.copyfileobj(fp, fp_dest)
     fp.close()
 
-    downloaded_files = []
-    if template.downloader.format == "zip":
-        filenames = unzip_recursive(man.cache_path(file_rel_path))
-        if len(filenames) == 0:
-            raise Exception("Market data download failed: empty zip file")
-        for filename in filenames:
-            fname = Path(filename).name
-            _file_rel_path = str(Path(meta.download_folder) / fname)
-            shutil.move(filename, man.cache_path(_file_rel_path))
-            downloaded_files.append(_file_rel_path)
-        Path(man.cache_path(file_rel_path)).unlink()
-    elif template.downloader.format == "base64":
-        with Path(man.cache_path(file_rel_path)).open("rb") as fp:
-            fname = f"decoded.{template.downloader.decoded_format}"
-            _file_rel_path = str(Path(meta.download_folder) / fname)
-            with Path(man.cache_path(_file_rel_path)).open("wb") as fp_dest:
-                base64.decode(fp, fp_dest)
-            downloaded_files.append(_file_rel_path)
-        Path(man.cache_path(file_rel_path)).unlink()
-    else:
-        downloaded_files.append(file_rel_path)
-
+    downloaded_files = _process_downloaded_format(template, file_rel_path, man, meta)
     meta.downloaded_files = downloaded_files
-    for fname in downloaded_files:
-        # this call can raise an Exception
-        template.downloader.validate(man.cache_path(fname))
-
-    # gzip all downloaded files - it saves space
-    files_to_gzip = list(meta._downloaded_files)  # Work with a copy of the actual list
-    for fname in files_to_gzip:
-        _fname = man.cache_path(fname)
-        with Path(_fname).open("rb") as f_in, gzip.open(_fname + ".gz", "wb") as f_out:
-            shutil.copyfileobj(f_in, f_out)
-        # Add gzipped version and remove original using helper methods
-        meta.add_downloaded_file(fname + ".gz")
-        meta.remove_downloaded_file(fname)
-        Path(_fname).unlink()
+    _validate_downloaded_files(template, downloaded_files, man)
+    _gzip_downloaded_files(downloaded_files, man, meta)

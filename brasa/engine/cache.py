@@ -43,6 +43,8 @@ class CacheMetadata:
         self._processed_files: dict[str, str] = {}
         self.extra_key: str = ""
         self.processing_errors: str = ""
+        self.is_invalid_download: bool = False
+        self.invalid_download_reason: str = ""
 
     def to_dict(self) -> dict:
         """Convert metadata to a dictionary."""
@@ -56,6 +58,8 @@ class CacheMetadata:
             "processed_files": self.processed_files,
             "extra_key": self.extra_key,
             "processing_errors": self.processing_errors,
+            "is_invalid_download": self.is_invalid_download,
+            "invalid_download_reason": self.invalid_download_reason,
         }
 
     def from_dict(self, kwargs) -> None:
@@ -320,6 +324,12 @@ class CacheManager(Singleton):
                     ),
                     "extra_key": meta_row[8],
                     "processing_errors": meta_row[9],
+                    "is_invalid_download": meta_row[10] == "1"
+                    if len(meta_row) > 10
+                    else False,
+                    "invalid_download_reason": meta_row[11]
+                    if len(meta_row) > 11
+                    else "",
                 }
                 return _meta
         return None
@@ -340,10 +350,12 @@ class CacheManager(Singleton):
                     json.dumps(meta.processed_files, default=json_convert_from_object),
                     meta.extra_key,
                     meta.processing_errors,
+                    "1" if meta.is_invalid_download else "0",
+                    meta.invalid_download_reason,
                     meta.id,
                 )
                 c.execute(
-                    "update cache_metadata set download_checksum = ?, timestamp = ?, response = ?, download_args = ?, template = ?, downloaded_files = ?, processed_files = ?, extra_key = ?, processing_errors = ? where id = ?",
+                    "update cache_metadata set download_checksum = ?, timestamp = ?, response = ?, download_args = ?, template = ?, downloaded_files = ?, processed_files = ?, extra_key = ?, processing_errors = ?, is_invalid_download = ?, invalid_download_reason = ? where id = ?",
                     params,
                 )
             else:
@@ -358,9 +370,11 @@ class CacheManager(Singleton):
                     json.dumps(meta.processed_files, default=json_convert_from_object),
                     meta.extra_key,
                     meta.processing_errors,
+                    "1" if meta.is_invalid_download else "0",
+                    meta.invalid_download_reason,
                 )
                 c.execute(
-                    "insert into cache_metadata values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "insert into cache_metadata values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     params,
                 )
             conn.commit()
@@ -454,7 +468,11 @@ class CacheManager(Singleton):
     def download_marketdata(self, meta: CacheMetadata) -> None:
         """Download market data and save to cache."""
         from .download import _download_marketdata
-        from .exceptions import DownloadException, DuplicatedFolderException
+        from .exceptions import (
+            DownloadException,
+            DuplicatedFolderException,
+            InvalidContentException,
+        )
 
         try:
             _download_marketdata(meta, **meta.download_args)
@@ -462,6 +480,13 @@ class CacheManager(Singleton):
         except DuplicatedFolderException as e:
             self.save_trial(meta, True)
             warn(str(e), stacklevel=2)
+        except InvalidContentException as e:
+            # Mark metadata as invalid but save it for future reference
+            meta.is_invalid_download = True
+            meta.invalid_download_reason = str(e)
+            self.save_trial(meta, False)
+            self.clean_meta_raw_folder(meta)
+            raise e
         except DownloadException as e:
             self.save_trial(meta, False)
             raise e

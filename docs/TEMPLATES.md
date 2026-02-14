@@ -297,6 +297,21 @@ fields:
 - Supports URL patterns with date substitution (e.g., `%y%m%d`)
 - Returns downloaded file(s) cached by CacheManager
 
+**Best practice for static URLs (no date in URL):**
+- Set `downloader.extra-key: date` to make cache identity date-aware and avoid
+  repeated downloads for the same reference date.
+- In `reader.pipeline`, materialize this context value into the dataset:
+
+```yaml
+- step: add_column
+  from:
+    where: extra_key
+  name: refdate
+```
+
+- This keeps temporal lineage explicit in output tables and supports
+  partitioning/auditing by reference date.
+
 **Reader Pipeline** (`reader.pipeline`)
 - Sequence of transformation steps
 - Each step receives the output of the previous step

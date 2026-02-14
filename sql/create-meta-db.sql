@@ -8,7 +8,9 @@ create table if not exists cache_metadata (
     downloaded_files TEXT,
     processed_files TEXT,
     extra_key TEXT,
-    processing_errors TEXT
+    processing_errors TEXT,
+    is_invalid_download TEXT,
+    invalid_download_reason TEXT
 );
 
 create table if not exists download_trials (

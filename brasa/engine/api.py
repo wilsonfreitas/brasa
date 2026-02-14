@@ -45,6 +45,12 @@ def _should_download(cache: CacheManager, meta: CacheMetadata, reprocess: bool) 
             cache.remove_meta(meta)
         return True
 
+    if cache.has_meta(meta):
+        cache.load_meta(meta)
+        # If metadata is marked as invalid, skip unless forced with reprocess
+        if meta.is_invalid_download:
+            return False
+
     if not cache.has_successful_trial(meta):
         if cache.has_meta(meta):
             cache.load_meta(meta)

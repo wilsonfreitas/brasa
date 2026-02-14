@@ -22,6 +22,7 @@ Public API:
 """
 
 # Public API functions
+# Migrations
 from .api import (
     download_marketdata,
     get_marketdata,
@@ -52,7 +53,11 @@ from .core import (
 from .download import _download_marketdata
 
 # Exceptions
-from .exceptions import DownloadException, DuplicatedFolderException
+from .exceptions import (
+    DownloadException,
+    DuplicatedFolderException,
+    InvalidContentException,
+)
 
 # Layers
 from .layers import DEFAULT_ETL_LAYER, DEFAULT_LAYER, LAYER_ORDER, DataLayer
@@ -120,6 +125,7 @@ __all__ = [
     "DuplicatedFolderException",
     "FieldHandler",
     "FieldHandlerFactory",
+    "InvalidContentException",
     "MarketDataDownloader",
     "MarketDataETL",
     "MarketDataReader",

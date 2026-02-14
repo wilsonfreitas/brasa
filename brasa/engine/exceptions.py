@@ -11,3 +11,9 @@ class DuplicatedFolderException(Exception):
     """Raised when attempting to create a download folder that already exists."""
 
     pass
+
+
+class InvalidContentException(Exception):
+    """Raised when downloaded content is invalid or fails validation."""
+
+    pass
