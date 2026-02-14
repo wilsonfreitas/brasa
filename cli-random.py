@@ -6,7 +6,7 @@ from datetime import datetime
 import brasa
 from brasa.util import DateRange
 
-period = DateRange(start=datetime(2025, 1, 1), end=datetime.today(), calendar="B3")
+period = DateRange(start=datetime(2026, 1, 1), end=datetime.today(), calendar="B3")
 
 brasa.download_marketdata("b3-bvbg087", refdate=period)
 
@@ -30,10 +30,6 @@ brasa.download_marketdata("b3-economic-indicators-fwf", refdate=period)
 
 # brasa.download_marketdata("b3-companies-options", refdate=period)
 
-# brasa.download_marketdata("b3-indexes-composition")
-
-# brasa.download_marketdata("b3-indexes-theoretical-portfolio", index=brasa.get_symbols("index"))
-
 # brasa.download_marketdata("b3-company-info", issuingCompany=brasa.get_symbols("company"))
 # brasa.process_marketdata("b3-company-info")
 # brasa.process_etl("b3-companies-info")
@@ -55,6 +51,27 @@ brasa.download_marketdata("b3-listed-stock-etfs")
 brasa.download_marketdata("b3-listed-reits")
 
 brasa.download_marketdata("b3-trades-intraday", refdate=period)
+
+brasa.download_marketdata("b3-indexes-composition")
+
+brasa.download_marketdata(
+    "b3-indexes-theoretical-portfolio", index=brasa.get_symbols("index")
+)
+
+brasa.download_marketdata(
+    "b3-indexes-current-portfolio", index=brasa.get_symbols("index")
+)
+
+brasa.download_marketdata(
+    "b3-indexes-historical-prices",
+    index=brasa.get_symbols("index"),
+    year=[2026],
+    reprocess=True,
+)
+
+# brasa.download_marketdata(
+#     "b3-company-info", issuingCompany=brasa.get_symbols("company")
+# )
 
 
 # brasa.process_marketdata("b3-bvbg087")
