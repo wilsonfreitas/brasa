@@ -1,0 +1,224 @@
+id: cvm-companies-registration
+description: Cadastro de companhias abertas da CVM
+
+downloader:
+  function: brasa.downloaders.simple_download
+  verify_ssl: false
+  extra-key: date
+  url: https://dados.cvm.gov.br/dados/CIA_ABERTA/CAD/DADOS/cad_cia_aberta.csv
+  format: csv
+
+reader:
+  locale: pt
+  encoding: latin1
+  pipeline:
+    - step: read_csv
+      separator: ";"
+
+    - step: add_column
+      from:
+        where: extra_key
+      name: refdate
+
+    - step: rename_columns
+      mapping:
+        CNPJ_CIA: cnpj_cia
+        DENOM_SOCIAL: denom_social
+        DENOM_COMERC: denom_comerc
+        DT_REG: dt_reg
+        DT_CONST: dt_const
+        DT_CANCEL: dt_cancel
+        MOTIVO_CANCEL: motivo_cancel
+        SIT: sit
+        DT_INI_SIT: dt_ini_sit
+        CD_CVM: code_cvm
+        SETOR_ATIV: setor_ativ
+        TP_MERC: tp_merc
+        CATEG_REG: categ_reg
+        DT_INI_CATEG: dt_ini_categ
+        SIT_EMISSOR: sit_emissor
+        DT_INI_SIT_EMISSOR: dt_ini_sit_emissor
+        CONTROLE_ACIONARIO: controle_acionario
+        TP_ENDER: tp_ender
+        LOGRADOURO: logradouro
+        COMPL: compl
+        BAIRRO: bairro
+        MUN: mun
+        UF: uf
+        PAIS: pais
+        CEP: cep
+        DDD_TEL: ddd_tel
+        TEL: tel
+        DDD_FAX: ddd_fax
+        FAX: fax
+        EMAIL: email
+        TP_RESP: tp_resp
+        RESP: resp
+        DT_INI_RESP: dt_ini_resp
+        LOGRADOURO_RESP: logradouro_resp
+        COMPL_RESP: compl_resp
+        BAIRRO_RESP: bairro_resp
+        MUN_RESP: mun_resp
+        UF_RESP: uf_resp
+        PAIS_RESP: pais_resp
+        CEP_RESP: cep_resp
+        DDD_TEL_RESP: ddd_tel_resp
+        TEL_RESP: tel_resp
+        DDD_FAX_RESP: ddd_fax_resp
+        FAX_RESP: fax_resp
+        EMAIL_RESP: email_resp
+        CNPJ_AUDITOR: cnpj_auditor
+        AUDITOR: auditor
+
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: input
+  partitioning: [refdate]
+
+fields:
+  - name: cnpj_cia
+    description: CNPJ da companhia
+    type: string
+  - name: denom_social
+    description: Denominação social da companhia
+    type: string
+  - name: denom_comerc
+    description: Denominação comercial da companhia
+    type: string
+  - name: dt_reg
+    description: Data de registro na CVM
+    type: 'date(format="%Y-%m-%d")'
+  - name: dt_const
+    description: Data de constituição da companhia
+    type: 'date(format="%Y-%m-%d")'
+  - name: dt_cancel
+    description: Data de cancelamento do registro
+    type: 'date(format="%Y-%m-%d")'
+  - name: motivo_cancel
+    description: Motivo do cancelamento
+    type: string
+  - name: sit
+    description: Situação da companhia
+    type: string
+  - name: dt_ini_sit
+    description: Data de início da situação
+    type: 'date(format="%Y-%m-%d")'
+  - name: code_cvm
+    description: Código CVM da companhia
+    type: integer
+  - name: setor_ativ
+    description: Setor de atividade
+    type: string
+  - name: tp_merc
+    description: Tipo de mercado
+    type: string
+  - name: categ_reg
+    description: Categoria de registro
+    type: string
+  - name: dt_ini_categ
+    description: Data de início da categoria
+    type: 'date(format="%Y-%m-%d")'
+  - name: sit_emissor
+    description: Situação do emissor
+    type: string
+  - name: dt_ini_sit_emissor
+    description: Data de início da situação do emissor
+    type: 'date(format="%Y-%m-%d")'
+  - name: controle_acionario
+    description: Tipo de controle acionário
+    type: string
+  - name: tp_ender
+    description: Tipo de endereço
+    type: string
+  - name: logradouro
+    description: Logradouro
+    type: string
+  - name: compl
+    description: Complemento do endereço
+    type: string
+  - name: bairro
+    description: Bairro
+    type: string
+  - name: mun
+    description: Município
+    type: string
+  - name: uf
+    description: Unidade federativa
+    type: string
+  - name: pais
+    description: País
+    type: string
+  - name: cep
+    description: CEP
+    type: string
+  - name: ddd_tel
+    description: DDD do telefone
+    type: string
+  - name: tel
+    description: Telefone
+    type: string
+  - name: ddd_fax
+    description: DDD do fax
+    type: string
+  - name: fax
+    description: Fax
+    type: string
+  - name: email
+    description: E-mail da companhia
+    type: string
+  - name: tp_resp
+    description: Tipo de responsável
+    type: string
+  - name: resp
+    description: Nome do responsável
+    type: string
+  - name: dt_ini_resp
+    description: Data de início do responsável
+    type: 'date(format="%Y-%m-%d")'
+  - name: logradouro_resp
+    description: Logradouro do responsável
+    type: string
+  - name: compl_resp
+    description: Complemento do endereço do responsável
+    type: string
+  - name: bairro_resp
+    description: Bairro do responsável
+    type: string
+  - name: mun_resp
+    description: Município do responsável
+    type: string
+  - name: uf_resp
+    description: Unidade federativa do responsável
+    type: string
+  - name: pais_resp
+    description: País do responsável
+    type: string
+  - name: cep_resp
+    description: CEP do responsável
+    type: string
+  - name: ddd_tel_resp
+    description: DDD do telefone do responsável
+    type: string
+  - name: tel_resp
+    description: Telefone do responsável
+    type: string
+  - name: ddd_fax_resp
+    description: DDD do fax do responsável
+    type: string
+  - name: fax_resp
+    description: Fax do responsável
+    type: string
+  - name: email_resp
+    description: E-mail do responsável
+    type: string
+  - name: cnpj_auditor
+    description: CNPJ do auditor independente
+    type: string
+  - name: auditor
+    description: Nome do auditor independente
+    type: string
+  - name: refdate
+    description: Data de referência do cadastro
+    type: date

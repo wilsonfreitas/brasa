@@ -894,7 +894,7 @@ def _get_companies_names() -> list[str]:
 
 def _get_companies_cvm_codes() -> list[int]:
     df = (
-        get_dataset("b3-companies-info")
+        get_dataset("cvm-companies-registration", layer="input")
         .filter(pc.field("code_cvm") != 0)
         .scanner(columns=["code_cvm", "refdate"])
         .to_table()
