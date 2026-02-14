@@ -14,6 +14,7 @@ from .engine import (
 )
 from .queries import (
     BrasaDB,
+    create_all_views,
     describe,
     describe_dataset,
     get_dataset,
@@ -22,7 +23,9 @@ from .queries import (
     get_returns,
     get_symbols,
     list_datasets,
+    list_sql_tables,
     show,
+    sql,
     write_dataset,
 )
 
@@ -34,6 +37,7 @@ __all__ = [
     "MigrationReport",
     "TaskReport",
     "Verbosity",
+    "create_all_views",
     "describe",
     "describe_dataset",
     "download_marketdata",
@@ -44,10 +48,12 @@ __all__ = [
     "get_returns",
     "get_symbols",
     "list_datasets",
+    "list_sql_tables",
     "process_etl",
     "process_marketdata",
     "retrieve_template",
     "show",
+    "sql",
     "sync_catalog_from_disk",
     "write_dataset",
 ]

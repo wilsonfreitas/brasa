@@ -142,18 +142,45 @@ add_verbosity_args(parser_process)
 parser_create_views = subparsers.add_parser(
     "create-views", help="create all views in brasa database"
 )
+parser_create_views.add_argument(
+    "--layer",
+    help="specify layer to create views for (raw, input, staging, curated)",
+    choices=["raw", "input", "staging", "curated"],
+)
 
 parser_create_view = subparsers.add_parser(
     "create-view", help="create specific view in brasa database"
 )
 parser_create_view.add_argument("template", nargs="+", help="template names")
 
+parser_list_tables = subparsers.add_parser(
+    "list-tables", help="list available layer.dataset tables"
+)
+parser_list_tables.add_argument(
+    "--layer",
+    help="filter by specific layer",
+    choices=["raw", "input", "staging", "curated"],
+)
+parser_list_tables.add_argument(
+    "-v", "--verbose", action="store_true", help="show additional information"
+)
+
 parser_query = subparsers.add_parser(
     "query", help="execute read-only SQL queries on brasa database"
 )
 parser_query.add_argument("sql_query", nargs=1, help="SQL query to be executed")
 parser_query.add_argument(
-    "-o", "--output", nargs=1, help="SQL query to be executed", default="display"
+    "-o",
+    "--output",
+    nargs=1,
+    help="output format (display, csv, json, parquet, xlsx)",
+    default="display",
+)
+parser_query.add_argument(
+    "--list-tables", action="store_true", help="list available tables and exit"
+)
+parser_query.add_argument(
+    "-v", "--verbose", action="store_true", help="show query execution details"
 )
 
 parser_head = subparsers.add_parser("head", help="show first N rows of a dataset")
@@ -419,25 +446,91 @@ if __name__ == "__main__":
                     report_file=report_file,
                 )
     elif args.command == "create-views":
-        BrasaDB.create_views()
+        layers = [args.layer] if hasattr(args, "layer") and args.layer else None
+        results = BrasaDB.create_all_views(layers)
+        if results:
+            created = sum(1 for v in results.values() if v)
+            total = len(results)
+            print(f"\nSuccessfully created {created}/{total} views")
+        else:
+            print("No views were created")
     elif args.command == "create-view":
         for template in args.template:
             BrasaDB.create_view(template)
+    elif args.command == "list-tables":
+        tables = BrasaDB.list_tables()
+        if not tables:
+            print("No tables found. Create views first with: brasa create-views")
+            sys.exit(0)
+
+        # Filter by layer if specified
+        layer_filter = getattr(args, "layer", None)
+        if layer_filter:
+            tables = [t for t in tables if t.startswith(layer_filter + ".")]
+
+        if getattr(args, "verbose", False):
+            print(f"{'Table Name':<50} | {'Rows':>12}")
+            print("-" * 65)
+            for table in tables:
+                try:
+                    result = BrasaDB.query(f'SELECT COUNT(*) as cnt FROM "{table}"')
+                    count = result.df().iloc[0, 0]
+                    print(f"{table:<50} | {count:>12,}")
+                except Exception as e:
+                    print(f"{table:<50} | Error: {str(e)[:20]}")
+        else:
+            for table in tables:
+                print(table)
+
     elif args.command == "query":
-        q = BrasaDB.get_connection().sql(args.sql_query[0])
-        output = args.output[0]
+        # Check if user wants to list tables
+        if getattr(args, "list_tables", False):
+            tables = BrasaDB.list_tables()
+            if not tables:
+                print("No tables found. Create views first with: brasa create-views")
+                sys.exit(0)
+            print("Available tables:")
+            for table in tables:
+                print(f"  {table}")
+            sys.exit(0)
+
+        # Create views if they don't exist
+        existing_tables = BrasaDB.list_tables()
+        if not existing_tables:
+            print("Creating views... (first time setup)")
+            BrasaDB.create_all_views()
+
+        # Execute query
+        q = BrasaDB.query(args.sql_query[0])
+        output = args.output[0] if isinstance(args.output, list) else args.output
+
+        if getattr(args, "verbose", False):
+            # Show query execution info (could add EXPLAIN here)
+            try:
+                explain = BrasaDB.query(f"EXPLAIN {args.sql_query[0]}")
+                print("Query Plan:")
+                print(explain)
+                print("\n" + "=" * 60 + "\n")
+            except Exception:
+                pass  # If EXPLAIN fails, just skip it
+
         if output == "display":
             print(q)
         elif output.endswith(".csv"):
             q.df().to_csv(output, sep=",", encoding="utf-8", index=False)
+            print(f"Results saved to {output}")
         elif output.endswith(".json"):
             q.df().to_json(output, index=False)
+            print(f"Results saved to {output}")
         elif output.endswith(".parquet"):
             q.df().to_parquet(output, index=False)
+            print(f"Results saved to {output}")
         elif output.endswith(".orc"):
             q.df().to_orc(output, index=False)
+            print(f"Results saved to {output}")
         elif output.endswith(".xls") or output.endswith(".xlsx"):
             q.df().to_excel(output, index=False)
+            print(f"Results saved to {output}")
     elif args.command == "head":
         # Validate dataset format
         if "." not in args.dataset:
