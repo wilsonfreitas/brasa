@@ -14,6 +14,7 @@ from .fieldsets import PyArrowAdapter
 
 __all__ = [
     "BrasaDB",
+    "create_all_views",
     "describe",
     "describe_dataset",
     "get_dataset",
@@ -26,7 +27,9 @@ __all__ = [
     "get_template_partitioning",
     "get_template_schema",
     "list_datasets",
+    "list_sql_tables",
     "show",
+    "sql",
     "write_dataset",
 ]
 
@@ -53,19 +56,270 @@ class BrasaDB:
 
     @classmethod
     def create_view(cls, template: str) -> None:
+        """Create a view for a single dataset (legacy method).
+
+        Deprecated: Use create_all_views() instead for layer-aware view creation.
+        """
         man = CacheManager()
         con = cls.get_connection()
         con.read_parquet(man.db_path(f"{template}/*.parquet")).create_view(template)
 
     @classmethod
     def create_views(cls) -> None:
+        """Create views for all datasets (legacy method).
+
+        Deprecated: Use create_all_views() instead for layer-aware view creation.
+        """
         man = CacheManager()
         for p in Path(man.db_path("")).iterdir():
             try:
                 p.name.index(".")
             except ValueError:
                 cls.create_view(p.name)
-                cls.create_view(p)
+
+    @classmethod
+    def _create_single_view(
+        cls,
+        con: duckdb.DuckDBPyConnection,
+        layer: str,
+        dataset_name: str,
+        dataset_info: "DatasetInfo",
+        man: CacheManager,
+    ) -> tuple[bool, str]:
+        """Create a single view for a dataset.
+
+        Handles both partitioned (hive) and non-partitioned parquet datasets.
+        Partition columns are automatically exposed as queryable table columns.
+
+        Returns:
+            Tuple of (success, message).
+        """
+        view_name = f"{layer}.{dataset_name}"
+
+        try:
+            db_path = man.db_path(f"{layer}/{dataset_name}")
+            parquet_path = Path(db_path)
+
+            if not parquet_path.exists():
+                msg = f"Dataset directory not found: {db_path}"
+                return False, msg
+
+            parquet_files = list(parquet_path.glob("**/*.parquet"))
+            if not parquet_files:
+                return False, "No parquet files found"
+
+            # Use recursive glob pattern to find all parquet files.
+            # This works for both:
+            # - Non-partitioned: files in root directory
+            # - Hive-partitioned: files in partition subdirectories (e.g., refdate=2024-01-15/)
+            pattern = str(parquet_path / "**" / "*.parquet")
+
+            if dataset_info.partitioning:
+                # Enable hive_partitioning to expose partition columns as queryable columns
+                con.execute(
+                    f"""
+                    CREATE OR REPLACE VIEW "{view_name}" AS
+                    SELECT * FROM read_parquet('{pattern}', hive_partitioning=true)
+                    """
+                )
+            else:
+                # Non-partitioned dataset
+                con.read_parquet(pattern).create_view(view_name)
+
+            return True, f"Rows: ~{len(parquet_files)}"
+
+        except Exception as e:
+            return False, f"Error: {str(e)[:100]}"
+
+    @classmethod
+    def create_all_views(cls, layers: list[str] | None = None) -> dict[str, bool]:
+        """Create DuckDB views for all datasets with layer.dataset naming.
+
+        Discovers all datasets from the DatasetCatalog and creates views with
+        proper schema and partitioning support. Views are named as "layer.dataset"
+        (e.g., "input.b3-cotahist-daily") for explicit layer context.
+
+        Args:
+            layers: Optional list of specific layers to create views for.
+                   If None, creates views for all layers.
+                   Valid values: 'raw', 'input', 'staging', 'curated'.
+
+        Returns:
+            Dictionary mapping view_name -> success_bool.
+            View names follow the pattern "layer.dataset_name".
+
+        Example:
+            # Create all views
+            BrasaDB.create_all_views()
+
+            # Create views only for input and staging layers
+            BrasaDB.create_all_views(['input', 'staging'])
+        """
+        man = CacheManager()
+        con = cls.get_connection()
+        catalog = DatasetCatalog()
+
+        results: dict[str, bool] = {}
+        total_created = 0
+        total_skipped = 0
+        total_errors = 0
+
+        # Get all datasets from catalog
+        all_datasets = catalog.list_datasets(layer=None)
+
+        # Filter by specified layers if provided
+        if layers:
+            datasets = [d for d in all_datasets if d.layer in layers]
+        else:
+            datasets = all_datasets
+
+        if not datasets:
+            print("No datasets found in catalog.")
+            return results
+
+        for dataset_info in datasets:
+            layer = dataset_info.layer
+            dataset_name = dataset_info.dataset_name
+            view_name = f"{layer}.{dataset_name}"
+
+            success, msg = cls._create_single_view(
+                con, layer, dataset_name, dataset_info, man
+            )
+
+            if success:
+                results[view_name] = True
+                total_created += 1
+                print(f"✓ Created view: {view_name:50s} | {msg}")
+            else:
+                results[view_name] = False
+                if "not found" in msg or "No parquet" in msg:
+                    total_skipped += 1
+                    print(f"⊘ Skipped view: {view_name:50s} | {msg}")
+                else:
+                    total_errors += 1
+                    print(f"✗ Failed view:  {view_name:50s} | {msg}")
+
+        # Print summary
+        print(
+            f"\nSummary: {total_created} created, "
+            f"{total_skipped} skipped, {total_errors} errors"
+        )
+        return results
+
+    @classmethod
+    def query(cls, sql: str) -> duckdb.DuckDBPyRelation:
+        """Execute SQL query on Brasa datasets.
+
+        Executes a SQL query against DuckDB and returns a relation object.
+        The relation object supports methods like .df() to convert to pandas
+        DataFrame, or .fetch_all() to get list of tuples.
+
+        Note: Views must exist first. Call create_all_views() to initialize views.
+
+        Args:
+            sql: SQL query string. Can reference views named as "layer.dataset".
+
+        Returns:
+            DuckDB relation. Call .df() for pandas DataFrame or .fetch_all()
+            for records.
+
+        Example:
+            # Create views first (usually done once per session)
+            BrasaDB.create_all_views()
+
+            # Execute query
+            result = BrasaDB.query('SELECT COUNT(*) as cnt FROM "input.b3-cotahist-daily"')
+            df = result.df()
+            count = result.fetch_one()[0]
+        """
+        con = cls.get_connection()
+        return con.sql(sql)
+
+    @classmethod
+    def list_tables(cls) -> list[str]:
+        """List all available layer.dataset tables.
+
+        Queries DuckDB's information_schema to discover all user-created views
+        that follow the layer.dataset naming pattern.
+
+        Returns:
+            Sorted list of view names in "layer.dataset" format.
+
+        Example:
+            tables = BrasaDB.list_tables()
+            for table in tables:
+                print(table)  # e.g., "input.b3-cotahist-daily"
+        """
+        con = cls.get_connection()
+        try:
+            result = con.sql(
+                """
+                SELECT table_name FROM information_schema.tables
+                WHERE table_type = 'VIEW'
+                AND table_name LIKE '%.%'
+                ORDER BY table_name
+                """
+            )
+            df = result.df()
+            return df["table_name"].tolist()
+        except Exception:
+            return []
+
+
+# Module-level convenience functions
+def create_all_views(layers: list[str] | None = None) -> dict[str, bool]:
+    """Create all layer-aware views in the DuckDB database.
+
+    Delegates to BrasaDB.create_all_views() for programmatic use.
+
+    Args:
+        layers: Optional list of specific layers to create views for.
+
+    Returns:
+        Dictionary mapping view_name -> success_bool.
+
+    Example:
+        create_all_views()  # Create all views
+        create_all_views(['input', 'staging'])  # Specific layers
+    """
+    return BrasaDB.create_all_views(layers)
+
+
+def sql(query_string: str) -> duckdb.DuckDBPyRelation:
+    """Execute SQL query on Brasa datasets.
+
+    Delegates to BrasaDB.query() for convenient SQL execution from REPL or scripts.
+
+    Args:
+        query_string: SQL query string with layer.dataset table references.
+
+    Returns:
+        DuckDB relation. Call .df() for pandas or .fetch_all() for records.
+
+    Example:
+        # Create views first
+        create_all_views()
+
+        # Execute query
+        result = sql('SELECT * FROM "input.b3-cotahist-daily" LIMIT 10')
+        df = result.df()
+    """
+    return BrasaDB.query(query_string)
+
+
+def list_sql_tables() -> list[str]:
+    """List all available layer.dataset tables.
+
+    Delegates to BrasaDB.list_tables() for discovering available views.
+
+    Returns:
+        Sorted list of view names in "layer.dataset" format.
+
+    Example:
+        tables = list_sql_tables()
+        print(f"Available tables: {tables}")
+    """
+    return BrasaDB.list_tables()
 
 
 # def get_timeseries(symbol: str, start: datetime, end: datetime) -> pd.DataFrame:
