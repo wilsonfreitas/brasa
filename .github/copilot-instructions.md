@@ -1,225 +1,100 @@
-# GitHub Copilot Instructions for Brasa
+# GitHub Copilot Instructions
 
-## Project Overview
+## Priority Guidelines
 
-Brasa is a Python library for extracting, processing, and managing financial market data from Brazilian financial institutions (B3, ANBIMA, Tesouro Direto, CVM, BCB). It provides a template-driven ETL pipeline with caching, parsing, and querying capabilities.
+When generating code for this repository:
 
-## Technology Stack
+1. **Version Compatibility**: Use only Python and dependency features that match the versions defined in [pyproject.toml](pyproject.toml).
+2. **Context Files**: Prioritize instructions in `.github/instructions/*.instructions.md` and this file.
+3. **Codebase Patterns**: When instructions are silent, scan similar modules for established patterns and follow the most consistent ones.
+4. **Architectural Consistency**: Keep the modular library layout used in `brasa/` (engine, downloaders, parsers, readers, queries).
+5. **Code Quality**: Favor maintainability and testability as seen in current modules and tests.
 
-- **Python**: 3.10+
-- **Package Manager**: Poetry (always use `poetry run` for commands)
-- **Linter/Formatter**: Ruff
+## Technology Versions (Observed)
+
+- **Python**: ^3.10 (Ruff target version `py310`)
+- **Package Manager**: Poetry
+- **Linter/Formatter**: Ruff (line length 88, double quotes)
 - **Type Checker**: mypy
 - **Testing**: pytest
-- **Pre-commit**: Configured with ruff and standard hooks
-- **Data Storage**: Parquet files with DuckDB for querying
-- **Key Libraries**: pandas, numpy, pyarrow, duckdb, lxml, beautifulsoup4
 
-## Poetry Usage
+Key dependencies (see [pyproject.toml](pyproject.toml)):
 
-Always use Poetry for dependency management and running commands:
+- pandas ^2.0.0
+- numpy ^2.0.0
+- pyarrow ^19.0.0
+- duckdb ^1.2.0
+- lxml ^4.9.2
+- beautifulsoup4 ^4.12.2
+- pyyaml ^6.0
+- python-bcb ^0.3.2
 
-```bash
-# Install dependencies
-poetry install
+## Context Files
 
-# Add a new dependency
-poetry add <package>
+Follow these instruction files when they apply:
 
-# Add a dev dependency
-poetry add --group dev <package>
+- [.github/instructions/python.instructions.md](.github/instructions/python.instructions.md)
+- [.github/instructions/templates.instructions.md](.github/instructions/templates.instructions.md)
+- [.github/instructions/r.instructions.md](.github/instructions/r.instructions.md)
+- [.github/instructions/python-mcp-server.instructions.md](.github/instructions/python-mcp-server.instructions.md)
 
-# Run any Python command
-poetry run python <script.py>
+## Architecture and Module Boundaries
 
-# Run tests
-poetry run pytest
+The project is a modular Python library with a template-driven ETL flow:
 
-# Run linting
-poetry run ruff check .
+- `brasa/engine`: cache, templates, orchestration
+- `brasa/downloaders`: HTTP/API download clients
+- `brasa/readers`: file readers
+- `brasa/parsers`: parsing implementations
+- `brasa/queries`: DuckDB query interfaces
+- `brasa/etl.py`: transformation routines using pandas/pyarrow
 
-# Run formatting
-poetry run ruff format .
-```
+Keep changes within these boundaries; follow existing flows from templates -> downloaders/readers/parsers -> engine -> queries.
 
-## Code Style Guidelines
+## Codebase Patterns (Examples)
 
-### General Python Best Practices
+Use these observed patterns as references:
 
-1. **Type Hints**: Always use type hints for function parameters and return values
-   ```python
-   def process_data(df: pd.DataFrame, date: datetime) -> pd.DataFrame:
-       ...
-   ```
+- **Docstrings with Args/Returns**: See [brasa/fieldsets/field.py](brasa/fieldsets/field.py#L1-L120).
+- **Module-level docstrings**: See [brasa/engine/core.py](brasa/engine/core.py#L1-L16).
+- **Custom exceptions**: See [brasa/engine/exceptions.py](brasa/engine/exceptions.py#L1-L20).
+- **pytest tests and skips**: See [tests/test_templates.py](tests/test_templates.py#L1-L120).
+- **ETL with pandas/pyarrow**: See [brasa/etl.py](brasa/etl.py#L1-L160).
 
-2. **Docstrings**: Use descriptive docstrings for modules, classes, and functions
-   ```python
-   def generate_checksum(template: str, args: dict) -> str:
-       """Generates a hash for a template and its arguments.
+## Coding Standards (Observed)
 
-       The hash is used to identify a template and its arguments.
-       """
-   ```
-
-3. **Imports**:
-   - Group imports: standard library, third-party, local
-   - Use absolute imports for the `brasa` package
-   - isort is configured via ruff
-
-4. **Line Length**: 88 characters (Black-compatible)
-
-5. **Quotes**: Double quotes for strings
-
-6. **Naming Conventions**:
-   - `snake_case` for functions and variables
-   - `PascalCase` for classes
-   - `UPPER_CASE` for constants
-   - Prefix unused variables with underscore `_`
-
-### Ruff Configuration
-
-The project uses Ruff with these rule sets enabled:
-- `E`, `W`: pycodestyle
-- `F`: Pyflakes
-- `I`: isort
-- `B`: flake8-bugbear
-- `C4`: flake8-comprehensions
-- `UP`: pyupgrade
-- `ARG`: flake8-unused-arguments
-- `SIM`: flake8-simplify
-- `PTH`: flake8-use-pathlib
-- `PL`: Pylint
-- `RUF`: Ruff-specific
-
-### Before Committing
-
-```bash
-# Run linting and formatting
-poetry run ruff check . --fix && poetry run ruff format .
-
-# Or use pre-commit
-poetry run pre-commit run --all-files
-```
-
-## Project Architecture
-
-### Directory Structure
-
-```
-brasa/
-├── __init__.py          # Public API exports
-├── cli.py               # Command-line interface
-├── etl.py               # ETL transformation functions
-├── queries.py           # DuckDB query interface
-├── util.py              # Utility functions
-├── downloaders/         # HTTP/API download clients
-├── engine/              # Core engine (cache, templates, processing)
-├── fieldsets/           # Field schema definitions
-├── parsers/             # Data parsers (B3, ANBIMA, etc.)
-└── readers/             # Generic file readers
-
-templates/               # YAML configuration files for data sources
-tests/                   # pytest test files
-notebooks/               # Jupyter notebooks for analysis
-```
-
-### Key Patterns
-
-1. **Singleton Pattern**: Used for `CacheManager`
-2. **Template-Driven**: YAML templates define data source behavior
-3. **Factory Pattern**: `FieldHandlerFactory` for field parsing
-
-### Public API
-
-Main functions exposed via `brasa.__init__`:
-- `get_marketdata()`: Retrieve market data with caching
-- `download_marketdata()`: Batch download operations
-- `process_marketdata()`: Process to parquet format
-- `process_etl()`: Run ETL transformations
-- `get_dataset()`, `get_prices()`, `get_returns()`: Query functions
-
-## Testing Guidelines
-
-```bash
-# Run all tests
-poetry run pytest
-
-# Run specific test file
-poetry run pytest tests/test_templates.py
-
-# Run with verbose output
-poetry run pytest -v
-
-# Run with coverage (if configured)
-poetry run pytest --cov=brasa
-```
-
-### Test File Naming
-- Test files: `test_<module>.py`
-- Test functions: `test_<functionality>()`
-
-## Common Tasks
-
-### Adding a New Data Source
-
-1. Create YAML template in `templates/`
-2. Implement parser in `brasa/parsers/` if needed
-3. Add tests in `tests/`
-
-### Working with DataFrames
-
-- Use pandas for data manipulation
-- Convert to pyarrow for storage
-- Use DuckDB for analytical queries
-
-### Cache Management
-
-The cache is stored in `.brasa-cache/` (or `$BRASA_DATA_PATH`):
-- `raw/`: Downloaded files
-- `db/`: Parquet datasets
-- `meta/`: SQLite metadata
+- **Imports**: Standard library, third-party, then local (e.g., [brasa/etl.py](brasa/etl.py#L1-L20)).
+- **Docstrings**: Use triple-quoted docstrings; common style is Google-style with `Args:` and `Returns:` blocks (e.g., [brasa/fieldsets/field.py](brasa/fieldsets/field.py#L20-L110)).
+- **Type hints**: Present in many core modules (e.g., [brasa/engine/core.py](brasa/engine/core.py#L20-L70)) but not universal; match the surrounding file style and add type hints in new code where practical.
+- **Formatting**: Use Ruff format settings (line length 88, double quotes) from [pyproject.toml](pyproject.toml#L43-L140).
+- **Logging**: Use the standard `logging` module when needed (e.g., [brasa/downloaders/downloaders.py](brasa/downloaders/downloaders.py#L1-L120)).
 
 ## Error Handling
 
-Use custom exceptions from `brasa.engine.exceptions`:
-- `DownloadException`: For download failures
-- `DuplicatedFolderException`: For cache conflicts
+- Use the custom exceptions defined in [brasa/engine/exceptions.py](brasa/engine/exceptions.py#L1-L20) when signaling download/cache/content issues.
+- Raise errors with descriptive messages; preserve exception context with `from e` when wrapping (see [brasa/fieldsets/field.py](brasa/fieldsets/field.py#L60-L90)).
 
-## Type Checking
+## Testing Approach
+
+- Tests are written with pytest and named `test_*.py` and `test_*()` (see [tests/test_templates.py](tests/test_templates.py#L1-L120)).
+- Use `pytest.mark.skip` for external or unstable dependencies when needed (see [tests/test_templates.py](tests/test_templates.py#L30-L90)).
+
+## Templates
+
+- Template configuration is pipeline-based. Follow the rules in [.github/instructions/templates.instructions.md](.github/instructions/templates.instructions.md).
+- Full specification lives in [docs/TEMPLATES.md](docs/TEMPLATES.md).
+
+## Tooling Commands
+
+Always run commands via Poetry:
 
 ```bash
-# Run mypy
+poetry run pytest
+poetry run ruff check .
+poetry run ruff format .
 poetry run mypy brasa/
-
-# Ignored packages (no stubs available)
-# pandas, regexparser, bcb, pyarrow, bizdays
 ```
 
-## Documentation
+## Public API Surface
 
-- Module docstrings at the top of each file
-- Function/class docstrings with parameters and return types
-- Update `docs/` for significant changes
-
-## Environment Variables
-
-- `BRASA_DATA_PATH`: Custom cache directory path (default: `.brasa-cache/`)
-
-## Template System
-
-For working with YAML template configurations (in `templates/` directory), refer to the dedicated instruction file:
-- **Templates**: See `.github/instructions/templates.instructions.md` for pipeline-based template configuration
-- **Full specification**: `docs/TEMPLATES.md` contains complete template system documentation
-- Always use pipeline-based templates (not function-based) for new code
-
-## Code Review Checklist
-
-- [ ] Type hints added
-- [ ] Docstrings present
-- [ ] Tests written/updated
-- [ ] Linting passes (`poetry run ruff check .`)
-- [ ] Formatting applied (`poetry run ruff format .`)
-- [ ] No hardcoded values (use constants or config)
-- [ ] Proper error handling
-- [ ] Uses `pathlib.Path` instead of string paths
-- [ ] Templates follow pipeline-based pattern (if applicable)
+Public API exports are in [brasa/__init__.py](brasa/__init__.py#L1-L60). When adding new public functions, update `__all__` consistently.
