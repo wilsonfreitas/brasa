@@ -1,0 +1,120 @@
+id: brasa-companies
+description: BOLSA-registered companies consolidated dataset from CVM and B3
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - input.cvm-companies-registration
+        - input.b3-company-details
+      query: |+
+        -- BOLSA-registered companies consolidated dataset
+        --
+        -- Consolidates CVM company registration data with B3 listed company details.
+        -- Filters to BOLSA (stock exchange) registered companies only.
+        -- Deduplicates B3 data by selecting the latest snapshot per company.
+        -- LEFT joins on CVM (authoritative) anchor table.
+        --
+        -- Output columns:
+        -- - code_cvm: CVM 6-digit company code (primary identifier)
+        -- - company_name: Official company name (COALESCE B3 > CVM)
+        -- - trading_name: Trading name / commercial denomination (COALESCE B3 > CVM)
+        -- - asset_name: B3 listing name (NULL if not listed)
+        -- - company_status: Company status from CVM (ATIVO, CANCELADA, SUSPENSO)
+        -- - isin: ISIN code for equity instruments (NULL if not available)
+        -- - industry_classification: B3 raw industry classification (NULL if not listed)
+        -- - sector_level1: B3 primary sector (NULL if not listed)
+        -- - sector_level2: B3 subsector (NULL if not listed)
+        -- - sector_level3: B3 segment (NULL if not listed)
+        -- - cvm_cnpj: CNPJ from CVM data
+        -- - b3_cnpj: CNPJ from B3 data (validation, NULL if not listed)
+        WITH cvm_latest AS (
+            -- CVM Companies Registration data (deduplicated by CNPJ)
+            -- Each company has a single record per refdate; we filter to latest
+            SELECT DISTINCT
+                CAST(code_cvm AS VARCHAR) as code_cvm,
+                cnpj_cia as cvm_cnpj,
+                denom_social as company_name,
+                denom_comerc as trading_name,
+                sit as company_status,
+                tp_merc,
+                refdate,
+                ROW_NUMBER() OVER (PARTITION BY cnpj_cia ORDER BY refdate DESC) as rn
+            FROM 'input.cvm-companies-registration'
+            WHERE tp_merc = 'BOLSA'
+        ),
+        b3_latest AS (
+            -- B3 Company Details data (deduplicated by company code and refdate)
+            -- Multiple refdates per company; we select the latest snapshot
+            SELECT DISTINCT
+                CAST(codeCVM AS VARCHAR) as code_cvm,
+                issuingCompany,
+                companyName,
+                cnpj as b3_cnpj,
+                tradingName,
+                isin,
+                industryClassification,
+                ROW_NUMBER() OVER (PARTITION BY CAST(codeCVM AS VARCHAR) ORDER BY refdate DESC) as rn
+            FROM 'input.b3-company-details'
+        )
+        SELECT
+            cvm.code_cvm,
+            COALESCE(b3.companyName, cvm.company_name) as company_name,
+            COALESCE(b3.tradingName, cvm.trading_name) as trading_name,
+            b3.issuingCompany as asset_name,
+            cvm.company_status,
+            b3.isin,
+            b3.industryClassification as industry_classification,
+            -- Split B3 industry classification into hierarchy levels
+            -- Pattern: "Level 1 / Level 2 / Level 3"
+            TRIM(SPLIT_PART(b3.industryClassification, '/', 1)) as sector_level1,
+            TRIM(SPLIT_PART(b3.industryClassification, '/', 2)) as sector_level2,
+            TRIM(SPLIT_PART(b3.industryClassification, '/', 3)) as sector_level3,
+            cvm.cvm_cnpj,
+            b3.b3_cnpj
+        FROM cvm_latest cvm
+        LEFT JOIN b3_latest b3 ON cvm.code_cvm = b3.code_cvm
+        WHERE (cvm.rn = 1 OR cvm.rn IS NULL) AND (b3.rn = 1 OR b3.rn IS NULL)
+        ORDER BY cvm.company_name
+
+writer:
+  layer: staging
+  dataset: brasa-companies
+
+fields:
+  - name: code_cvm
+    description: CVM 6-digit company code (primary identifier)
+    type: string
+  - name: company_name
+    description: Official company name
+    type: string
+  - name: trading_name
+    description: Trading name / commercial denomination
+    type: string
+  - name: asset_name
+    description: B3 listing name (from issuingCompany)
+    type: string
+  - name: company_status
+    description: Company status (ATIVO, CANCELADA, SUSPENSO)
+    type: string
+  - name: isin
+    description: ISIN code for equity instruments
+    type: string
+  - name: industry_classification
+    description: B3 hierarchical industry classification (raw)
+    type: string
+  - name: sector_level1
+    description: B3 primary sector (Level 1)
+    type: string
+  - name: sector_level2
+    description: B3 subsector (Level 2)
+    type: string
+  - name: sector_level3
+    description: B3 segment (Level 3)
+    type: string
+  - name: cvm_cnpj
+    description: CNPJ from CVM data
+    type: string
+  - name: b3_cnpj
+    description: CNPJ from B3 data (for validation)
+    type: string

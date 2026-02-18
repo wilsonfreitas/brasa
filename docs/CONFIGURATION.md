@@ -412,7 +412,34 @@ writer:
     - refdate
 ```
 
-#### Example 3: ETL Only
+#### Example 3: ETL with In-Memory Query
+
+```yaml
+id: brasa-companies
+description: BOLSA-registered companies consolidated dataset from CVM and B3
+
+etl:
+  pipeline:
+    - step: run_query
+      datasets:
+        - input.cvm-companies-registration
+        - input.b3-company-details
+      query: |
+        SELECT
+          cvm.code_cvm,
+          COALESCE(b3.companyName, cvm.denom_social) as company_name,
+          b3.issuingCompany as asset_name,
+          cvm.sit as company_status
+        FROM 'input.cvm-companies-registration' cvm
+        LEFT JOIN 'input.b3-company-details' b3
+          ON cvm.code_cvm = CAST(b3.codeCVM AS VARCHAR)
+        WHERE cvm.tp_merc = 'BOLSA'
+
+writer:
+  layer: staging
+```
+
+#### Example 4: Legacy ETL Function
 
 ```yaml
 id: b3-futures-di1
@@ -426,7 +453,7 @@ etl:
   commodity: DI1
 ```
 
-#### Example 4: Multi-Output Reader
+#### Example 5: Multi-Output Reader
 
 ```yaml
 id: b3-bvbg028

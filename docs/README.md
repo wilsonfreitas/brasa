@@ -305,6 +305,7 @@ result = con.execute("""
 - `b3-indexes-returns`: Index returns (ETL)
 
 **Company Data**:
+- `brasa-companies`: BOLSA-registered companies (consolidated CVM + B3, ETL)
 - `b3-company-info`: Company information
 - `b3-cash-dividends`: Dividend events
 - `b3-companies-properties`: Company metadata (ETL)

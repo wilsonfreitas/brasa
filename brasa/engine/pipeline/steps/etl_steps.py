@@ -422,6 +422,109 @@ class FlattenStep(PipelineStep):
         return shared_transforms.flatten_column(data, columns, separator)
 
 
+@StepRegistry.register("sql_query")
+class RunQueryStep(PipelineStep):
+    """Execute SQL query on datasets in an in-memory DuckDB database.
+
+    This step creates a temporary `:memory:` DuckDB connection, registers
+    the specified datasets as views using their full names, executes the
+    provided SQL query, and returns the result as a pandas DataFrame.
+
+    Parameters:
+        datasets: List of input dataset names to load and register as views.
+        query: SQL query string (can be multi-line) to execute on the datasets.
+               Dataset names in the query should match those in the 'datasets' list.
+
+    Returns:
+        pandas DataFrame containing the query results.
+
+    Examples:
+        # Simple join and filter
+        - step: run_query
+          datasets:
+            - input.cvm-companies-registration
+            - input.b3-company-details
+          query: |
+            SELECT
+              DISTINCT cvm.code_cvm,
+              cvm.denom_social as company_name,
+              b3.issuingCompany as asset_name
+            FROM 'input.cvm-companies-registration' cvm
+            LEFT JOIN 'input.b3-company-details' b3
+              ON cvm.code_cvm = CAST(b3.codeCVM AS VARCHAR)
+            WHERE cvm.tp_merc = 'BOLSA'
+            ORDER BY cvm.denom_social
+    """
+
+    def execute(self, _data: Any, _context: Any) -> pd.DataFrame:
+        """Execute SQL query on datasets in an in-memory DuckDB database.
+
+        Args:
+            _data: Ignored (datasets are loaded explicitly).
+            _context: Pipeline context.
+
+        Returns:
+            Query results as a pandas DataFrame.
+
+        Raises:
+            ValueError: If required parameters are missing.
+            RuntimeError: If query execution fails.
+        """
+        import duckdb
+
+        from brasa.queries import get_dataset
+
+        datasets = self.require_param("datasets")
+        query = self.require_param("query")
+
+        if not datasets:
+            raise ValueError("run_query requires a non-empty 'datasets' list")
+        if not query or not query.strip():
+            raise ValueError("run_query requires a non-empty 'query' string")
+
+        # Create an in-memory DuckDB connection
+        conn = duckdb.connect(":memory:")
+
+        try:
+            # Register each dataset as a view using its full name
+            for dataset_name in datasets:
+                # Load the dataset using brasa's dataset loader.
+                # Dataset references may come as "<layer>.<dataset-name>".
+                if "." in dataset_name:
+                    layer_name, base_dataset_name = dataset_name.split(".", 1)
+                    dataset = get_dataset(
+                        base_dataset_name,
+                        layer=layer_name,
+                        use_template_schema=False,
+                        use_catalog_schema=True,
+                    )
+                else:
+                    dataset = get_dataset(dataset_name)
+
+                # Convert PyArrow Dataset to Table and register with DuckDB.
+                # DuckDB natively supports PyArrow Tables, avoiding pandas overhead.
+                # table = dataset.to_table()
+                conn.register(dataset_name, dataset)
+
+            # Execute the query and return results as a DataFrame
+            result = conn.execute(query).fetch_df()
+
+            return result
+
+        except Exception as e:
+            raise RuntimeError(f"Query execution failed: {e!s}") from e
+        finally:
+            conn.close()
+
+    def get_input_datasets(self) -> list[str]:
+        """Get the list of input dataset names from the 'datasets' parameter.
+
+        Returns:
+            List of dataset names that are inputs to this step.
+        """
+        return self.params.get("datasets", [])
+
+
 # =============================================================================
 # Backward Compatibility Aliases
 # =============================================================================

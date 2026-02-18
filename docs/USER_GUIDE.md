@@ -370,6 +370,7 @@ ls templates/*.yaml
 ```
 
 Common templates:
+- **brasa-companies**: BOLSA-registered companies (consolidated ETL)
 - **b3-cotahist-daily**: Daily historical prices
 - **b3-futures-settlement-prices**: Futures settlement
 - **b3-indexes-composition**: Index compositions
