@@ -896,6 +896,7 @@ def _get_companies_cvm_codes() -> list[int]:
     df = (
         get_dataset("cvm-companies-registration", layer="input")
         .filter(pc.field("code_cvm") != 0)
+        .filter(pc.field("sit") == "ATIVO")
         .scanner(columns=["code_cvm", "refdate"])
         .to_table()
         .to_pandas()
