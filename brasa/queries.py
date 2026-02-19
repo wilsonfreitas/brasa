@@ -868,34 +868,29 @@ def _get_companies_industry_sectors(column) -> list[str]:
 
 def _get_companies_trading_names() -> list[str]:
     df = (
-        get_dataset("b3-companies-details")
-        .scanner(columns=["refdate", "trading_name"])
+        get_dataset("brasa-companies")
+        .filter(pc.field("company_status") == "ATIVO")
+        .scanner(columns=["trading_name"])
         .to_table()
         .to_pandas()
     )
-    df = df.groupby(["trading_name"], sort=True).last().reset_index()
     return list(df.trading_name.unique())
 
 
 def _get_companies_names() -> list[str]:
-    tb = get_dataset("b3-equities-register").scanner(columns=["refdate"]).to_table()
-    max_date = pyarrow.compute.max(tb.column("refdate"))
     df = (
-        get_dataset("b3-equities-register")
-        .filter(pc.field("instrument_market") == 10)
-        .filter(pc.field("security_category") == 11)
-        .filter(pc.field("refdate") == max_date)
-        .scanner(columns=["instrument_asset"])
+        get_dataset("brasa-companies")
+        .filter(pc.field("company_status") == "ATIVO")
+        .scanner(columns=["asset_name"])
         .to_table()
         .to_pandas()
     )
-    return list(df.instrument_asset.unique())
+    return list(df.asset_name.unique())
 
 
 def _get_companies_cvm_codes() -> list[int]:
     df = (
         get_dataset("cvm-companies-registration", layer="input")
-        .filter(pc.field("code_cvm") != 0)
         .filter(pc.field("sit") == "ATIVO")
         .scanner(columns=["code_cvm", "refdate"])
         .to_table()
