@@ -515,6 +515,78 @@ fields:
     type: integer
 ```
 
+### Example 3: ETL Lookup Table with sql_query Step
+
+**Template:** `brasa-industry-sectors`
+
+Produces a deterministic lookup table by joining and mapping `sector_level1`/`sector_level2` values from `staging.brasa-companies` to standard GICS, ICB, and normalized sector taxonomies using a single `sql_query` step.
+
+**Source:** `staging.brasa-companies` (produced by `templates/brasa-companies.yaml`)
+**Output:** `staging.brasa-industry-sectors`
+
+```yaml
+id: brasa-industry-sectors
+description: >
+  Industry sector lookup table derived from staging.brasa-companies.
+  Maps B3 sector hierarchy (sector_level1, sector_level2) to GICS, ICB,
+  and normalized English sector/subsector names.
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - staging.brasa-companies
+      query: |+
+        WITH base AS (
+            SELECT DISTINCT
+                TRIM(sector_level1) AS sector_level1,
+                TRIM(sector_level2) AS sector_level2
+            FROM 'staging.brasa-companies'
+            WHERE sector_level1 IS NOT NULL
+              AND TRIM(sector_level1) <> ''
+        )
+        SELECT
+            sector_level1,
+            sector_level2,
+            CASE sector_level1
+                WHEN 'Financeiro' THEN 'Financials'
+                -- ... full CASE expression in template
+                ELSE 'Unclassified'
+            END AS gics_sector,
+            -- ... icb_sector, normalized_sector, normalized_subsector
+            ELSE 'Other'
+            END AS normalized_subsector
+        FROM base
+        ORDER BY sector_level1, sector_level2
+
+writer:
+  layer: staging
+  dataset: brasa-industry-sectors
+
+fields:
+  - name: sector_level1
+    description: B3 primary sector (Portuguese label, trimmed)
+    type: string
+  - name: sector_level2
+    description: B3 subsector (Portuguese label, trimmed)
+    type: string
+  - name: gics_sector
+    description: GICS standard sector mapped from sector_level1
+    type: string
+  - name: icb_sector
+    description: ICB standard sector mapped from sector_level1
+    type: string
+  - name: normalized_sector
+    description: English normalized name for sector_level1
+    type: string
+  - name: normalized_subsector
+    description: English normalized subsector; falls back to 'Other' for unmapped tuples
+    type: string
+```
+
+**Run:** `poetry run brasa etl brasa-industry-sectors`
+**Output path:** `staging` layer dataset `brasa-industry-sectors` (parquet).
+
 ### Key Concepts
 
 **ETL Pipeline** (`etl.pipeline`)

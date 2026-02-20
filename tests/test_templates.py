@@ -159,3 +159,48 @@ def test_brasa_companies_pipeline_execution():
     # Skipped since it requires real datalake data
     assert tpl is not None
     assert tpl.is_etl
+
+
+def test_brasa_industry_sectors_template_loads():
+    """Test that the brasa-industry-sectors template loads correctly."""
+    tpl = MarketDataTemplate("templates/brasa-industry-sectors.yaml")
+
+    assert tpl.id == "brasa-industry-sectors"
+    assert tpl.is_etl
+    assert not tpl.has_downloader
+    assert not tpl.has_reader
+    assert tpl.etl.is_pipeline
+
+    # Check that the template has the expected field structure
+    assert tpl.fields is not None
+    assert len(tpl.fields) > 0
+
+    # Verify mandatory output fields are defined
+    field_names = {f.name for f in tpl.fields}
+    expected_fields = {
+        "sector_level1",
+        "sector_level2",
+        "gics_sector",
+        "icb_sector",
+        "normalized_sector",
+        "normalized_subsector",
+    }
+    assert expected_fields.issubset(
+        field_names
+    ), f"Missing fields: {expected_fields - field_names}"
+
+    # Verify all fields are of type string
+    for field in tpl.fields:
+        assert (
+            field.type_name == "string"
+        ), f"Field '{field.name}' expected type 'string', got '{field.type_name}'"
+
+
+@pytest.mark.skip(reason="Requires local datalake dataset staging.brasa-companies")
+def test_brasa_industry_sectors_pipeline_execution():
+    """Test that the brasa-industry-sectors template can be executed (requires datalake)."""
+    tpl = retrieve_template("brasa-industry-sectors")
+    # This would normally execute the full ETL pipeline against staging.brasa-companies
+    # Skipped since it requires real datalake data
+    assert tpl is not None
+    assert tpl.is_etl
