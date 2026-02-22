@@ -16,8 +16,9 @@ This document provides comprehensive guidance on **pipeline-based templates** in
 4. [ETL Templates (Single Dataset)](#etl-templates-single-dataset)
 5. [Field Schema & Type System](#field-schema--type-system)
 6. [Pipeline Steps Reference](#pipeline-steps-reference)
-7. [Common Pitfalls & Best Practices](#common-pitfalls--best-practices)
-8. [Architecture & Processing Flow](#architecture--processing-flow)
+7. [Downloader Retry Policy](#downloader-retry-policy)
+8. [Common Pitfalls & Best Practices](#common-pitfalls--best-practices)
+9. [Architecture & Processing Flow](#architecture--processing-flow)
 
 ---
 
@@ -1004,6 +1005,68 @@ Steps for handling multiple output datasets:
 |------|---------|-------|
 | `b3_read_bvbg087_xml` | Parse B3 BVBG087 XML format | Returns dict of DataFrames |
 | `apply_fields_multi` | Apply field conversions to each dataset | Used with `datasets:` section |
+
+---
+
+## Downloader Retry Policy
+
+Templates can declare a retry policy under `downloader` to handle transient network or server failures automatically. Retry is deterministic, centrally executed, and compatible with the download status taxonomy (`.`, `D`, `I`, `C`, `F`, `E`, `S`, `W`).
+
+### Configuration Keys
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `retry_attempts` | `int` | `0` | Number of additional attempts after the first failure. Total attempts = `1 + retry_attempts`. |
+| `retry_delay` | `float` | `0.0` | Initial delay in seconds before retry #1. |
+| `retry_backoff` | `float` | `1.0` | Multiplier applied after each failed retry (`delay = delay * retry_backoff`). Must be ≥ 1.0. |
+| `retry_on_status_codes` | `list[int]` | `[408, 425, 429, 500, 502, 503, 504]` | HTTP status codes considered transient. |
+| `retry_on_download_exception` | `bool` | `true` | Retry on `DownloadException` when no explicit HTTP status is extractable. |
+
+### Deterministic Retry Rules
+
+| Rule | Behavior |
+|------|----------|
+| RTRY-001 | Attempt 1 always executes immediately. |
+| RTRY-002 | Retry only when failure is classified transient by HTTP status code or by `retry_on_download_exception=true`. |
+| RTRY-003 | `InvalidContentException`, `CorruptedContentException`, and `DuplicatedFolderException` are **never** retried. |
+| RTRY-004 | On final failure the original exception chain is preserved (`raise ... from ...`). |
+| RTRY-005 | Retry sleeps are independent of `download_delay` (which remains inter-task pacing). |
+
+### Retry–Status Interaction
+
+| Rule | Behavior |
+|------|----------|
+| RSTS-001 | If any retry succeeds, the final persisted status is `.` (PASSED). |
+| RSTS-002 | Exhausted retriable failures persist `F` or `E` as appropriate. |
+| RSTS-003 | `InvalidContentException` and `CorruptedContentException` remain non-retriable and keep `I`/`C`. |
+| RSTS-004 | `DuplicatedFolderException` remains non-retriable and keeps `D`. |
+| RSTS-005 | Each intermediate failed attempt is persisted as a `download_trials` row before the next retry. The last row is authoritative for scheduling/reporting. |
+
+### Example: Unstable Endpoint
+
+```yaml
+id: b3-company-details
+downloader:
+  function: brasa.downloaders.b3_url_encoded_download
+  url: https://sistemaswebb3-listados.b3.com.br/...
+  format: json
+  download_delay: 2
+  retry_attempts: 2
+  retry_delay: 3.0
+  retry_backoff: 2.0
+  args:
+    codeCVM: ~
+```
+
+With this configuration:
+- First attempt executes immediately.
+- On transient failure, waits 3 s, then retries (attempt 2).
+- If attempt 2 fails, waits 6 s, then retries (attempt 3).
+- Total maximum attempts: 3 (`1 + retry_attempts`).
+
+### Templates Without Retry
+
+Templates that omit all retry keys behave exactly as before: one attempt, no delay, and the same status persistence flow (REQ-002).
 
 ---
 

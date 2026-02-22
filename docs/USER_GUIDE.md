@@ -564,6 +564,40 @@ if man.has_meta(meta):
     print(meta.processing_errors)
 ```
 
+#### 2. Tuning Retry for Unstable Endpoints
+
+**Problem**: An external API (e.g., B3 company details) fails intermittently
+due to transient 5xx errors or connection resets.
+
+**Solution**: Add `retry_attempts`, `retry_delay`, and `retry_backoff` to the
+`downloader` section of the template YAML:
+
+```yaml
+downloader:
+  function: brasa.downloaders.b3_url_encoded_download
+  url: https://...
+  download_delay: 2        # seconds between tasks (unchanged)
+  retry_attempts: 2        # 2 extra attempts → 3 total
+  retry_delay: 3.0         # 3 s before first retry
+  retry_backoff: 2.0       # exponential: 3, 6, 12 …
+```
+
+**Key points**:
+- `retry_delay` / `retry_backoff` control the sleep between retries.
+  `download_delay` is the pacing between distinct download tasks and remains
+  unchanged by retry configuration.
+- Only transient failures (HTTP 408, 425, 429, 5xx by default) and generic
+  `DownloadException` without a status code are retried. Content validation
+  failures (`InvalidContentException`, `CorruptedContentException`) and
+  duplicates are **never** retried.
+- Each retry attempt is recorded as a separate `download_trials` row. The
+  last row is the authoritative status for scheduling and reports.
+- When all retries are exhausted the final status is `F` (FAILED) or `E`
+  (ERROR); no new status code is introduced.
+
+See [docs/TEMPLATES.md](TEMPLATES.md#downloader-retry-policy) for the full
+specification.
+
 #### 2. Processing Errors
 
 **Problem**: Data processing fails

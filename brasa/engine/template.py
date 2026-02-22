@@ -6,10 +6,12 @@ that define how to download, read, and write market data from various sources.
 
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import IO, TYPE_CHECKING, Any
+from typing import IO, TYPE_CHECKING, Any, ClassVar
 
 import pandas as pd
 import yaml
@@ -247,6 +249,80 @@ class MarketDataWriter:
             self._layer = value
 
 
+logger = logging.getLogger(__name__)
+
+
+def _extract_status_code_from_exception(err: Exception) -> int | None:
+    """Extract HTTP status code from a nested exception chain.
+
+    Parses patterns like ``status_code = 404`` from exception messages
+    in the full chain (__cause__, __context__).
+
+    Args:
+        err: The exception to inspect.
+
+    Returns:
+        The HTTP status code as integer, or None if not found.
+    """
+    import re
+
+    current: BaseException | None = err
+    while current is not None:
+        match = re.search(r"status_code\s*=\s*(\d+)", str(current))
+        if match:
+            return int(match.group(1))
+        current = current.__cause__ or current.__context__
+    return None
+
+
+def _is_retriable_failure(
+    err: Exception,
+    status_code: int | None,
+    retry_on_status_codes: list[int],
+    retry_on_download_exception: bool,
+) -> bool:
+    """Determine if a failure is transient and should be retried.
+
+    Implements RTRY-002 and RTRY-003 from the retry specification.
+
+    Args:
+        err: The exception that occurred.
+        status_code: Extracted HTTP status code or None.
+        retry_on_status_codes: List of transient HTTP status codes.
+        retry_on_download_exception: Whether to retry generic
+            DownloadExceptions without status codes.
+
+    Returns:
+        True if the failure is retriable, False otherwise.
+    """
+    from .exceptions import (
+        CorruptedContentException,
+        DownloadException,
+        DuplicatedFolderException,
+        InvalidContentException,
+    )
+
+    # RTRY-003: Non-retriable exception types
+    _non_retriable = (
+        InvalidContentException | CorruptedContentException | DuplicatedFolderException
+    )
+    if isinstance(err, _non_retriable):
+        return False
+    cause = err.__cause__
+    if isinstance(cause, _non_retriable):
+        return False
+
+    # RTRY-002: Retry on transient HTTP status codes
+    if status_code is not None:
+        return status_code in retry_on_status_codes
+
+    # Retry on DownloadException when configured
+    is_dl_exc = isinstance(err, DownloadException) or (
+        cause is not None and isinstance(cause, DownloadException)
+    )
+    return retry_on_download_exception if is_dl_exc else False
+
+
 class MarketDataDownloader:
     """Configuration for downloading market data from remote sources.
 
@@ -256,7 +332,26 @@ class MarketDataDownloader:
         download_delay: Delay in seconds between consecutive downloads.
             Used to avoid rate limiting on APIs that restrict request frequency.
             Default is 0 (no delay).
+        retry_attempts: Number of additional attempts after the first failure.
+            Total attempts = 1 + retry_attempts. Default is 0 (no retries).
+        retry_delay: Initial delay in seconds before retry #1. Default is 0.0.
+        retry_backoff: Multiplier applied after each failed retry
+            (delay = delay * retry_backoff). Must be >= 1.0. Default is 1.0.
+        retry_on_status_codes: HTTP status codes considered transient.
+            Default is [408, 425, 429, 500, 502, 503, 504].
+        retry_on_download_exception: Retry when a DownloadException occurs
+            without explicit HTTP status extraction. Default is True.
     """
+
+    _DEFAULT_RETRY_STATUS_CODES: ClassVar[list[int]] = [
+        408,
+        425,
+        429,
+        500,
+        502,
+        503,
+        504,
+    ]
 
     def __init__(self, downloader: dict) -> None:
         self.url = None
@@ -281,6 +376,37 @@ class MarketDataDownloader:
         else:
             self.extra_key = ""
 
+        # Retry configuration (REQ-001)
+        self.retry_attempts: int = downloader.get("retry_attempts", 0)
+        self.retry_delay: float = downloader.get("retry_delay", 0.0)
+        self.retry_backoff: float = downloader.get("retry_backoff", 1.0)
+        self.retry_on_status_codes: list[int] = downloader.get(
+            "retry_on_status_codes", self._DEFAULT_RETRY_STATUS_CODES
+        )
+        self.retry_on_download_exception: bool = downloader.get(
+            "retry_on_download_exception", True
+        )
+        self._validate_retry_config()
+
+    def _validate_retry_config(self) -> None:
+        """Validate retry configuration values.
+
+        Raises:
+            ValueError: If any retry configuration value is invalid.
+        """
+        if self.retry_attempts < 0:
+            raise ValueError(f"retry_attempts must be >= 0, got {self.retry_attempts}")
+        if self.retry_delay < 0:
+            raise ValueError(f"retry_delay must be >= 0, got {self.retry_delay}")
+        if self.retry_backoff < 1.0:
+            raise ValueError(f"retry_backoff must be >= 1.0, got {self.retry_backoff}")
+        for code in self.retry_on_status_codes:
+            if not (100 <= code <= 599):
+                raise ValueError(
+                    f"retry_on_status_codes values must be in "
+                    f"[100, 599], got {code}"
+                )
+
     def download_args(self, **kwargs) -> dict:
         """Prepare download arguments by merging defaults with provided kwargs."""
         args = {}
@@ -293,26 +419,115 @@ class MarketDataDownloader:
                 raise ValueError(f"Missing argument {key}")
         return args
 
-    def download(self, **kwargs) -> tuple[IO | None, Any]:
-        """Execute the download.
+    def download(
+        self,
+        on_attempt_failure: Any | None = None,
+        **kwargs,
+    ) -> tuple[IO | None, Any, dict]:
+        """Execute the download with optional retry policy.
+
+        When retry_attempts > 0, transient failures are retried using
+        an exponential-backoff strategy controlled by retry_delay and
+        retry_backoff.  Non-retriable exceptions (InvalidContentException,
+        CorruptedContentException, DuplicatedFolderException) propagate
+        immediately (RTRY-003).
 
         Args:
+            on_attempt_failure: Optional callback invoked after each
+                failed retriable attempt **before** the next retry.
+                Signature: ``(attempt: int, err: Exception,
+                status_code: int | None) -> None``.
             **kwargs: Arguments to pass to the download function.
 
         Returns:
-            Tuple of (file pointer, response object).
+            Tuple of (file pointer, response object, retry_info).
+            retry_info is a dict with keys:
+            - ``attempts_used``: Number of retries executed (0 = first try ok).
+            - ``attempts_configured``: Value of ``retry_attempts``.
+            - ``success_on_attempt``: 1-based attempt that succeeded, or None.
 
         Raises:
-            DownloadException: If download fails.
+            DownloadException: If download fails after all retry attempts.
         """
         from .exceptions import DownloadException
 
         args = self.download_args(**kwargs)
-        try:
-            fp, response = self.download_function(self, **args)
-        except Exception as err:
-            raise DownloadException("Problem downloading data.") from err
-        return fp, response
+        max_attempts = 1 + self.retry_attempts
+        current_delay = self.retry_delay
+
+        last_err: Exception | None = None
+        for attempt in range(1, max_attempts + 1):
+            fp: IO | None = None
+            response: Any = None
+            caught_err: Exception | None = None
+
+            try:
+                fp, response = self.download_function(self, **args)
+            except Exception as err:
+                caught_err = err
+
+            # --- Soft failure: fp is None — never retry ---
+            if caught_err is None and fp is None:
+                raise DownloadException("Download returned null file pointer.")
+
+            # --- Exception-based failure ---
+            if caught_err is not None:
+                last_err = caught_err
+                wrapped = (
+                    caught_err
+                    if isinstance(caught_err, DownloadException)
+                    else DownloadException("Problem downloading data.")
+                )
+                if not isinstance(caught_err, DownloadException):
+                    wrapped.__cause__ = caught_err
+
+                status_code = _extract_status_code_from_exception(wrapped)
+                retriable = _is_retriable_failure(
+                    wrapped,
+                    status_code,
+                    self.retry_on_status_codes,
+                    self.retry_on_download_exception,
+                )
+
+                if not retriable or attempt == max_attempts:
+                    if isinstance(caught_err, DownloadException):
+                        raise caught_err
+                    raise wrapped from caught_err
+
+                # RSTS-005: persist intermediate failed attempt
+                if on_attempt_failure is not None:
+                    on_attempt_failure(attempt, wrapped, status_code)
+
+                logger.warning(
+                    "Download attempt %d/%d failed "
+                    "(status_code=%s), retrying in %.1fs: %s",
+                    attempt,
+                    max_attempts,
+                    status_code,
+                    current_delay,
+                    str(last_err),
+                )
+                if current_delay > 0:
+                    time.sleep(current_delay)
+                current_delay *= self.retry_backoff
+                continue
+
+            # --- Success ---
+            if attempt > 1:
+                logger.info(
+                    "Download succeeded on attempt %d/%d",
+                    attempt,
+                    max_attempts,
+                )
+            retry_info = {
+                "attempts_used": attempt - 1,
+                "attempts_configured": self.retry_attempts,
+                "success_on_attempt": attempt,
+            }
+            return fp, response, retry_info
+
+        # Should never reach here, but satisfy type checker
+        raise DownloadException("Problem downloading data.") from last_err
 
     def validate(self, fname: str) -> None:
         """Validate a downloaded file."""

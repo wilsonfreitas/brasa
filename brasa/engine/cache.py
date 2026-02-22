@@ -43,6 +43,13 @@ class DownloadResult:
         is_success: True for PASSED/DUPLICATED outcomes.
         is_expected_error: True for expected failures (I, F), False for E.
         exception: The original exception object, or None on success.
+        retry_attempts_used: Number of retry attempts actually executed
+            (0 means first attempt succeeded). None when retry is not
+            configured.
+        retry_attempts_configured: max extra attempts configured via
+            template retry_attempts. None when not configured.
+        retry_success_on_attempt: 1-based attempt number that succeeded,
+            or None if all attempts failed.
     """
 
     status_code: str
@@ -52,6 +59,9 @@ class DownloadResult:
     is_success: bool = True
     is_expected_error: bool = False
     exception: Exception | None = None
+    retry_attempts_used: int | None = None
+    retry_attempts_configured: int | None = None
+    retry_success_on_attempt: int | None = None
 
 
 def _extract_http_status(ex: Exception) -> int | None:
@@ -544,6 +554,10 @@ class CacheManager(Singleton):
     def get_last_download_status(self, meta: CacheMetadata) -> dict | None:
         """Get the most recent download status for a cache entry.
 
+        Uses rowid ordering to ensure the latest persisted attempt is
+        returned even when multiple trials share the same timestamp
+        (e.g. during retry sequences).
+
         Args:
             meta: Cache metadata identifying the entry.
 
@@ -556,7 +570,7 @@ class CacheManager(Singleton):
             c.execute(
                 "SELECT status_code, status_name, reason, http_status "
                 "FROM download_trials "
-                "WHERE cache_id = ? ORDER BY timestamp DESC LIMIT 1",
+                "WHERE cache_id = ? ORDER BY rowid DESC LIMIT 1",
                 (meta.id,),
             )
             row = c.fetchone()
@@ -578,6 +592,38 @@ class CacheManager(Singleton):
                 (meta.id,),
             )
             return len(c.fetchall()) > 0
+
+    def count_trials(
+        self,
+        meta: CacheMetadata,
+        since: str | None = None,
+    ) -> int:
+        """Count download trial rows for a cache entry.
+
+        Args:
+            meta: Cache metadata identifying the entry.
+            since: Optional ISO-format timestamp lower bound
+                (inclusive). When provided only trials with
+                ``timestamp >= since`` are counted.
+
+        Returns:
+            Number of matching trial rows.
+        """
+        with self.meta_db_connection as conn:
+            c = conn.cursor()
+            if since:
+                c.execute(
+                    "SELECT COUNT(*) FROM download_trials "
+                    "WHERE cache_id = ? AND timestamp >= ?",
+                    (meta.id, since),
+                )
+            else:
+                c.execute(
+                    "SELECT COUNT(*) FROM download_trials " "WHERE cache_id = ?",
+                    (meta.id,),
+                )
+            row = c.fetchone()
+            return row[0] if row else 0
 
     def parquet_file_name(self, fname_part: str) -> str:
         """Generate a parquet filename from a part identifier."""
@@ -613,12 +659,17 @@ class CacheManager(Singleton):
             warn("No processed files", stacklevel=2)
             return None
 
-    def download_marketdata(self, meta: CacheMetadata) -> DownloadResult:
+    def download_marketdata(self, meta: CacheMetadata) -> DownloadResult:  # noqa: PLR0915
         """Download market data and save to cache.
 
         Handles all download exceptions internally — callers never need
         to catch download-related errors.  Every outcome is persisted as
         a trial and returned as a ``DownloadResult``.
+
+        When retry is configured in the template, intermediate failed
+        attempts are persisted as individual ``download_trials`` rows
+        (RSTS-005). The final outcome is always the authoritative
+        row for scheduling/reporting.
 
         Returns:
             A DownloadResult describing the outcome.
@@ -631,16 +682,43 @@ class CacheManager(Singleton):
             InvalidContentException,
         )
 
+        # Build per-attempt callback for intermediate retry failures
+        def _on_attempt_failure(
+            attempt: int, err: Exception, status_code: int | None
+        ) -> None:
+            http_st = status_code
+            if http_st is None:
+                http_st = _extract_http_status(err)
+            self.save_trial(
+                meta,
+                downloaded=False,
+                status_code="F",
+                status_name="FAILED",
+                reason=f"retry attempt {attempt}: {err}",
+                http_status=http_st,
+            )
+
         result: DownloadResult | None = None
+        retry_info: dict = {}
         try:
-            _download_marketdata(meta, **meta.download_args)
+            retry_info = _download_marketdata(
+                meta,
+                on_attempt_failure=_on_attempt_failure,
+                **meta.download_args,
+            )
             self.save_trial(
                 meta,
                 downloaded=True,
                 status_code=".",
                 status_name="PASSED",
             )
-            result = DownloadResult(status_code=".", status_name="PASSED")
+            result = DownloadResult(
+                status_code=".",
+                status_name="PASSED",
+                retry_attempts_used=retry_info.get("attempts_used"),
+                retry_attempts_configured=retry_info.get("attempts_configured"),
+                retry_success_on_attempt=retry_info.get("success_on_attempt"),
+            )
         except DuplicatedFolderException as e:
             meta.download_checksum = meta.id
             self.save_trial(

@@ -66,6 +66,8 @@ def _should_download(cache: CacheManager, meta: CacheMetadata, reprocess: bool) 
     if not cache.has_successful_trial(meta):
         if cache.has_meta(meta):
             cache.load_meta(meta)
+            if not meta.downloaded_files:
+                return True
             check = all(
                 Path(cache.cache_path(f)).exists() for f in meta.downloaded_files
             )
@@ -167,6 +169,16 @@ def _build_result_from_download(
     result.extra_info["download_status_reason"] = dl.reason
     if dl.http_status is not None:
         result.extra_info["http_status"] = str(dl.http_status)
+
+    # Retry telemetry (REQ-011)
+    if dl.retry_attempts_configured is not None:
+        result.extra_info["retry_attempts_configured"] = str(
+            dl.retry_attempts_configured
+        )
+    if dl.retry_attempts_used is not None:
+        result.extra_info["retry_attempts_used"] = str(dl.retry_attempts_used)
+    if dl.retry_success_on_attempt is not None:
+        result.extra_info["retry_success_on_attempt"] = str(dl.retry_success_on_attempt)
 
     return result
 

@@ -204,3 +204,76 @@ def test_brasa_industry_sectors_pipeline_execution():
     # Skipped since it requires real datalake data
     assert tpl is not None
     assert tpl.is_etl
+
+
+# --- Retry configuration tests (TASK-013) ---
+
+
+class TestRetryConfigParsing:
+    """Tests for retry configuration parsing and validation."""
+
+    def test_default_retry_config(self):
+        """Templates without retry keys must preserve single-attempt behavior."""
+        tpl = retrieve_template("bcb-sgs-data")
+        dl = tpl.downloader
+        assert dl.retry_attempts == 0
+        assert dl.retry_delay == 0.0
+        assert dl.retry_backoff == 1.0
+        assert dl.retry_on_status_codes == [408, 425, 429, 500, 502, 503, 504]
+        assert dl.retry_on_download_exception is True
+
+    def test_b3_company_details_retry_config(self):
+        """b3-company-details template should have explicit retry keys."""
+        tpl = retrieve_template("b3-company-details")
+        dl = tpl.downloader
+        assert dl.retry_attempts == 2
+        assert dl.retry_delay == 3.0
+        assert dl.retry_backoff == 2.0
+
+    def test_retry_attempts_negative_raises(self):
+        """retry_attempts < 0 must raise ValueError."""
+        from brasa.engine.template import MarketDataDownloader
+
+        with pytest.raises(ValueError, match="retry_attempts must be >= 0"):
+            MarketDataDownloader(
+                {
+                    "function": "brasa.downloaders.simple_download",
+                    "retry_attempts": -1,
+                }
+            )
+
+    def test_retry_delay_negative_raises(self):
+        """retry_delay < 0 must raise ValueError."""
+        from brasa.engine.template import MarketDataDownloader
+
+        with pytest.raises(ValueError, match="retry_delay must be >= 0"):
+            MarketDataDownloader(
+                {
+                    "function": "brasa.downloaders.simple_download",
+                    "retry_delay": -0.5,
+                }
+            )
+
+    def test_retry_backoff_below_one_raises(self):
+        """retry_backoff < 1.0 must raise ValueError."""
+        from brasa.engine.template import MarketDataDownloader
+
+        with pytest.raises(ValueError, match="retry_backoff must be >= 1.0"):
+            MarketDataDownloader(
+                {
+                    "function": "brasa.downloaders.simple_download",
+                    "retry_backoff": 0.5,
+                }
+            )
+
+    def test_retry_on_status_codes_out_of_range_raises(self):
+        """Status codes outside [100, 599] must raise ValueError."""
+        from brasa.engine.template import MarketDataDownloader
+
+        with pytest.raises(ValueError, match="retry_on_status_codes values must be in"):
+            MarketDataDownloader(
+                {
+                    "function": "brasa.downloaders.simple_download",
+                    "retry_on_status_codes": [200, 999],
+                }
+            )

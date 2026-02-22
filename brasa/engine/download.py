@@ -110,7 +110,7 @@ def _gzip_downloaded_files(
         Path(_fname).unlink()
 
 
-def _download_marketdata(meta: CacheMetadata, **kwargs):
+def _download_marketdata(meta: CacheMetadata, on_attempt_failure=None, **kwargs):
     """Download market data for a cache entry.
 
     Handles the complete download workflow:
@@ -121,7 +121,13 @@ def _download_marketdata(meta: CacheMetadata, **kwargs):
 
     Args:
         meta: Cache metadata to update with download results.
+        on_attempt_failure: Optional callback for per-attempt retry
+            persistence. Passed through to downloader.download().
         **kwargs: Download arguments to pass to the download function.
+
+    Returns:
+        Dict with retry info keys (attempts_used, attempts_configured,
+        success_on_attempt) or empty dict when retry is not configured.
 
     Raises:
         DownloadException: If download fails.
@@ -130,7 +136,9 @@ def _download_marketdata(meta: CacheMetadata, **kwargs):
     template = retrieve_template(meta.template)
     meta.download_args = kwargs
     meta.extra_key = template.downloader.extra_key
-    fp, response = template.downloader.download(**kwargs)
+    fp, response, retry_info = template.downloader.download(
+        on_attempt_failure=on_attempt_failure, **kwargs
+    )
     if fp is None:
         raise DownloadException("Market data download failed: null file pointer")
     meta.response = response
@@ -156,3 +164,4 @@ def _download_marketdata(meta: CacheMetadata, **kwargs):
     meta.downloaded_files = downloaded_files
     _validate_downloaded_files(template, downloaded_files, man)
     _gzip_downloaded_files(downloaded_files, man, meta)
+    return retry_info
