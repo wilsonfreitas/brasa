@@ -64,51 +64,65 @@ class PandasAdapter:
         self._build_mappings()
 
     def _build_mappings(self) -> None:
-        """Build dtype and converter mappings from fieldset."""
+        """
+        Build dtype and converter mappings from fieldset.
+
+        For ``read_csv``:
+        - Fields that require per-cell parsing (date, time, parameterised
+          numeric) get a converter callback.
+        - Simple fields (integer, boolean, string, plain numeric) get a
+          dtype hint so that ``pd.read_csv`` handles them natively.
+
+        Note: ``_parse_dates`` is intentionally unused; all date/datetime
+        columns are handled by converter callbacks in ``read_csv`` and by
+        vectorized ``pd.to_datetime`` in ``apply_types``.
+        """
         for field in self.fieldset.get_all_fields():
-            type_name = field.type_name
             field_name = field.name
 
-            # Check if this type needs a converter (complex parsing)
             if self._needs_converter(field):
-                # Use converter for complex types
                 self._converters[field_name] = self._create_converter(field)
             else:
-                # Use dtype for simple types
                 dtype = self._get_pandas_dtype(field)
                 if dtype:
                     self._dtype_dict[field_name] = dtype
 
-                # Track date fields for parse_dates parameter
-                # Only add to parse_dates if using default format
-                if type_name in (
-                    "date",
-                    "datetime",
-                ) and not field.parser.parameters.get("format"):
-                    self._parse_dates.append(field_name)
-
     def _needs_converter(self, field: Field) -> bool:
         """
-        Check if field needs a custom converter function.
+        Decide whether ``pd.read_csv`` requires a per-cell converter callback.
 
-        Fields need converters if they have:
-        - Custom date/datetime/time formats
-        - Numeric types with decimal parameters
-        - Date/datetime/time types when error handling is needed (coerce/ignore)
-        - Any other custom parsing logic
+        This method is intentionally scoped to ``read_csv`` only.  ``apply_types``
+        uses a separate, vectorized decision path (see ``_can_vectorize_date`` and
+        ``_can_vectorize_numeric``).
+
+        Decision matrix for ``read_csv`` converters
+        -------------------------------------------
+        type          | condition                              | needs converter
+        --------------|----------------------------------------|----------------
+        date/datetime | any (format or no format, any errors)  | True
+        time          | any                                    | True
+        numeric       | dec, sign, thousands, or decimal param | True
+        numeric       | no custom params                       | False (dtype=float64)
+        integer       | -                                      | False (dtype=Int64)
+        boolean       | -                                      | False (dtype=boolean)
+        string/char   | -                                      | False (dtype=string)
+
+        Notes
+        -----
+        Date/datetime remain as converter-only in ``read_csv`` because
+        ``pd.read_csv`` ``parse_dates`` does not support per-column format strings
+        reliably across pandas versions, and error coercion behaviour is
+        inconsistent.  ``apply_types`` handles these with vectorized
+        ``pd.to_datetime(format=...)``.
         """
         type_name = field.type_name
 
-        # Date/datetime/time with custom format always need converters
+        # All date/datetime/time fields use converter in read_csv for
+        # reliable format and error handling across pandas versions.
         if type_name in ("date", "datetime", "time"):
-            if field.parser.parameters.get("format"):
-                return True
-            # Also use converters when we need error handling (not 'raise')
-            # because parse_dates doesn't handle errors gracefully
-            if self.errors != "raise":
-                return True
+            return True
 
-        # Numeric with decimal places, sign, or custom separators needs converter
+        # Numeric with any custom parameter cannot be mapped to a simple dtype.
         if type_name == "numeric":
             params = field.parser.parameters
             return bool(
@@ -119,6 +133,76 @@ class PandasAdapter:
             )
 
         return False
+
+    # ------------------------------------------------------------------
+    # Vectorized-eligibility helpers (Phase 1 / TASK-006)
+    # Used exclusively by apply_types to decide the conversion path.
+    # ------------------------------------------------------------------
+
+    def _can_vectorize_date(self, field: Field) -> bool:
+        """
+        Return True when the date/datetime field can be converted with
+        ``pd.to_datetime`` (i.e. the CAND-004 vectorized path is safe).
+
+        Currently *all* date/datetime fields are vectorizable because
+        ``pd.to_datetime`` accepts an optional ``format`` parameter and
+        supports all ``errors`` modes.
+
+        Args:
+            field: Field instance with type_name in ('date', 'datetime').
+
+        Returns:
+            True (always, for date/datetime).
+        """
+        return field.type_name in ("date", "datetime")
+
+    def _can_vectorize_numeric(self, field: Field) -> bool:
+        """
+        Return True when the numeric field can be converted with
+        vectorized string preprocessing + ``pd.to_numeric``.
+
+        All numeric parameter combinations supported by ``NumericParser``
+        (``dec``, ``sign``, ``thousands``, ``decimal``) can be reproduced
+        with ``Series.str.replace`` followed by ``pd.to_numeric``.
+
+        Args:
+            field: Field instance with type_name 'numeric'.
+
+        Returns:
+            True (always, for numeric).
+        """
+        return field.type_name == "numeric"
+
+    def _normalize_numeric_series(self, series: pd.Series, field: Field) -> pd.Series:
+        """
+        Apply vectorized string preprocessing to match ``NumericParser`` semantics.
+
+        Preprocessing steps (mirrors ``NumericParser.parse``):
+
+        1. Strip whitespace.
+        2. Remove thousands separator.
+        3. Replace non-standard decimal separator with ``'.'``.
+
+        ``dec`` (implied decimal places) and ``sign`` are applied *after*
+        ``pd.to_numeric`` by the caller.
+
+        Args:
+            series: Raw string Series to preprocess.
+            field:  Field whose parser carries the numeric parameters.
+
+        Returns:
+            String Series ready for ``pd.to_numeric``.
+        """
+        params = field.parser.parameters
+        thousands = params.get("thousands")
+        decimal_sep = params.get("decimal", ".")
+
+        s = series.astype(str).str.strip()
+        if thousands:
+            s = s.str.replace(thousands, "", regex=False)
+        if decimal_sep != ".":
+            s = s.str.replace(decimal_sep, ".", regex=False)
+        return s
 
     def _get_pandas_dtype(self, field: Field) -> str | None:
         """
@@ -275,7 +359,7 @@ class PandasAdapter:
             print("PandasAdapter: Reading CSV with Fieldset schema:")
             print(f"  - dtype mapping: {len(self._dtype_dict)} fields")
             print(f"  - converters: {len(self._converters)} fields")
-            print(f"  - parse_dates: {len(read_params.get('parse_dates', []))} fields")
+            print(f"  - parse_dates: {len(read_params.get('parse_dates', []))} fields")  # type: ignore[arg-type]
 
         return pd.read_csv(filepath_or_buffer, **read_params)
 
@@ -361,7 +445,7 @@ class PandasAdapter:
     def _convert_with_converter(
         self, df: pd.DataFrame, field_name: str, field: Field
     ) -> pd.Series:
-        """Apply converter function to a column."""
+        """Apply row-wise converter function to a column (scalar fallback path)."""
         converter = self._create_converter(field)
         result = df[field_name].apply(converter)
 
@@ -374,29 +458,124 @@ class PandasAdapter:
 
         return result
 
-    def _convert_date_type(self, series: pd.Series) -> pd.Series:
-        """Convert series to datetime."""
-        return pd.to_datetime(series, errors=self.errors)
+    # ------------------------------------------------------------------
+    # Vectorized conversion methods (Phase 2 / TASK-009, TASK-010)
+    # These accept an optional ``field`` parameter so that parser
+    # parameters (format, thousands, decimal, dec, sign) are applied
+    # without falling back to row-wise Series.apply.
+    # ------------------------------------------------------------------
+
+    def _convert_date_type(
+        self, series: pd.Series, field: Field | None = None
+    ) -> pd.Series:
+        """
+        Vectorized date/datetime conversion.
+
+        When *field* is provided the parser ``format`` parameter is forwarded
+        to ``pd.to_datetime`` so that custom format strings are handled without
+        per-row Python callbacks.
+
+        Args:
+            series: Raw string (or already date-like) Series.
+            field:  Optional Field whose ``DateParser``/``DateTimeParser``
+                    carries a ``format`` parameter.
+
+        Returns:
+            datetime64[ns] Series with null values for unparseable entries
+            (when ``errors`` is ``'coerce'`` or ``'ignore'``) or a
+            raised ``ValueError`` (when ``errors`` is ``'raise'``).
+        """
+        fmt: str | None = None
+        if field is not None:
+            fmt = field.parser.parameters.get("format")
+        pd_errors = "coerce" if self.errors in ("coerce", "ignore") else "raise"
+        return pd.to_datetime(series, format=fmt, errors=pd_errors)
 
     def _convert_integer_type(self, series: pd.Series) -> pd.Series:
-        """Convert series to integer."""
-        numeric_series = pd.to_numeric(series, errors=self.errors)
+        """
+        Vectorized integer conversion.
+
+        Args:
+            series: Raw string or numeric Series.
+
+        Returns:
+            Int64 (nullable) or float64 Series.
+        """
+        pd_errors = "coerce" if self.errors in ("coerce", "ignore") else "raise"
+        numeric_series = pd.to_numeric(series, errors=pd_errors)
         return (
             numeric_series.astype("Int64")
             if self.use_nullable_dtypes
             else numeric_series
         )
 
-    def _convert_numeric_type(self, series: pd.Series) -> pd.Series:
-        """Convert series to numeric."""
-        return pd.to_numeric(series, errors=self.errors)
+    def _convert_numeric_type(
+        self, series: pd.Series, field: Field | None = None
+    ) -> pd.Series:
+        """
+        Vectorized numeric (float) conversion.
+
+        When *field* is provided the parser parameters ``thousands``,
+        ``decimal``, ``dec``, and ``sign`` are applied using vectorized
+        ``Series.str.replace`` before ``pd.to_numeric`` — eliminating
+        per-row Python callbacks for parameterized numeric fields.
+
+        Args:
+            series: Raw string Series.
+            field:  Optional Field whose ``NumericParser`` carries
+                    ``thousands``, ``decimal``, ``dec``, and ``sign``
+                    parameters.
+
+        Returns:
+            float64 Series with null values for unparseable entries.
+        """
+        pd_errors = "coerce" if self.errors in ("coerce", "ignore") else "raise"
+
+        if field is not None and self._can_vectorize_numeric(field):
+            params = field.parser.parameters
+            s = self._normalize_numeric_series(series, field)
+            result = pd.to_numeric(s, errors=pd_errors)
+
+            dec = int(params.get("dec", 0))
+            sign = str(params.get("sign", "+"))
+            if dec > 0:
+                result = result / (10**dec)
+            if sign == "-":
+                result = -result
+            return result
+
+        return pd.to_numeric(series, errors=pd_errors)
+
+    # Boolean sentinel for mapping string values
+    _BOOL_TRUE: frozenset[str] = frozenset({"true", "t", "yes", "y", "1", "on"})
+    _BOOL_FALSE: frozenset[str] = frozenset({"false", "f", "no", "n", "0", "off"})
 
     def _convert_boolean_type(self, series: pd.Series) -> pd.Series:
-        """Convert series to boolean."""
-        return series.astype("boolean" if self.use_nullable_dtypes else bool)
+        """
+        Vectorized boolean conversion.
+
+        Maps common boolean string representations (true/false, yes/no,
+        1/0, on/off — case-insensitive) to a nullable ``boolean`` dtype.
+        Unrecognised values become ``pd.NA``.
+
+        Args:
+            series: Raw string Series.
+
+        Returns:
+            boolean (nullable) or object bool Series.
+        """
+        bool_map = {
+            **{v: True for v in self._BOOL_TRUE},
+            **{v: False for v in self._BOOL_FALSE},
+        }
+        lower = series.astype(str).str.lower().str.strip()
+        mapped = lower.map(bool_map)
+        if self.use_nullable_dtypes:
+            return mapped.astype("boolean")
+        return mapped
 
     def _convert_string_type(self, series: pd.Series) -> pd.Series:
-        """Convert series to string."""
+        """Convert series to string dtype."""
         return series.astype("string") if self.use_nullable_dtypes else series
 
     def apply_types(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -429,41 +608,59 @@ class PandasAdapter:
         """
         df = df.copy()
 
-        # Mapping of type names to conversion methods
-        type_converters = {
-            "date": self._convert_date_type,
-            "datetime": self._convert_date_type,
-            "integer": self._convert_integer_type,
-            "numeric": self._convert_numeric_type,
-            "boolean": self._convert_boolean_type,
-            "string": self._convert_string_type,
-            "character": self._convert_string_type,
-        }
-
-        for field in self.fieldset.get_all_fields():
-            field_name = field.name
+        for field_obj in self.fieldset.get_all_fields():
+            field_name = field_obj.name
 
             # Skip if column doesn't exist in DataFrame
             if field_name not in df.columns:
                 continue
 
-            # Apply the appropriate conversion
+            # -------------------------------------------------------
+            # CAND-004 vectorized dispatch (Phase 2 / TASK-011)
+            #
+            # Routing priority (highest to lowest):
+            #   1. date/datetime  -> _convert_date_type(series, field)
+            #   2. numeric        -> _convert_numeric_type(series, field)
+            #   3. integer        -> _convert_integer_type(series)
+            #   4. boolean        -> _convert_boolean_type(series)
+            #   5. string/char    -> _convert_string_type(series)
+            #   6. fallback       -> _convert_with_converter(df, name, field)
+            #
+            # Steps 1-5 are fully vectorized pandas operations; step 6
+            # is the row-wise scalar fallback for unknown/custom types.
+            # -------------------------------------------------------
+            type_name = field_obj.type_name
             try:
-                if self._needs_converter(field):
-                    df[field_name] = self._convert_with_converter(df, field_name, field)
+                if self._can_vectorize_date(field_obj):
+                    df[field_name] = self._convert_date_type(
+                        df[field_name], field=field_obj
+                    )
+                elif self._can_vectorize_numeric(field_obj):
+                    df[field_name] = self._convert_numeric_type(
+                        df[field_name], field=field_obj
+                    )
+                elif type_name == "integer":
+                    df[field_name] = self._convert_integer_type(df[field_name])
+                elif type_name == "boolean":
+                    df[field_name] = self._convert_boolean_type(df[field_name])
+                elif type_name in ("string", "character"):
+                    df[field_name] = self._convert_string_type(df[field_name])
                 else:
-                    converter = type_converters.get(field.type_name)
-                    if converter:
-                        df[field_name] = converter(df[field_name])
+                    # Scalar fallback for custom/unknown types
+                    df[field_name] = self._convert_with_converter(
+                        df, field_name, field_obj
+                    )
 
             except Exception as e:
                 if self.errors == "raise":
                     raise TypeParseError(
-                        f"Failed to convert field '{field_name}' to type '{field.type_definition}': {e}"
+                        f"Failed to convert field '{field_name}' to type "
+                        f"'{field_obj.type_definition}': {e}"
                     ) from e
                 elif self.verbose_warnings:
                     warnings.warn(
-                        f"Error converting field '{field_name}' to type '{field.type_definition}': {e}",
+                        f"Error converting field '{field_name}' to type "
+                        f"'{field_obj.type_definition}': {e}",
                         UserWarning,
                         stacklevel=2,
                     )
