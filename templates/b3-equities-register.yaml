@@ -3,14 +3,21 @@ description: Dataset de dados cadastrais de ações
 
 etl:
   pipeline:
-    - step: load
-      input: b3-bvbg028-equities
-      layer: input
+    - step: sql_query
+      datasets:
+        - input.b3-bvbg028-equities
+      query: |+
+        -- B3 Equities Register dataset
+        select
+          *
+        from
+          'input.b3-bvbg028-equities'
+        where
+          refdate = (select max(refdate) from 'input.b3-bvbg028-equities')
 
     - step: select_fields
-
-    - step: drop_duplicates
-      keep: first
+    - step: apply_fields
+      errors: coerce
 
 writer:
   layer: staging
