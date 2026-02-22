@@ -16,5 +16,9 @@ create table if not exists cache_metadata (
 create table if not exists download_trials (
     cache_id TEXT,
     timestamp TEXT,
-    downloaded TEXT
+    downloaded TEXT,
+    status_code TEXT,
+    status_name TEXT,
+    reason TEXT,
+    http_status INTEGER
 );

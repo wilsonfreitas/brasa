@@ -421,6 +421,11 @@ if __name__ == "__main__":
             date_range = [datetime.strptime(d, "%Y-%m-%d") for d in args.date]
         verbosity = get_verbosity(args)
         report_file = getattr(args, "report", None)
+        if verbosity != Verbosity.QUIET:
+            print(
+                "Status legend: .(passed) F(failed) E(error) "
+                "S(skipped) D(duplicated) I(invalid) C(corrupted)"
+            )
         for template in args.template:
             download_marketdata(
                 template,

@@ -810,3 +810,80 @@ print(f"Cache size: {cache_size:.2f} GB")
 - Review example notebooks in `notebooks/` directory
 - Check API reference for detailed function documentation
 - Consult architecture documentation for system internals
+
+---
+
+## Download Status Codes
+
+Every download attempt in brasa is classified with exactly one deterministic
+status code. These codes appear in CLI progress output, JSON reports, and the
+`download_trials` SQLite table.
+
+### Status Code Table
+
+| Symbol | Name       | Meaning                                                        |
+|--------|------------|----------------------------------------------------------------|
+| `.`    | PASSED     | Download completed successfully.                               |
+| `F`    | FAILED     | Expected download failure (e.g., HTTP 4xx/5xx via `DownloadException`). |
+| `E`    | ERROR      | Unexpected unhandled exception during download.                |
+| `S`    | SKIPPED    | Download was skipped because data already exists in cache (or cache marked invalid/duplicated). |
+| `D`    | DUPLICATED | Target raw folder already exists (`DuplicatedFolderException`). Treated as cache-reusable; future attempts are skipped unless `reprocess=True`. |
+| `I`    | INVALID    | Downloaded file failed template validation rules (`InvalidContentException`). Raw files are cleaned up; future attempts are skipped unless `reprocess=True`. |
+| `W`    | WARNING    | Download succeeded but with non-terminal warnings.             |
+
+### Reading CLI Output
+
+During a batch download, brasa prints pytest-style symbols:
+
+```
+Status legend: .(passed) F(failed) E(error) S(skipped) D(duplicated) I(invalid)
+Download b3-cotahist ....FSSD.FI [10/10] (3.2s)
+```
+
+### JSON Report Fields
+
+When saving reports with `--report report.json`, each result includes:
+
+```json
+{
+  "extra_info": {
+    "download_status_code": ".",
+    "download_status_name": "PASSED",
+    "download_status_reason": "",
+    "http_status": "404"
+  }
+}
+```
+
+The summary section includes `duplicated` and `invalid` counts alongside
+the standard `passed`, `failed`, `errors`, `skipped`, and `warnings`.
+
+### Scheduling Rules
+
+- **DUPLICATED (D)**: If the last trial for a cache entry was `D` and the raw
+  files still exist on disk, subsequent attempts are automatically skipped (`S`).
+  If raw files are missing, a fresh download is triggered.
+- **INVALID (I)**: Invalid entries are skipped on future attempts. Use
+  `reprocess=True` to force a re-download.
+
+### Database Migration
+
+Existing cache databases are migrated automatically on startup. The
+`download_trials` table gains four new columns: `status_code`, `status_name`,
+`reason`, and `http_status`. Legacy rows are backfilled:
+
+- `downloaded=1` → `status_code='.'`, `status_name='PASSED'`
+- `downloaded=0` → `status_code='F'`, `status_name='FAILED'`
+
+You can also run the migration manually:
+
+```bash
+poetry run python scripts/migrate_download_trials_status.py [CACHE_PATH]
+```
+
+If `CACHE_PATH` is omitted, the script uses `$BRASA_DATA_PATH` or
+`./.brasa-cache`.
+
+**Rollback**: The migration only adds columns and backfills NULLs. It does not
+remove or modify the legacy `downloaded` column. Reverting requires manually
+dropping the new columns via SQLite.

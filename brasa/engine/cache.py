@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import sqlite3
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -25,6 +26,50 @@ from .core import Singleton, json_convert_from_object, json_convert_to_object
 
 if TYPE_CHECKING:
     from .template import MarketDataTemplate
+
+
+@dataclass(frozen=True)
+class DownloadResult:
+    """Result of a download attempt from CacheManager.download_marketdata.
+
+    Encapsulates the full outcome so callers never need to catch
+    download-related exceptions themselves.
+
+    Attributes:
+        status_code: Single-char status symbol ('.', 'D', 'I', 'F', 'E').
+        status_name: Human-readable name (e.g. 'PASSED', 'FAILED').
+        reason: Descriptive text (usually str(exception) or empty).
+        http_status: HTTP status code when available, else None.
+        is_success: True for PASSED/DUPLICATED outcomes.
+        is_expected_error: True for expected failures (I, F), False for E.
+        exception: The original exception object, or None on success.
+    """
+
+    status_code: str
+    status_name: str
+    reason: str = ""
+    http_status: int | None = None
+    is_success: bool = True
+    is_expected_error: bool = False
+    exception: Exception | None = None
+
+
+def _extract_http_status(ex: Exception) -> int | None:
+    """Extract HTTP status code from a DownloadException message.
+
+    Parses patterns like ``status_code = 404`` from the exception
+    message string.
+
+    Args:
+        ex: The exception to inspect.
+
+    Returns:
+        The HTTP status code as integer, or None if not found.
+    """
+    match = re.search(r"status_code\s*=\s*(\d+)", str(ex))
+    if match:
+        return int(match.group(1))
+    return None
 
 
 class CacheMetadata:
@@ -148,6 +193,8 @@ class CacheManager(Singleton):
         Path(self.cache_path(self._db_folder)).mkdir(parents=True, exist_ok=True)
         if not Path(self.cache_path(self.meta_db_filename)).exists():
             self.create_meta_db()
+        else:
+            self._migrate_download_trials()
         # Initialize the dataset catalog table
         self._init_dataset_catalog()
 
@@ -201,6 +248,44 @@ class CacheManager(Singleton):
         )
         with sql_path.open() as f:
             c.executescript(f.read())
+        db_conn.commit()
+        db_conn.close()
+
+    def _migrate_download_trials(self) -> None:
+        """Add missing status columns to download_trials (idempotent).
+
+        Checks existing columns via PRAGMA table_info and adds any
+        missing columns. Also backfills legacy rows where status_code
+        is NULL: downloaded=1 -> PASSED, downloaded=0 -> FAILED.
+        """
+        new_columns = {
+            "status_code": "TEXT",
+            "status_name": "TEXT",
+            "reason": "TEXT",
+            "http_status": "INTEGER",
+        }
+        db_conn = sqlite3.connect(database=self.cache_path(self.meta_db_filename))
+        c = db_conn.cursor()
+
+        c.execute("PRAGMA table_info(download_trials)")
+        existing = {row[1] for row in c.fetchall()}
+
+        for col_name, col_type in new_columns.items():
+            if col_name not in existing:
+                c.execute(
+                    f"ALTER TABLE download_trials ADD COLUMN {col_name} {col_type}"
+                )
+
+        # Backfill legacy rows that have no status_code
+        c.execute(
+            "UPDATE download_trials SET status_code = '.', status_name = 'PASSED' "
+            "WHERE status_code IS NULL AND downloaded = '1'"
+        )
+        c.execute(
+            "UPDATE download_trials SET status_code = 'F', status_name = 'FAILED' "
+            "WHERE status_code IS NULL AND downloaded = '0'"
+        )
+
         db_conn.commit()
         db_conn.close()
 
@@ -409,17 +494,80 @@ class CacheManager(Singleton):
         self.clean_meta_db_folder(meta)
         self.clean_meta_db(meta)
 
-    def save_trial(self, meta: CacheMetadata, downloaded: bool) -> None:
-        """Record a download trial."""
+    def save_trial(
+        self,
+        meta: CacheMetadata,
+        downloaded: bool,
+        status_code: str | None = None,
+        status_name: str | None = None,
+        reason: str = "",
+        http_status: int | None = None,
+    ) -> None:
+        """Record a download trial with explicit status.
+
+        When status_code/status_name are omitted the method falls back
+        to legacy boolean semantics for backward compatibility:
+        downloaded=True  -> PASSED (.)
+        downloaded=False -> FAILED (F)
+
+        Args:
+            meta: Cache metadata identifying the trial.
+            downloaded: Legacy boolean success flag.
+            status_code: Single-char status symbol (e.g. '.', 'F', 'D').
+            status_name: Human-readable status name (e.g. 'PASSED').
+            reason: Optional reason text for the outcome.
+            http_status: Optional HTTP status code from downloader.
+        """
+        if status_code is None:
+            status_code = "." if downloaded else "F"
+            status_name = "PASSED" if downloaded else "FAILED"
+
         with self.meta_db_connection as conn:
             c = conn.cursor()
             params = (
                 meta.id,
                 meta.timestamp.isoformat(),
                 downloaded,
+                status_code,
+                status_name,
+                reason,
+                http_status,
             )
-            c.execute("insert into download_trials values (?, ?, ?)", params)
+            c.execute(
+                "INSERT INTO download_trials "
+                "(cache_id, timestamp, downloaded, status_code, status_name, reason, http_status) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                params,
+            )
         conn.commit()
+
+    def get_last_download_status(self, meta: CacheMetadata) -> dict | None:
+        """Get the most recent download status for a cache entry.
+
+        Args:
+            meta: Cache metadata identifying the entry.
+
+        Returns:
+            Dict with keys code, name, reason, http_status or None
+            if no trials exist.
+        """
+        with self.meta_db_connection as conn:
+            c = conn.cursor()
+            c.execute(
+                "SELECT status_code, status_name, reason, http_status "
+                "FROM download_trials "
+                "WHERE cache_id = ? ORDER BY timestamp DESC LIMIT 1",
+                (meta.id,),
+            )
+            row = c.fetchone()
+            if row:
+                return {
+                    "code": row[0],
+                    "name": row[1],
+                    "reason": row[2] or "",
+                    "http_status": row[3],
+                }
+        return None
 
     def has_successful_trial(self, meta: CacheMetadata) -> bool:
         """Check if there was a successful download trial."""
@@ -465,40 +613,136 @@ class CacheManager(Singleton):
             warn("No processed files", stacklevel=2)
             return None
 
-    def download_marketdata(self, meta: CacheMetadata) -> None:
-        """Download market data and save to cache."""
+    def download_marketdata(self, meta: CacheMetadata) -> DownloadResult:
+        """Download market data and save to cache.
+
+        Handles all download exceptions internally — callers never need
+        to catch download-related errors.  Every outcome is persisted as
+        a trial and returned as a ``DownloadResult``.
+
+        Returns:
+            A DownloadResult describing the outcome.
+        """
         from .download import _download_marketdata
         from .exceptions import (
+            CorruptedContentException,
             DownloadException,
             DuplicatedFolderException,
             InvalidContentException,
         )
 
+        result: DownloadResult | None = None
         try:
             _download_marketdata(meta, **meta.download_args)
-            self.save_trial(meta, True)
+            self.save_trial(
+                meta,
+                downloaded=True,
+                status_code=".",
+                status_name="PASSED",
+            )
+            result = DownloadResult(status_code=".", status_name="PASSED")
         except DuplicatedFolderException as e:
-            self.save_trial(meta, True)
-            warn(str(e), stacklevel=2)
+            meta.download_checksum = meta.id
+            self.save_trial(
+                meta,
+                downloaded=True,
+                status_code="D",
+                status_name="DUPLICATED",
+                reason=str(e),
+            )
+            result = DownloadResult(
+                status_code="D",
+                status_name="DUPLICATED",
+                reason=str(e),
+                exception=e,
+            )
         except InvalidContentException as e:
-            # Mark metadata as invalid but save it for future reference
             meta.is_invalid_download = True
             meta.invalid_download_reason = str(e)
-            self.save_trial(meta, False)
+            meta.download_checksum = meta.id
+            meta.downloaded_files = []
+            self.save_trial(
+                meta,
+                downloaded=False,
+                status_code="I",
+                status_name="INVALID",
+                reason=str(e),
+            )
             self.clean_meta_raw_folder(meta)
-            raise e
+            result = DownloadResult(
+                status_code="I",
+                status_name="INVALID",
+                reason=str(e),
+                is_success=False,
+                is_expected_error=True,
+                exception=e,
+            )
+        except CorruptedContentException as e:
+            meta.download_checksum = meta.id
+            meta.downloaded_files = []
+            self.save_trial(
+                meta,
+                downloaded=False,
+                status_code="C",
+                status_name="CORRUPTED",
+                reason=str(e),
+            )
+            self.clean_meta_raw_folder(meta)
+            result = DownloadResult(
+                status_code="C",
+                status_name="CORRUPTED",
+                reason=str(e),
+                is_success=False,
+                is_expected_error=True,
+                exception=e,
+            )
         except DownloadException as e:
-            self.save_trial(meta, False)
-            raise e
+            meta.download_checksum = meta.id
+            meta.downloaded_files = []
+            http_status = _extract_http_status(e)
+            self.save_trial(
+                meta,
+                downloaded=False,
+                status_code="F",
+                status_name="FAILED",
+                reason=str(e),
+                http_status=http_status,
+            )
+            result = DownloadResult(
+                status_code="F",
+                status_name="FAILED",
+                reason=str(e),
+                http_status=http_status,
+                is_success=False,
+                is_expected_error=True,
+                exception=e,
+            )
         except Exception as e:
-            self.save_trial(meta, False)
+            meta.download_checksum = meta.id
+            meta.downloaded_files = []
+            self.save_trial(
+                meta,
+                downloaded=False,
+                status_code="E",
+                status_name="ERROR",
+                reason=str(e),
+            )
             self.clean_meta_raw_folder(meta)
-            raise e
+            result = DownloadResult(
+                status_code="E",
+                status_name="ERROR",
+                reason=str(e),
+                is_success=False,
+                is_expected_error=False,
+                exception=e,
+            )
         finally:
             try:
                 self.save_meta(meta)
-            except Exception:
+            except Exception as e:
+                print(f"Failed to save meta for {meta.download_args}: {e}")
                 self.clean_meta_db(meta)
+        return result  # type: ignore[return-value]
 
     def process_without_checks(
         self, meta: CacheMetadata

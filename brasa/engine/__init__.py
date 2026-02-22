@@ -31,7 +31,7 @@ from .api import (
 )
 
 # Cache classes
-from .cache import CacheManager, CacheMetadata
+from .cache import CacheManager, CacheMetadata, DownloadResult
 
 # Catalog classes
 from .catalog import (
@@ -54,6 +54,7 @@ from .download import _download_marketdata
 
 # Exceptions
 from .exceptions import (
+    CorruptedContentException,
     DownloadException,
     DuplicatedFolderException,
     InvalidContentException,
@@ -85,6 +86,7 @@ from .processing import (
 
 # Reporting classes
 from .reporting import (
+    DownloadAttemptStatus,
     ProgressDisplay,
     TaskReport,
     TaskResult,
@@ -94,6 +96,8 @@ from .reporting import (
     create_task_result_from_exception,
     create_task_result_skipped,
     create_task_result_success,
+    map_exception_to_download_status,
+    to_task_status,
 )
 
 # Template classes and functions
@@ -117,11 +121,14 @@ __all__ = [
     "CacheManager",
     "CacheMetadata",
     "CharacterFieldHandler",
+    "CorruptedContentException",
     "DataLayer",
     "DatasetCatalog",
     "DatasetInfo",
     "DateFieldHandler",
+    "DownloadAttemptStatus",
     "DownloadException",
+    "DownloadResult",
     "DuplicatedFolderException",
     "FieldHandler",
     "FieldHandlerFactory",
@@ -158,6 +165,7 @@ __all__ = [
     "json_convert_to_object",
     "list_templates",
     "load_function_by_name",
+    "map_exception_to_download_status",
     "process_etl",
     "process_marketdata",
     "reload_template",
@@ -165,4 +173,5 @@ __all__ = [
     "save_parquet_file",
     "save_partitioned_parquet_file",
     "sync_catalog_from_disk",
+    "to_task_status",
 ]

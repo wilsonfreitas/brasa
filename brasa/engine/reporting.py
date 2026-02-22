@@ -30,6 +30,147 @@ from rich.panel import Panel
 from rich.text import Text
 
 
+class DownloadAttemptStatus(Enum):
+    """Deterministic status code for every download attempt.
+
+    Each download attempt produces exactly one status code that
+    classifies the outcome. Symbols are single-character and
+    non-conflicting.
+
+    Attributes:
+        PASSED: Successful download completion.
+        FAILED: Expected download failure (DownloadException).
+        ERROR: Unexpected unhandled exception.
+        SKIPPED: Download skipped (_should_download returned False).
+        DUPLICATED: Target raw folder already exists (DuplicatedFolderException).
+        INVALID: Downloaded file fails validation (InvalidContentException).
+        WARNING: Successful download with non-terminal warnings.
+    """
+
+    PASSED = "passed"
+    FAILED = "failed"
+    ERROR = "error"
+    SKIPPED = "skipped"
+    DUPLICATED = "duplicated"
+    INVALID = "invalid"
+    CORRUPTED = "corrupted"
+    WARNING = "warning"
+
+    @property
+    def symbol(self) -> str:
+        """Get the single-character symbol for this status.
+
+        Returns:
+            A single character representing the status.
+        """
+        symbols = {
+            DownloadAttemptStatus.PASSED: ".",
+            DownloadAttemptStatus.FAILED: "F",
+            DownloadAttemptStatus.ERROR: "E",
+            DownloadAttemptStatus.SKIPPED: "S",
+            DownloadAttemptStatus.DUPLICATED: "D",
+            DownloadAttemptStatus.INVALID: "I",
+            DownloadAttemptStatus.CORRUPTED: "C",
+            DownloadAttemptStatus.WARNING: "W",
+        }
+        return symbols[self]
+
+    @property
+    def color(self) -> str:
+        """Get the rich color for this status.
+
+        Returns:
+            A rich color string for terminal display.
+        """
+        colors = {
+            DownloadAttemptStatus.PASSED: "green",
+            DownloadAttemptStatus.FAILED: "red",
+            DownloadAttemptStatus.ERROR: "red bold",
+            DownloadAttemptStatus.SKIPPED: "yellow",
+            DownloadAttemptStatus.DUPLICATED: "cyan",
+            DownloadAttemptStatus.INVALID: "magenta",
+            DownloadAttemptStatus.CORRUPTED: "yellow",
+            DownloadAttemptStatus.WARNING: "yellow",
+        }
+        return colors[self]
+
+
+def map_exception_to_download_status(
+    ex: Exception | None,
+) -> DownloadAttemptStatus:
+    """Map an exception to a deterministic DownloadAttemptStatus.
+
+    Uses the exception taxonomy defined in brasa/engine/exceptions.py
+    to classify each outcome:
+    - None -> PASSED
+    - DownloadException -> FAILED
+    - DuplicatedFolderException -> DUPLICATED
+    - InvalidContentException -> INVALID
+    - Any other Exception -> ERROR
+
+    Args:
+        ex: The exception raised during download, or None for success.
+
+    Returns:
+        The corresponding DownloadAttemptStatus.
+    """
+    from .exceptions import (
+        CorruptedContentException,
+        DownloadException,
+        DuplicatedFolderException,
+        InvalidContentException,
+    )
+
+    if ex is None:
+        return DownloadAttemptStatus.PASSED
+    if isinstance(ex, DuplicatedFolderException):
+        return DownloadAttemptStatus.DUPLICATED
+    if isinstance(ex, CorruptedContentException):
+        return DownloadAttemptStatus.CORRUPTED
+    if isinstance(ex, InvalidContentException):
+        return DownloadAttemptStatus.INVALID
+    if isinstance(ex, DownloadException):
+        return DownloadAttemptStatus.FAILED
+    return DownloadAttemptStatus.ERROR
+
+
+def to_task_status(
+    download_status: DownloadAttemptStatus,
+) -> TaskStatus:
+    """Convert a DownloadAttemptStatus to the legacy TaskStatus.
+
+    Maintains backward compatibility for downstream code that
+    consumes TaskReport / TaskStatus.
+
+    Mapping:
+        PASSED   -> TaskStatus.PASSED
+        FAILED   -> TaskStatus.FAILED
+        ERROR    -> TaskStatus.ERROR
+        SKIPPED  -> TaskStatus.SKIPPED
+        DUPLICATED -> TaskStatus.PASSED  (cache-reusable success)
+        INVALID  -> TaskStatus.FAILED    (permanent content validation failure)
+        CORRUPTED -> TaskStatus.FAILED   (transient content failure, retryable)
+        WARNING  -> TaskStatus.WARNING
+
+    Args:
+        download_status: The download attempt status to convert.
+
+    Returns:
+        The corresponding TaskStatus for report integration.
+    """
+    mapping = {
+        DownloadAttemptStatus.PASSED: TaskStatus.PASSED,
+        DownloadAttemptStatus.FAILED: TaskStatus.FAILED,
+        DownloadAttemptStatus.ERROR: TaskStatus.ERROR,
+        DownloadAttemptStatus.SKIPPED: TaskStatus.SKIPPED,
+        DownloadAttemptStatus.DUPLICATED: TaskStatus.PASSED,
+        DownloadAttemptStatus.INVALID: TaskStatus.FAILED,
+        DownloadAttemptStatus.CORRUPTED: TaskStatus.FAILED,
+        DownloadAttemptStatus.WARNING: TaskStatus.WARNING,
+    }
+    return mapping[download_status]
+
+
 class TaskStatus(Enum):
     """Status of a task execution."""
 
@@ -439,6 +580,17 @@ class TaskReport:
             1 for r in self.results if r.status == TaskStatus.WARNING or r.warnings
         )
 
+        # Extract download-specific status counts from extra_info
+        duplicated = sum(
+            1 for r in self.results if r.extra_info.get("download_status_code") == "D"
+        )
+        invalid = sum(
+            1 for r in self.results if r.extra_info.get("download_status_code") == "I"
+        )
+        corrupted = sum(
+            1 for r in self.results if r.extra_info.get("download_status_code") == "C"
+        )
+
         elapsed = 0.0
         if self._start_time and self._end_time:
             elapsed = (self._end_time - self._start_time).total_seconds()
@@ -456,6 +608,12 @@ class TaskReport:
             parts.append(f"[red bold]{errors} error[/red bold]")
         if skipped:
             parts.append(f"[yellow]{skipped} skipped[/yellow]")
+        if duplicated:
+            parts.append(f"[cyan]{duplicated} duplicated[/cyan]")
+        if invalid:
+            parts.append(f"[magenta]{invalid} invalid[/magenta]")
+        if corrupted:
+            parts.append(f"[yellow]{corrupted} corrupted[/yellow]")
         if warnings_count:
             parts.append(f"[yellow]{warnings_count} warning[/yellow]")
 
@@ -506,6 +664,21 @@ class TaskReport:
                 "errors": sum(1 for r in self.results if r.status == TaskStatus.ERROR),
                 "skipped": sum(
                     1 for r in self.results if r.status == TaskStatus.SKIPPED
+                ),
+                "duplicated": sum(
+                    1
+                    for r in self.results
+                    if r.extra_info.get("download_status_code") == "D"
+                ),
+                "invalid": sum(
+                    1
+                    for r in self.results
+                    if r.extra_info.get("download_status_code") == "I"
+                ),
+                "corrupted": sum(
+                    1
+                    for r in self.results
+                    if r.extra_info.get("download_status_code") == "C"
                 ),
                 "warnings": sum(
                     1
@@ -569,6 +742,15 @@ class TaskReport:
         failed = sum(1 for r in self.results if r.status == TaskStatus.FAILED)
         error_count = sum(1 for r in self.results if r.status == TaskStatus.ERROR)
         skipped = sum(1 for r in self.results if r.status == TaskStatus.SKIPPED)
+        duplicated_count = sum(
+            1 for r in self.results if r.extra_info.get("download_status_code") == "D"
+        )
+        invalid_count = sum(
+            1 for r in self.results if r.extra_info.get("download_status_code") == "I"
+        )
+        corrupted_count = sum(
+            1 for r in self.results if r.extra_info.get("download_status_code") == "C"
+        )
         warning_count = sum(
             1 for r in self.results if r.status == TaskStatus.WARNING or r.warnings
         )
@@ -578,6 +760,9 @@ class TaskReport:
         console.print(f"Failed: {failed}")
         console.print(f"Errors: {error_count}")
         console.print(f"Skipped: {skipped}")
+        console.print(f"Duplicated: {duplicated_count}")
+        console.print(f"Invalid: {invalid_count}")
+        console.print(f"Corrupted: {corrupted_count}")
         console.print(f"Warnings: {warning_count}")
 
 

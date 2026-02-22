@@ -22,6 +22,8 @@ This plan defines and implements a single, deterministic download status model f
 - **REQ-004**: CLI/report output must display both aggregate counts and per-task status symbols.
 - **REQ-005**: Existing behavior for cache reuse, reprocess, and invalid download skip must remain backward compatible.
 - **REQ-006**: Existing `TaskStatus` behavior must continue to work for downstream code that consumes `TaskReport`.
+- **REQ-009**: A dedicated migration script must exist to evolve existing `download_trials` tables to the new status schema in already-initialized caches.
+- **REQ-010**: `DUPLICATED (D)` must be treated as cache-reusable outcome for scheduling decisions; future trials for the same cache id must be skipped unless `reprocess=True`.
 - **SEC-001**: Do not persist sensitive payload data in status fields; store only status code, reason, and optional HTTP/status metadata.
 - **CON-001**: Use SQLite metadata database (`meta.db`) and existing CacheManager persistence patterns.
 - **CON-002**: Python and dependencies must remain compatible with versions in `pyproject.toml`.
@@ -47,6 +49,11 @@ This plan defines and implements a single, deterministic download status model f
 - **REQ-007**: Symbol `S` is reserved for SKIPPED only.
 - **REQ-008**: Success symbol is `.` only (no `S` alias) to avoid collision.
 
+### Future-Trial Scheduling Rule
+
+- **REQ-011**: `_should_download(...)` must return `False` when last persisted status for the same cache id is `D` and downloaded files still exist, producing runtime task status `S` for the new attempt.
+- **REQ-012**: If last status is `D` but required raw files are missing, `_should_download(...)` must return `True` to recover data.
+
 ## 2. Implementation Steps
 
 ### Implementation Phase 1: Define Status Model
@@ -70,9 +77,11 @@ This plan defines and implements a single, deterministic download status model f
 |------|-------------|-----------|------|
 | TASK-005 | Update `sql/create-meta-db.sql` to include new `download_trials` columns: `status_code TEXT`, `status_name TEXT`, `reason TEXT`, `http_status INTEGER`. |  |  |
 | TASK-006 | Add migration logic in `brasa/engine/cache.py::init` to `ALTER TABLE download_trials` for missing columns (idempotent checks via `PRAGMA table_info`). |  |  |
+| TASK-006A | Create migration script `scripts/migrate_download_trials_status.py` that updates existing cache databases by adding missing columns and backfilling `status_code/status_name` from legacy `downloaded` values. |  |  |
 | TASK-007 | Refactor `CacheManager.save_trial(meta, downloaded)` to `save_trial(meta, status_code, status_name, reason="", http_status=None)` and keep backward wrapper for internal compatibility during transition. |  |  |
 | TASK-008 | Add `CacheManager.get_last_download_status(meta)` returning structured dict with code/name/reason/http status for CLI/report usage. |  |  |
 | TASK-009 | Add tests in `tests/test_cache.py` validating legacy and migrated schemas, plus persisted status retrieval. |  |  |
+| TASK-009A | Add migration-script tests in `tests/test_download_trials_migration.py` covering: idempotent reruns, partial-schema caches, and backfill correctness (`downloaded=1 -> . / PASSED`, `downloaded=0 -> F / FAILED`). |  |  |
 
 ### Implementation Phase 3: Classify All Download Outcomes in Runtime Flow
 
@@ -83,6 +92,7 @@ This plan defines and implements a single, deterministic download status model f
 |------|-------------|-----------|------|
 | TASK-010 | In `brasa/engine/cache.py::download_marketdata`, replace boolean `save_trial` calls with explicit statuses: success `.`/PASSED, duplicated `D`, invalid `I`, expected failure `F`, unexpected error `E`. |  |  |
 | TASK-011 | In `brasa/engine/api.py::download_marketdata`, record skip `S` when `_should_download(...)` returns `False` (without invoking downloader). |  |  |
+| TASK-011A | Update `_should_download` decision in `brasa/engine/api.py` to treat last status `D` as skip-eligible, with file-existence guard to redownload when raw files are missing. |  |  |
 | TASK-012 | Extend `DownloadException` creation points in `brasa/downloaders/downloaders.py` to include optional normalized HTTP status extraction for persistence (`http_status`). |  |  |
 | TASK-013 | Ensure invalid-download short-circuit in `_should_download` remains SKIPPED (`S`) and reason includes `invalid_download_reason` that references validation-rule failure context. |  |  |
 | TASK-014 | Add integration tests in `tests/test_invalid_downloads.py` and new `tests/test_download_status.py` for all 6 core status outcomes (`.,F,E,S,D,I`). |  |  |
@@ -109,6 +119,7 @@ This plan defines and implements a single, deterministic download status model f
 | TASK-019 | Add section "Download Status Codes" to `docs/USER_GUIDE.md` with complete code table and branch mapping. |  |  |
 | TASK-020 | Update `docs/IMPLEMENTATION_INVALID_DOWNLOADS.md` to reference `I` (invalid) vs `S` (skipped) behavior. |  |  |
 | TASK-021 | Add changelog entry to `README.md` or release notes section describing new deterministic statuses and DB migration impact. |  |  |
+| TASK-022 | Document migration script usage in `docs/USER_GUIDE.md` with command examples and rollback notes. |  |  |
 
 ## 3. Alternatives
 
@@ -123,6 +134,7 @@ This plan defines and implements a single, deterministic download status model f
 - **DEP-002**: Existing reporting framework in `brasa/engine/reporting.py`.
 - **DEP-003**: SQLite schema bootstrap in `sql/create-meta-db.sql` and cache initialization in `brasa/engine/cache.py`.
 - **DEP-004**: pytest test framework and fixtures in `tests/conftest.py`.
+- **DEP-005**: Python runtime script execution via Poetry (`poetry run python scripts/migrate_download_trials_status.py`).
 
 ## 5. Files
 
@@ -134,8 +146,10 @@ This plan defines and implements a single, deterministic download status model f
 - **FILE-006**: `brasa/cli.py` - Display status legend and extended status summaries.
 - **FILE-007**: `tests/test_reporting.py` - Add symbol uniqueness and mapping tests.
 - **FILE-008**: `tests/test_cache.py` - Add persistence/migration tests for download status columns.
+- **FILE-008A**: `scripts/migrate_download_trials_status.py` - Migration utility for existing `download_trials` tables.
 - **FILE-009**: `tests/test_download_status.py` - Add end-to-end status outcome tests.
 - **FILE-010**: `tests/test_invalid_downloads.py` - Extend tests for invalid vs skipped semantics.
+- **FILE-010A**: `tests/test_download_trials_migration.py` - Script-specific migration and backfill tests.
 - **FILE-011**: `docs/USER_GUIDE.md` - Document status taxonomy and interpretation.
 - **FILE-012**: `docs/IMPLEMENTATION_INVALID_DOWNLOADS.md` - Align invalid download behavior with new status model.
 
@@ -147,8 +161,11 @@ This plan defines and implements a single, deterministic download status model f
 - **TEST-004**: Verify `DownloadException` maps to `F`, including optional HTTP status persistence.
 - **TEST-005**: Verify generic `Exception` maps to `E`.
 - **TEST-006**: Verify `_should_download == False` path records/returns `S` in report output.
+- **TEST-006A**: Verify first attempt ending in `D` causes subsequent attempt (same args, no reprocess) to be skipped (`S`) when raw files exist.
+- **TEST-006B**: Verify prior `D` does not skip when raw files were deleted; new download attempt must run.
 - **TEST-007**: Verify successful downloads record `.` with non-empty downloaded file list.
 - **TEST-008**: Verify migration of existing `download_trials` schema does not break old data reads.
+- **TEST-008A**: Verify migration script backfills legacy rows deterministically (`downloaded=1` to passed, `downloaded=0` to failed) and is idempotent.
 - **TEST-009**: Verify report JSON contains `download_status_code`, `download_status_name`, `download_status_reason`, and `http_status` when available.
 
 ## 7. Risks & Assumptions
@@ -157,6 +174,7 @@ This plan defines and implements a single, deterministic download status model f
 - **RISK-002**: SQLite migration can fail on locked database files - Mitigate with explicit error handling and startup warnings.
 - **RISK-003**: Some downloaders may not expose HTTP status consistently - Mitigate by allowing `http_status=NULL` and preserving reason text.
 - **RISK-004**: Legacy tooling may assume boolean `downloaded` semantics only - Mitigate by preserving legacy column and derived compatibility.
+- **RISK-005**: False skip after `D` when filesystem state changed - Mitigate by validating raw file existence before applying skip.
 - **ASSUMPTION-001**: All download attempts continue to pass through `CacheManager.download_marketdata` and `api.download_marketdata`.
 - **ASSUMPTION-002**: Existing tests can be expanded without changing external network dependencies.
 

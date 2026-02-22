@@ -4,6 +4,24 @@
 
 Added comprehensive support for tracking and managing invalid downloads in the cache metadata. This prevents duplicate download attempts for files that fail validation and provides a clear way to force re-download when needed.
 
+### Relationship to Download Status Codes
+
+Invalid downloads are now classified under the deterministic download status
+model. Each download attempt receives exactly one status code:
+
+| Code | Meaning |
+|------|---------|
+| `I`  | **INVALID** – Downloaded file failed template validation (`InvalidContentException`). |
+| `S`  | **SKIPPED** – Download skipped because cache entry is already marked invalid (or other skip condition). |
+
+When a file fails validation:
+1. The attempt is recorded as `I` (INVALID) in `download_trials`.
+2. `CacheMetadata.is_invalid_download` is set to `True`.
+3. Future attempts for the same cache entry return `S` (SKIPPED) unless
+   `reprocess=True` is specified.
+
+See [USER_GUIDE.md → Download Status Codes](USER_GUIDE.md#download-status-codes) for the complete status taxonomy.
+
 ## Changes Made
 
 ### 1. New Exception Type

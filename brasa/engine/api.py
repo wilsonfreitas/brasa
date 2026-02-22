@@ -14,7 +14,7 @@ import pandas as pd
 
 from brasa.util import KwargsIterator
 
-from .cache import CacheManager, CacheMetadata
+from .cache import CacheManager, CacheMetadata, DownloadResult
 from .exceptions import DownloadException
 from .reporting import (
     TaskReport,
@@ -28,7 +28,7 @@ from .reporting import (
 from .template import retrieve_template
 
 
-def _should_download(cache: CacheManager, meta: CacheMetadata, reprocess: bool) -> bool:
+def _should_download(cache: CacheManager, meta: CacheMetadata, reprocess: bool) -> bool:  # noqa: PLR0911
     """Determine if data should be downloaded.
 
     Args:
@@ -50,6 +50,18 @@ def _should_download(cache: CacheManager, meta: CacheMetadata, reprocess: bool) 
         # If metadata is marked as invalid, skip unless forced with reprocess
         if meta.is_invalid_download:
             return False
+
+    # REQ-011: Treat last status D (DUPLICATED) as skip-eligible
+    last_status = cache.get_last_download_status(meta)
+    if last_status and last_status["code"] == "D":
+        # REQ-012: Guard - redownload if raw files are missing
+        if cache.has_meta(meta):
+            raw_files_exist = all(
+                Path(cache.cache_path(f)).exists() for f in meta.downloaded_files
+            )
+            return not raw_files_exist
+        # No metadata but last trial was D - redownload
+        return True
 
     if not cache.has_successful_trial(meta):
         if cache.has_meta(meta):
@@ -103,6 +115,103 @@ def get_marketdata(
         return get_marketdata(template_name, reprocess=True, **kwargs)
 
 
+def _build_result_from_download(
+    dl: DownloadResult,
+    template_name: str,
+    args: dict,
+    duration: float,
+    meta: CacheMetadata,
+    captured_warnings: list[str],
+) -> "TaskResult":
+    """Build a TaskResult from a DownloadResult.
+
+    Maps success/failure to the appropriate TaskResult constructor
+    and attaches download status metadata to extra_info.
+
+    Args:
+        dl: The DownloadResult returned by CacheManager.download_marketdata.
+        template_name: Name of the template.
+        args: Download arguments for this iteration.
+        duration: Elapsed time in seconds.
+        meta: Cache metadata (may be reloaded after download).
+        captured_warnings: Warnings captured during the download.
+
+    Returns:
+        A TaskResult with download status attached.
+    """
+    if dl.is_success:
+        result = create_task_result_success(
+            operation="download",
+            template_name=template_name,
+            args=args,
+            duration=duration,
+            downloaded_files=meta.downloaded_files,
+            processed_files=meta.processed_files,
+            captured_warnings=captured_warnings,
+        )
+    else:
+        result = create_task_result_from_exception(
+            exception=dl.exception or Exception(dl.reason),
+            operation="download",
+            template_name=template_name,
+            args=args,
+            duration=duration,
+            downloaded_files=meta.downloaded_files,
+            processed_files=meta.processed_files,
+            captured_warnings=captured_warnings,
+            is_expected_error=dl.is_expected_error,
+        )
+
+    result.extra_info["download_status_code"] = dl.status_code
+    result.extra_info["download_status_name"] = dl.status_name
+    result.extra_info["download_status_reason"] = dl.reason
+    if dl.http_status is not None:
+        result.extra_info["http_status"] = str(dl.http_status)
+
+    return result
+
+
+def _build_result_skipped(
+    cache: CacheManager,
+    meta: CacheMetadata,
+    template_name: str,
+    args: dict,
+    duration: float,
+) -> "TaskResult":
+    """Build a SKIPPED TaskResult with an appropriate reason.
+
+    Args:
+        cache: Cache manager instance.
+        meta: Cache metadata (loaded during _should_download).
+        template_name: Name of the template.
+        args: Download arguments for this iteration.
+        duration: Elapsed time in seconds.
+
+    Returns:
+        A TaskResult with SKIPPED status and reason.
+    """
+    skip_reason = "already downloaded"
+    if meta.is_invalid_download:
+        skip_reason = f"invalid download: {meta.invalid_download_reason}"
+    else:
+        last = cache.get_last_download_status(meta)
+        if last and last["code"] == "D":
+            skip_reason = "duplicated (cached)"
+
+    result = create_task_result_skipped(
+        operation="download",
+        template_name=template_name,
+        args=args,
+        duration=duration,
+        downloaded_files=meta.downloaded_files,
+        processed_files=meta.processed_files,
+    )
+    result.extra_info["download_status_code"] = "S"
+    result.extra_info["download_status_name"] = "SKIPPED"
+    result.extra_info["download_status_reason"] = skip_reason
+    return result
+
+
 def download_marketdata(
     template_name: str,
     reprocess: bool = False,
@@ -150,70 +259,37 @@ def download_marketdata(
         meta.processed_files = {}
 
         with capture_warnings() as captured_warnings:
-            try:
-                should_download = _should_download(cache, meta, reprocess)
+            should_download = _should_download(cache, meta, reprocess)
 
-                if should_download:
-                    # Apply delay between downloads (not before the first one)
-                    if download_delay > 0:
-                        time.sleep(download_delay)
+            if should_download:
+                # Apply delay between downloads (not before the first one)
+                if download_delay > 0:
+                    time.sleep(download_delay)
 
-                    cache.download_marketdata(meta)
+                dl = cache.download_marketdata(meta)
 
-                    # Reload meta to get downloaded files
-                    if cache.has_meta(meta):
-                        cache.load_meta(meta)
+                # Reload meta to get downloaded files
+                if cache.has_meta(meta):
+                    cache.load_meta(meta)
 
-                    duration = (datetime.now() - start_time).total_seconds()
-
-                    result = create_task_result_success(
-                        operation="download",
-                        template_name=template_name,
-                        args=args,
-                        duration=duration,
-                        downloaded_files=meta.downloaded_files,
-                        processed_files=meta.processed_files,
-                        captured_warnings=captured_warnings,
-                    )
-                else:
-                    # Task was skipped (already downloaded)
-                    duration = (datetime.now() - start_time).total_seconds()
-
-                    result = create_task_result_skipped(
-                        operation="download",
-                        template_name=template_name,
-                        args=args,
-                        duration=duration,
-                        downloaded_files=meta.downloaded_files,
-                        processed_files=meta.processed_files,
-                    )
-
-            except DownloadException as ex:
                 duration = (datetime.now() - start_time).total_seconds()
-                result = create_task_result_from_exception(
-                    exception=ex,
-                    operation="download",
-                    template_name=template_name,
-                    args=args,
-                    duration=duration,
-                    downloaded_files=meta.downloaded_files,
-                    processed_files=meta.processed_files,
-                    captured_warnings=captured_warnings,
-                    is_expected_error=True,
+                result = _build_result_from_download(
+                    dl,
+                    template_name,
+                    args,
+                    duration,
+                    meta,
+                    captured_warnings,
                 )
-
-            except Exception as ex:
+            else:
+                # Task was skipped (already downloaded or duplicated/invalid)
                 duration = (datetime.now() - start_time).total_seconds()
-                result = create_task_result_from_exception(
-                    exception=ex,
-                    operation="download",
-                    template_name=template_name,
-                    args=args,
-                    duration=duration,
-                    downloaded_files=meta.downloaded_files,
-                    processed_files=meta.processed_files,
-                    captured_warnings=captured_warnings,
-                    is_expected_error=False,
+                result = _build_result_skipped(
+                    cache,
+                    meta,
+                    template_name,
+                    args,
+                    duration,
                 )
 
         report.add_result(result)
