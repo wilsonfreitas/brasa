@@ -870,6 +870,7 @@ def _get_companies_trading_names() -> list[str]:
     df = (
         get_dataset("brasa-companies")
         .filter(pc.field("company_status") == "ATIVO")
+        .filter(pc.field("asset_name") is not None)
         .scanner(columns=["trading_name"])
         .to_table()
         .to_pandas()
@@ -881,6 +882,7 @@ def _get_companies_names() -> list[str]:
     df = (
         get_dataset("brasa-companies")
         .filter(pc.field("company_status") == "ATIVO")
+        .filter(pc.field("asset_name") is not None)
         .scanner(columns=["asset_name"])
         .to_table()
         .to_pandas()
