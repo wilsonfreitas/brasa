@@ -659,7 +659,7 @@ class CacheManager(Singleton):
             warn("No processed files", stacklevel=2)
             return None
 
-    def download_marketdata(self, meta: CacheMetadata) -> DownloadResult:  # noqa: PLR0915
+    def download_marketdata(self, meta: CacheMetadata) -> DownloadResult:
         """Download market data and save to cache.
 
         Handles all download exceptions internally — callers never need
@@ -712,6 +712,7 @@ class CacheManager(Singleton):
                 status_code=".",
                 status_name="PASSED",
             )
+            self.save_meta(meta)
             result = DownloadResult(
                 status_code=".",
                 status_name="PASSED",
@@ -720,7 +721,6 @@ class CacheManager(Singleton):
                 retry_success_on_attempt=retry_info.get("success_on_attempt"),
             )
         except DuplicatedFolderException as e:
-            meta.download_checksum = meta.id
             self.save_trial(
                 meta,
                 downloaded=True,
@@ -728,6 +728,7 @@ class CacheManager(Singleton):
                 status_name="DUPLICATED",
                 reason=str(e),
             )
+            self.clean_meta_db(meta)
             result = DownloadResult(
                 status_code="D",
                 status_name="DUPLICATED",
@@ -735,10 +736,6 @@ class CacheManager(Singleton):
                 exception=e,
             )
         except InvalidContentException as e:
-            meta.is_invalid_download = True
-            meta.invalid_download_reason = str(e)
-            meta.download_checksum = meta.id
-            meta.downloaded_files = []
             self.save_trial(
                 meta,
                 downloaded=False,
@@ -746,6 +743,7 @@ class CacheManager(Singleton):
                 status_name="INVALID",
                 reason=str(e),
             )
+            self.clean_meta_db(meta)
             self.clean_meta_raw_folder(meta)
             result = DownloadResult(
                 status_code="I",
@@ -756,8 +754,6 @@ class CacheManager(Singleton):
                 exception=e,
             )
         except CorruptedContentException as e:
-            meta.download_checksum = meta.id
-            meta.downloaded_files = []
             self.save_trial(
                 meta,
                 downloaded=False,
@@ -765,6 +761,7 @@ class CacheManager(Singleton):
                 status_name="CORRUPTED",
                 reason=str(e),
             )
+            self.clean_meta_db(meta)
             self.clean_meta_raw_folder(meta)
             result = DownloadResult(
                 status_code="C",
@@ -775,8 +772,6 @@ class CacheManager(Singleton):
                 exception=e,
             )
         except DownloadException as e:
-            meta.download_checksum = meta.id
-            meta.downloaded_files = []
             http_status = _extract_http_status(e)
             self.save_trial(
                 meta,
@@ -796,8 +791,6 @@ class CacheManager(Singleton):
                 exception=e,
             )
         except Exception as e:
-            meta.download_checksum = meta.id
-            meta.downloaded_files = []
             self.save_trial(
                 meta,
                 downloaded=False,
@@ -805,6 +798,7 @@ class CacheManager(Singleton):
                 status_name="ERROR",
                 reason=str(e),
             )
+            self.clean_meta_db(meta)
             self.clean_meta_raw_folder(meta)
             result = DownloadResult(
                 status_code="E",
@@ -814,12 +808,6 @@ class CacheManager(Singleton):
                 is_expected_error=False,
                 exception=e,
             )
-        finally:
-            try:
-                self.save_meta(meta)
-            except Exception as e:
-                print(f"Failed to save meta for {meta.download_args}: {e}")
-                self.clean_meta_db(meta)
         return result  # type: ignore[return-value]
 
     def process_without_checks(

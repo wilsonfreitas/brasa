@@ -142,15 +142,9 @@ def to_task_status(
     Maintains backward compatibility for downstream code that
     consumes TaskReport / TaskStatus.
 
-    Mapping:
-        PASSED   -> TaskStatus.PASSED
-        FAILED   -> TaskStatus.FAILED
-        ERROR    -> TaskStatus.ERROR
-        SKIPPED  -> TaskStatus.SKIPPED
-        DUPLICATED -> TaskStatus.PASSED  (cache-reusable success)
-        INVALID  -> TaskStatus.FAILED    (permanent content validation failure)
-        CORRUPTED -> TaskStatus.FAILED   (transient content failure, retryable)
-        WARNING  -> TaskStatus.WARNING
+    Mapping is now 1:1 — every DownloadAttemptStatus maps to the
+    identically-named TaskStatus member so reports preserve the
+    exact outcome.
 
     Args:
         download_status: The download attempt status to convert.
@@ -163,32 +157,42 @@ def to_task_status(
         DownloadAttemptStatus.FAILED: TaskStatus.FAILED,
         DownloadAttemptStatus.ERROR: TaskStatus.ERROR,
         DownloadAttemptStatus.SKIPPED: TaskStatus.SKIPPED,
-        DownloadAttemptStatus.DUPLICATED: TaskStatus.PASSED,
-        DownloadAttemptStatus.INVALID: TaskStatus.FAILED,
-        DownloadAttemptStatus.CORRUPTED: TaskStatus.FAILED,
+        DownloadAttemptStatus.DUPLICATED: TaskStatus.DUPLICATED,
+        DownloadAttemptStatus.INVALID: TaskStatus.INVALID,
+        DownloadAttemptStatus.CORRUPTED: TaskStatus.CORRUPTED,
         DownloadAttemptStatus.WARNING: TaskStatus.WARNING,
     }
     return mapping[download_status]
 
 
 class TaskStatus(Enum):
-    """Status of a task execution."""
+    """Status of a task execution.
+
+    Members mirror DownloadAttemptStatus so that reports expose
+    the exact outcome without lossy mapping.
+    """
 
     PASSED = "passed"
     FAILED = "failed"
     ERROR = "error"
     SKIPPED = "skipped"
+    DUPLICATED = "duplicated"
+    INVALID = "invalid"
+    CORRUPTED = "corrupted"
     WARNING = "warning"
 
     @property
     def symbol(self) -> str:
-        """Get the pytest-style symbol for this status."""
+        """Get the single-character symbol for this status."""
         symbols = {
             TaskStatus.PASSED: ".",
             TaskStatus.FAILED: "F",
             TaskStatus.ERROR: "E",
-            TaskStatus.SKIPPED: "s",
-            TaskStatus.WARNING: "w",
+            TaskStatus.SKIPPED: "S",
+            TaskStatus.DUPLICATED: "D",
+            TaskStatus.INVALID: "I",
+            TaskStatus.CORRUPTED: "C",
+            TaskStatus.WARNING: "W",
         }
         return symbols[self]
 
@@ -200,6 +204,9 @@ class TaskStatus(Enum):
             TaskStatus.FAILED: "red",
             TaskStatus.ERROR: "red bold",
             TaskStatus.SKIPPED: "yellow",
+            TaskStatus.DUPLICATED: "cyan",
+            TaskStatus.INVALID: "magenta",
+            TaskStatus.CORRUPTED: "yellow",
             TaskStatus.WARNING: "yellow",
         }
         return colors[self]
@@ -436,9 +443,13 @@ class TaskReport:
 
         # Always show report if there are failures/errors
         # In quiet mode, only show if there are problems
-        has_problems = any(
-            r.status in (TaskStatus.FAILED, TaskStatus.ERROR) for r in self.results
+        _problem_statuses = (
+            TaskStatus.FAILED,
+            TaskStatus.ERROR,
+            TaskStatus.INVALID,
+            TaskStatus.CORRUPTED,
         )
+        has_problems = any(r.status in _problem_statuses for r in self.results)
         has_warnings = any(
             r.status == TaskStatus.WARNING or r.warnings for r in self.results
         )
@@ -453,7 +464,16 @@ class TaskReport:
 
     def _print_detailed_report(self) -> None:
         """Print detailed report of failures, errors, and warnings."""
-        failures = [r for r in self.results if r.status == TaskStatus.FAILED]
+        failures = [
+            r
+            for r in self.results
+            if r.status
+            in (
+                TaskStatus.FAILED,
+                TaskStatus.INVALID,
+                TaskStatus.CORRUPTED,
+            )
+        ]
         errors = [r for r in self.results if r.status == TaskStatus.ERROR]
         warnings_results = [
             r for r in self.results if r.status == TaskStatus.WARNING or r.warnings
@@ -479,7 +499,9 @@ class TaskReport:
 
     def _print_result_detail(self, index: int, result: TaskResult) -> None:
         """Print detailed information about a failed/error result."""
-        status_color = "red" if result.status == TaskStatus.FAILED else "red bold"
+        status_color = (
+            result.status.color if result.status != TaskStatus.ERROR else "red bold"
+        )
         header = f"[{index}] {result.status.value.upper()} {result.operation} {result.args_summary}"
 
         self.console.print(
@@ -576,19 +598,11 @@ class TaskReport:
         failed = sum(1 for r in self.results if r.status == TaskStatus.FAILED)
         errors = sum(1 for r in self.results if r.status == TaskStatus.ERROR)
         skipped = sum(1 for r in self.results if r.status == TaskStatus.SKIPPED)
+        duplicated = sum(1 for r in self.results if r.status == TaskStatus.DUPLICATED)
+        invalid = sum(1 for r in self.results if r.status == TaskStatus.INVALID)
+        corrupted = sum(1 for r in self.results if r.status == TaskStatus.CORRUPTED)
         warnings_count = sum(
             1 for r in self.results if r.status == TaskStatus.WARNING or r.warnings
-        )
-
-        # Extract download-specific status counts from extra_info
-        duplicated = sum(
-            1 for r in self.results if r.extra_info.get("download_status_code") == "D"
-        )
-        invalid = sum(
-            1 for r in self.results if r.extra_info.get("download_status_code") == "I"
-        )
-        corrupted = sum(
-            1 for r in self.results if r.extra_info.get("download_status_code") == "C"
         )
 
         elapsed = 0.0
@@ -666,19 +680,13 @@ class TaskReport:
                     1 for r in self.results if r.status == TaskStatus.SKIPPED
                 ),
                 "duplicated": sum(
-                    1
-                    for r in self.results
-                    if r.extra_info.get("download_status_code") == "D"
+                    1 for r in self.results if r.status == TaskStatus.DUPLICATED
                 ),
                 "invalid": sum(
-                    1
-                    for r in self.results
-                    if r.extra_info.get("download_status_code") == "I"
+                    1 for r in self.results if r.status == TaskStatus.INVALID
                 ),
                 "corrupted": sum(
-                    1
-                    for r in self.results
-                    if r.extra_info.get("download_status_code") == "C"
+                    1 for r in self.results if r.status == TaskStatus.CORRUPTED
                 ),
                 "warnings": sum(
                     1
@@ -699,7 +707,16 @@ class TaskReport:
         )
 
         # Re-print the report to file
-        failures = [r for r in self.results if r.status == TaskStatus.FAILED]
+        failures = [
+            r
+            for r in self.results
+            if r.status
+            in (
+                TaskStatus.FAILED,
+                TaskStatus.INVALID,
+                TaskStatus.CORRUPTED,
+            )
+        ]
         errors = [r for r in self.results if r.status == TaskStatus.ERROR]
         warnings_results = [
             r for r in self.results if r.status == TaskStatus.WARNING or r.warnings
@@ -743,13 +760,11 @@ class TaskReport:
         error_count = sum(1 for r in self.results if r.status == TaskStatus.ERROR)
         skipped = sum(1 for r in self.results if r.status == TaskStatus.SKIPPED)
         duplicated_count = sum(
-            1 for r in self.results if r.extra_info.get("download_status_code") == "D"
+            1 for r in self.results if r.status == TaskStatus.DUPLICATED
         )
-        invalid_count = sum(
-            1 for r in self.results if r.extra_info.get("download_status_code") == "I"
-        )
+        invalid_count = sum(1 for r in self.results if r.status == TaskStatus.INVALID)
         corrupted_count = sum(
-            1 for r in self.results if r.extra_info.get("download_status_code") == "C"
+            1 for r in self.results if r.status == TaskStatus.CORRUPTED
         )
         warning_count = sum(
             1 for r in self.results if r.status == TaskStatus.WARNING or r.warnings

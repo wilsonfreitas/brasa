@@ -108,7 +108,7 @@ class TestReportJsonContainsStatusFields:
         report = TaskReport("download", "test-template", Verbosity.QUIET)
         report.start(total=1)
         result = _make_result(
-            TaskStatus.PASSED, "D", "DUPLICATED", reason="folder exists"
+            TaskStatus.DUPLICATED, "D", "DUPLICATED", reason="folder exists"
         )
         report.add_result(result)
         report.finish()
@@ -129,7 +129,7 @@ class TestReportJsonContainsStatusFields:
         report = TaskReport("download", "test-template", Verbosity.QUIET)
         report.start(total=1)
         result = _make_result(
-            TaskStatus.FAILED,
+            TaskStatus.INVALID,
             "I",
             "INVALID",
             reason="validation failed for file",
@@ -171,9 +171,9 @@ class TestReportJsonContainsStatusFields:
         report = TaskReport("download", "test-template", Verbosity.QUIET)
         report.start(total=4)
         report.add_result(_make_result(TaskStatus.PASSED, ".", "PASSED"))
-        report.add_result(_make_result(TaskStatus.PASSED, "D", "DUPLICATED"))
-        report.add_result(_make_result(TaskStatus.FAILED, "I", "INVALID"))
-        report.add_result(_make_result(TaskStatus.FAILED, "C", "CORRUPTED"))
+        report.add_result(_make_result(TaskStatus.DUPLICATED, "D", "DUPLICATED"))
+        report.add_result(_make_result(TaskStatus.INVALID, "I", "INVALID"))
+        report.add_result(_make_result(TaskStatus.CORRUPTED, "C", "CORRUPTED"))
         report.finish()
 
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
@@ -186,15 +186,15 @@ class TestReportJsonContainsStatusFields:
         assert data["summary"]["duplicated"] == 1
         assert data["summary"]["invalid"] == 1
         assert data["summary"]["corrupted"] == 1
-        assert data["summary"]["passed"] == 2
-        assert data["summary"]["failed"] == 2
+        assert data["summary"]["passed"] == 1
+        assert data["summary"]["failed"] == 0
         Path(filepath).unlink()
 
     def test_corrupted_status_in_json(self):
         report = TaskReport("download", "test-template", Verbosity.QUIET)
         report.start(total=1)
         result = _make_result(
-            TaskStatus.FAILED,
+            TaskStatus.CORRUPTED,
             "C",
             "CORRUPTED",
             reason="truncated file detected",

@@ -150,8 +150,10 @@ class TestDuplicatedStatus:
         assert DownloadAttemptStatus.DUPLICATED.symbol == "D"
 
     def test_duplicated_converts_to_task_passed(self):
-        """D is cache-reusable -> maps to PASSED."""
-        assert to_task_status(DownloadAttemptStatus.DUPLICATED) == (TaskStatus.PASSED)
+        """D maps directly to DUPLICATED."""
+        assert to_task_status(DownloadAttemptStatus.DUPLICATED) == (
+            TaskStatus.DUPLICATED
+        )
 
     def test_duplicated_persists(self, temp_cache):
         meta = CacheMetadata("test-template")
@@ -214,61 +216,109 @@ class TestDuplicatedStatus:
         assert result is True
 
 
-class TestChecksumUniqueness:
-    """Verify failed downloads don't collide on download_checksum UNIQUE."""
+class TestNoMetaForFailures:
+    """Verify I/C/F/E do not persist cache_metadata rows.
 
-    def test_two_invalid_downloads_same_content_no_collision(self, temp_cache):
-        """Two different dates producing the same empty file should both persist."""
-        meta1 = CacheMetadata("test-template")
-        meta1.download_args = {"refdate": "2025-01-01"}
-        meta1.download_checksum = meta1.id  # simulate the fix
-        meta1.is_invalid_download = True
-        meta1.invalid_download_reason = "empty file"
-        temp_cache.save_meta(meta1)
+    Only PASSED and DUPLICATED save to cache_metadata.
+    Failed statuses are tracked exclusively via download_trials.
+    """
 
-        meta2 = CacheMetadata("test-template")
-        meta2.download_args = {"refdate": "2025-01-02"}
-        meta2.download_checksum = meta2.id  # simulate the fix
-        meta2.is_invalid_download = True
-        meta2.invalid_download_reason = "empty file"
-        temp_cache.save_meta(meta2)
-
-        # Both entries saved — verify via has_meta
-        assert temp_cache.has_meta(meta1)
-        assert temp_cache.has_meta(meta2)
-        assert meta1.id != meta2.id
-
-    def test_two_failed_downloads_no_collision(self, temp_cache):
-        """Two failed downloads (checksum never set) should both persist."""
-        meta1 = CacheMetadata("test-template")
-        meta1.download_args = {"refdate": "2025-01-01"}
-        meta1.download_checksum = meta1.id
-        temp_cache.save_meta(meta1)
-
-        meta2 = CacheMetadata("test-template")
-        meta2.download_args = {"refdate": "2025-01-02"}
-        meta2.download_checksum = meta2.id
-        temp_cache.save_meta(meta2)
-
-        assert temp_cache.has_meta(meta1)
-        assert temp_cache.has_meta(meta2)
-
-    def test_invalid_meta_preserved_after_second_save(self, temp_cache):
-        """is_invalid_download flag survives when checksum is meta.id."""
+    def test_invalid_no_meta_row(self, temp_cache):
+        """INVALID trial exists but no cache_metadata row."""
         meta = CacheMetadata("test-template")
         meta.download_args = {"refdate": "2025-01-01"}
-        meta.download_checksum = meta.id
-        meta.is_invalid_download = True
-        meta.invalid_download_reason = "empty file"
-        temp_cache.save_meta(meta)
+        temp_cache.save_trial(
+            meta,
+            downloaded=False,
+            status_code="I",
+            status_name="INVALID",
+            reason="empty file",
+        )
+        assert not temp_cache.has_meta(meta)
+        status = temp_cache.get_last_download_status(meta)
+        assert status["code"] == "I"
 
-        # Reload and verify
+    def test_corrupted_no_meta_row(self, temp_cache):
+        """CORRUPTED trial exists but no cache_metadata row."""
+        meta = CacheMetadata("test-template")
+        meta.download_args = {"refdate": "2025-01-01"}
+        temp_cache.save_trial(
+            meta,
+            downloaded=False,
+            status_code="C",
+            status_name="CORRUPTED",
+            reason="truncated",
+        )
+        assert not temp_cache.has_meta(meta)
+
+    def test_failed_no_meta_row(self, temp_cache):
+        """FAILED trial exists but no cache_metadata row."""
+        meta = CacheMetadata("test-template")
+        meta.download_args = {"refdate": "2025-01-01"}
+        temp_cache.save_trial(
+            meta,
+            downloaded=False,
+            status_code="F",
+            status_name="FAILED",
+            reason="404",
+            http_status=404,
+        )
+        assert not temp_cache.has_meta(meta)
+
+    def test_two_invalid_downloads_no_checksum_collision(self, temp_cache):
+        """Two different dates with INVALID trials coexist without collision."""
+        meta1 = CacheMetadata("test-template")
+        meta1.download_args = {"refdate": "2025-01-01"}
+        temp_cache.save_trial(
+            meta1,
+            downloaded=False,
+            status_code="I",
+            status_name="INVALID",
+            reason="empty file",
+        )
         meta2 = CacheMetadata("test-template")
-        meta2.download_args = {"refdate": "2025-01-01"}
-        assert temp_cache.has_meta(meta2)
-        temp_cache.load_meta(meta2)
-        assert meta2.is_invalid_download is True
-        assert meta2.invalid_download_reason == "empty file"
+        meta2.download_args = {"refdate": "2025-01-02"}
+        temp_cache.save_trial(
+            meta2,
+            downloaded=False,
+            status_code="I",
+            status_name="INVALID",
+            reason="empty file",
+        )
+        # Both trials recorded, no collision
+        assert temp_cache.get_last_download_status(meta1)["code"] == "I"
+        assert temp_cache.get_last_download_status(meta2)["code"] == "I"
+
+    def test_invalid_skips_via_trial(self, temp_cache):
+        """INVALID is skipped on next run via trial check, not meta."""
+        meta = CacheMetadata("test-template")
+        meta.download_args = {"refdate": "2025-01-01"}
+        temp_cache.save_trial(
+            meta,
+            downloaded=False,
+            status_code="I",
+            status_name="INVALID",
+            reason="empty file",
+        )
+        # No meta saved — skip decision comes from trial
+        assert not temp_cache.has_meta(meta)
+        result = _should_download(temp_cache, meta, reprocess=False)
+        assert result is False
+
+    def test_corrupted_retries_via_trial(self, temp_cache):
+        """CORRUPTED allows retry — no meta, no skip."""
+        meta = CacheMetadata("test-template")
+        meta.download_args = {"refdate": "2025-01-01"}
+        temp_cache.save_trial(
+            meta,
+            downloaded=False,
+            status_code="C",
+            status_name="CORRUPTED",
+            reason="truncated",
+        )
+        assert not temp_cache.has_meta(meta)
+        result = _should_download(temp_cache, meta, reprocess=False)
+        assert result is True
 
 
 class TestInvalidStatus:
@@ -282,8 +332,8 @@ class TestInvalidStatus:
         assert DownloadAttemptStatus.INVALID.symbol == "I"
 
     def test_invalid_converts_to_task_failed(self):
-        """I is a content validation failure -> maps to FAILED."""
-        assert to_task_status(DownloadAttemptStatus.INVALID) == (TaskStatus.FAILED)
+        """I maps directly to INVALID."""
+        assert to_task_status(DownloadAttemptStatus.INVALID) == (TaskStatus.INVALID)
 
     def test_invalid_persists(self, temp_cache):
         meta = CacheMetadata("test-template")
@@ -311,8 +361,8 @@ class TestCorruptedStatus:
         assert DownloadAttemptStatus.CORRUPTED.symbol == "C"
 
     def test_corrupted_converts_to_task_failed(self):
-        """C is a transient failure -> maps to FAILED."""
-        assert to_task_status(DownloadAttemptStatus.CORRUPTED) == (TaskStatus.FAILED)
+        """C maps directly to CORRUPTED."""
+        assert to_task_status(DownloadAttemptStatus.CORRUPTED) == (TaskStatus.CORRUPTED)
 
     def test_corrupted_persists(self, temp_cache):
         meta = CacheMetadata("test-template")
@@ -331,14 +381,11 @@ class TestCorruptedStatus:
     def test_corrupted_does_not_skip_on_retry(self, temp_cache):
         """Unlike INVALID, CORRUPTED should allow re-download.
 
-        After a corrupted download the raw folder is cleaned, so the
-        previously downloaded files no longer exist on disk.
+        No cache_metadata row is saved for CORRUPTED, so _should_download
+        falls through to the no-successful-trial + no-meta path → True.
         """
         meta = CacheMetadata("test-template")
         meta.download_args = {"a": 1}
-        meta.download_checksum = "chk"
-        # Simulate files that were cleaned after corruption
-        meta._downloaded_files = [str(Path("raw/test-template/chk/cleaned.txt"))]
 
         temp_cache.save_trial(
             meta,
@@ -347,7 +394,7 @@ class TestCorruptedStatus:
             status_name="CORRUPTED",
             reason="Truncated file",
         )
-        temp_cache.save_meta(meta)
+        # No save_meta — CORRUPTED doesn't persist meta
 
         meta2 = CacheMetadata("test-template")
         meta2.download_args = {"a": 1}

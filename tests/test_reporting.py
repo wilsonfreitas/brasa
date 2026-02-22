@@ -127,15 +127,17 @@ class TestToTaskStatus:
 
     def test_duplicated_to_task_passed(self):
         """DUPLICATED is cache-reusable, maps to PASSED."""
-        assert to_task_status(DownloadAttemptStatus.DUPLICATED) == (TaskStatus.PASSED)
+        assert to_task_status(DownloadAttemptStatus.DUPLICATED) == (
+            TaskStatus.DUPLICATED
+        )
 
     def test_invalid_to_task_failed(self):
         """INVALID is a content-validation failure, maps to FAILED."""
-        assert to_task_status(DownloadAttemptStatus.INVALID) == (TaskStatus.FAILED)
+        assert to_task_status(DownloadAttemptStatus.INVALID) == (TaskStatus.INVALID)
 
     def test_corrupted_to_task_failed(self):
         """CORRUPTED is a transient failure, maps to FAILED."""
-        assert to_task_status(DownloadAttemptStatus.CORRUPTED) == (TaskStatus.FAILED)
+        assert to_task_status(DownloadAttemptStatus.CORRUPTED) == (TaskStatus.CORRUPTED)
 
     def test_warning_to_task_warning(self):
         assert to_task_status(DownloadAttemptStatus.WARNING) == (TaskStatus.WARNING)

@@ -17,6 +17,7 @@ from brasa.util import KwargsIterator
 from .cache import CacheManager, CacheMetadata, DownloadResult
 from .exceptions import DownloadException
 from .reporting import (
+    DownloadAttemptStatus,
     TaskReport,
     TaskResult,
     Verbosity,
@@ -24,6 +25,7 @@ from .reporting import (
     create_task_result_from_exception,
     create_task_result_skipped,
     create_task_result_success,
+    to_task_status,
 )
 from .template import retrieve_template
 
@@ -61,13 +63,15 @@ def _should_download(cache: CacheManager, meta: CacheMetadata, reprocess: bool) 
             )
             return not raw_files_exist
         # No metadata but last trial was D - redownload
-        return True
+        return False
+
+    # Trial-based skip for INVALID — permanent, no meta row saved
+    if last_status and last_status["code"] == "I":
+        return False
 
     if not cache.has_successful_trial(meta):
         if cache.has_meta(meta):
             cache.load_meta(meta)
-            if not meta.downloaded_files:
-                return True
             check = all(
                 Path(cache.cache_path(f)).exists() for f in meta.downloaded_files
             )
@@ -167,6 +171,9 @@ def _build_result_from_download(
     result.extra_info["download_status_code"] = dl.status_code
     result.extra_info["download_status_name"] = dl.status_name
     result.extra_info["download_status_reason"] = dl.reason
+
+    # Override generic status with the precise download outcome
+    result.status = to_task_status(DownloadAttemptStatus(dl.status_name.lower()))
     if dl.http_status is not None:
         result.extra_info["http_status"] = str(dl.http_status)
 
@@ -209,6 +216,8 @@ def _build_result_skipped(
         last = cache.get_last_download_status(meta)
         if last and last["code"] == "D":
             skip_reason = "duplicated (cached)"
+        elif last and last["code"] == "I":
+            skip_reason = f"invalid download: {last['reason']}"
 
     result = create_task_result_skipped(
         operation="download",

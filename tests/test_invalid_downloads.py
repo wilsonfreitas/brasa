@@ -91,18 +91,39 @@ def test_save_and_load_invalid_download_status(temp_cache):
 
 
 def test_should_download_skips_invalid_cache():
-    """Test that _should_download skips downloading when cache is marked invalid."""
+    """Test that _should_download skips when last trial is INVALID."""
     mock_cache = MagicMock()
     meta = CacheMetadata("test-template")
     meta.download_args = {"test": "arg"}
 
-    # Setup: metadata exists and is marked as invalid
+    # Setup: no meta row (new approach), but trial says INVALID
+    mock_cache.has_meta.return_value = False
+    mock_cache.get_last_download_status.return_value = {
+        "code": "I",
+        "name": "INVALID",
+        "reason": "empty file",
+        "http_status": None,
+    }
+
+    result = _should_download(mock_cache, meta, reprocess=False)
+
+    # Should return False - skip download for INVALID trial
+    assert result is False
+
+
+def test_should_download_skips_invalid_cache_legacy():
+    """Test backward compat: _should_download skips via meta.is_invalid_download."""
+    mock_cache = MagicMock()
+    meta = CacheMetadata("test-template")
+    meta.download_args = {"test": "arg"}
+
+    # Setup: legacy meta row with is_invalid_download flag
     mock_cache.has_meta.return_value = True
     mock_cache.load_meta.side_effect = lambda m: setattr(m, "is_invalid_download", True)
 
     result = _should_download(mock_cache, meta, reprocess=False)
 
-    # Should return False - skip download for invalid cache
+    # Should return False - skip download for invalid cache (legacy)
     assert result is False
 
 
