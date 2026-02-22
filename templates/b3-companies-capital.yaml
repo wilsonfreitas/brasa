@@ -1,0 +1,88 @@
+id: b3-companies-capital
+description: Informação de capital das companhias listadas na Bolsa
+downloader:
+  function: brasa.downloaders.b3_url_encoded_download
+  validator: brasa.downloaders.validate_json_empty_file
+  url: https://sistemaswebb3-listados.b3.com.br/shareCapitalProxy/ShareCapitalCall/GetList
+  format: json
+  download_delay: 1
+  retry_attempts: 2
+  retry_delay: 3.0
+  retry_backoff: 2.0
+  args:
+    pageNumber: 1
+    pageSize: 9999
+  extra-key: date
+
+reader:
+  locale: pt
+  pipeline:
+    steps:
+      - step: read_json
+        path: results
+
+      - step: add_column
+        name: refdate
+        from:
+          where: extra_key
+
+      - step: apply_fields
+        set_columns: true
+
+writer:
+  partitioning: [refdate]
+
+fields:
+  # "tradingName": "21SH BITCOIN",
+  # "issuingCompany": "CBTC",
+  # "companyName": "21SHARES BITCOIN CORE ETP",
+  # "market": "BOLSA",
+  # "typeCapital": "Homologado",
+  # "value": "0,00",
+  # "approvedDate": "04/09/2025",
+  # "commonShares": "0",
+  # "preferredShares": "6.145.425.000",
+  # "totalQtyShares": "6.145.425.000"
+  - name: trading_name
+    type: string
+    description: Nome de negociação do ativo.
+
+  - name: issuing_company
+    type: string
+    description: Código da companhia emissora.
+
+  - name: company_name
+    type: string
+    description: Nome empresarial da companhia.
+
+  - name: market
+    type: string
+    description: Segmento de mercado em que o ativo está listado.
+
+  - name: type_capital
+    type: string
+    description: Tipo da informação de capital reportada.
+
+  - name: value
+    type: numeric(decimal=",")
+    description: Valor de capital informado.
+
+  - name: approved_date
+    type: date(format="%d/%m/%Y")
+    description: Data de aprovação da informação de capital.
+
+  - name: common_shares
+    type: numeric(thousands=".")
+    description: Quantidade de ações ordinárias.
+
+  - name: preferred_shares
+    type: numeric(thousands=".")
+    description: Quantidade de ações preferenciais.
+
+  - name: total_qty_shares
+    type: numeric(thousands=".")
+    description: Quantidade total de ações.
+
+  - name: refdate
+    type: date
+    description: Data de referência
