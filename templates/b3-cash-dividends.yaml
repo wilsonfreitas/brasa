@@ -1,5 +1,6 @@
 id: b3-cash-dividends
 description: Listagem de dividendos em dinheiro
+
 downloader:
   function: brasa.downloaders.b3_paged_url_encoded_download
   validator: brasa.downloaders.validate_json_empty_file
@@ -15,38 +16,81 @@ downloader:
     pageNumber: 1
     pageSize: 200
   extra-key: date
+
 reader:
   locale: pt
-  function: brasa.readers.read_b3_cash_dividends
+  pipeline:
+    steps:
+      - step: read_json
+        path: results
+
+      - step: add_column
+        name: refdate
+        from:
+          where: extra_key
+
+      - step: add_column
+        name: trading_name
+        from:
+          where: download_args
+          key: tradingName
+
+      - step: rename_columns
+        mapping:
+          typeStock: type_stock
+          dateApproval: date_approval
+          valueCash: value_cash
+          corporateAction: corporate_action
+          lastDatePriorEx: last_date_prior_ex
+          dateClosingPricePriorExDate: date_closing_price_prior_ex_date
+          closingPricePriorExDate: closing_price_prior_ex_date
+          quotedPerShares: quoted_per_shares
+          corporateActionPrice: corporate_action_price
+          lastDateTimePriorEx: last_date_time_prior_ex
+
+      - step: apply_fields
+        error: coerce
+
+writer:
+  partitioning: [trading_name, refdate]
+
 fields:
-  - name: typeStock
+  - name: type_stock
+    type: string
     description: Tipo da ação (ON, PN)
-  - name: dateApproval
+  - name: date_approval
+    type: date(format="%d/%m/%Y")
     description: Data em que foi deliberado
-    handler:
-      type: Date
-      format: "%d/%m/%Y"
-  - name: valueCash
+  - name: value_cash
     description: Valor do dividendo
+    type: numeric(thousands=".", decimal=",")
   - name: ratio
     description: Razão
-  - name: corporateAction
+    type: numeric(thousands=".", decimal=",")
+  - name: corporate_action
+    type: string
     description: Tipo do provento
-  - name: lastDatePriorEx
+  - name: last_date_prior_ex
+    type: date(format="%d/%m/%Y")
     description: Data COM (última data antes da ação ficar EX do provento)
-    handler:
-      type: Date
-      format: "%d/%m/%Y"
-  - name: dateClosingPricePriorExDate
+  - name: date_closing_price_prior_ex_date
+    type: date(format="%d/%m/%Y")
     description: Data COM (última data antes da ação ficar EX do provento)
-    handler:
-      type: Date
-      format: "%d/%m/%Y"
-  - name: closingPricePriorExDate
+  - name: closing_price_prior_ex_date
+    type: numeric(thousands=".", decimal=",")
     description: Último preço COM
-  - name: quotedPerShares
+  - name: quoted_per_shares
+    type: numeric(thousands=".", decimal=",")
     description: Provento por ações
-  - name: corporateActionPrice
+  - name: corporate_action_price
+    type: numeric(thousands=".", decimal=",")
     description: Razão Provento/Preço (%)
-  - name: lastDateTimePriorEx
+  - name: last_date_time_prior_ex
+    type: date(format="%Y-%m-%dT%H:%M:%S")
     description: Data/Hora COM (última data antes da ação ficar EX do provento)
+  - name: refdate
+    type: date(format="%Y-%m-%d")
+    description: Data de referência do dado
+  - name: trading_name
+    type: string
+    description: Nome de negociação do ativo.
