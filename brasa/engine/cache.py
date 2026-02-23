@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -384,7 +385,7 @@ class CacheManager(Singleton):
 
     def has_meta(self, meta: CacheMetadata) -> bool:
         """Check if metadata exists for a cache entry."""
-        with self.meta_db_connection as conn:
+        with closing(self.meta_db_connection) as conn, conn:
             c = conn.cursor()
             c.execute("select * from cache_metadata where id = ?", (meta.id,))
             return len(c.fetchall()) == 1
@@ -396,7 +397,7 @@ class CacheManager(Singleton):
 
     def _load_meta_dict_by_id(self, id: str) -> dict | None:
         """Load metadata as a dictionary by ID."""
-        with self.meta_db_connection as conn:
+        with closing(self.meta_db_connection) as conn, conn:
             c = conn.cursor()
             c.execute("select * from cache_metadata where id = ?", (id,))
             if meta_row := c.fetchall():
@@ -431,7 +432,7 @@ class CacheManager(Singleton):
 
     def save_meta(self, meta: CacheMetadata) -> None:
         """Save metadata to the database."""
-        with self.meta_db_connection as conn:
+        with closing(self.meta_db_connection) as conn, conn:
             c = conn.cursor()
             c.execute("select * from cache_metadata where id = ?", (meta.id,))
             if c.fetchall():
@@ -472,7 +473,6 @@ class CacheManager(Singleton):
                     "insert into cache_metadata values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     params,
                 )
-            conn.commit()
 
     def clean_meta_raw_folder(self, meta: CacheMetadata) -> None:
         """Clean the raw download folder for a cache entry."""
@@ -493,10 +493,9 @@ class CacheManager(Singleton):
 
     def clean_meta_db(self, meta: CacheMetadata) -> None:
         """Remove metadata from the database."""
-        with self.meta_db_connection as conn:
+        with closing(self.meta_db_connection) as conn, conn:
             c = conn.cursor()
             c.execute("delete from cache_metadata where id = ?", (meta.id,))
-            conn.commit()
 
     def remove_meta(self, meta: CacheMetadata) -> None:
         """Remove all traces of a cache entry (files and metadata)."""
@@ -532,7 +531,7 @@ class CacheManager(Singleton):
             status_code = "." if downloaded else "F"
             status_name = "PASSED" if downloaded else "FAILED"
 
-        with self.meta_db_connection as conn:
+        with closing(self.meta_db_connection) as conn, conn:
             c = conn.cursor()
             params = (
                 meta.id,
@@ -549,7 +548,6 @@ class CacheManager(Singleton):
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 params,
             )
-        conn.commit()
 
     def get_last_download_status(self, meta: CacheMetadata) -> dict | None:
         """Get the most recent download status for a cache entry.
@@ -565,7 +563,7 @@ class CacheManager(Singleton):
             Dict with keys code, name, reason, http_status or None
             if no trials exist.
         """
-        with self.meta_db_connection as conn:
+        with closing(self.meta_db_connection) as conn, conn:
             c = conn.cursor()
             c.execute(
                 "SELECT status_code, status_name, reason, http_status "
@@ -585,7 +583,7 @@ class CacheManager(Singleton):
 
     def has_successful_trial(self, meta: CacheMetadata) -> bool:
         """Check if there was a successful download trial."""
-        with self.meta_db_connection as conn:
+        with closing(self.meta_db_connection) as conn, conn:
             c = conn.cursor()
             c.execute(
                 "select * from download_trials where cache_id = ? and downloaded == 1",
@@ -609,7 +607,7 @@ class CacheManager(Singleton):
         Returns:
             Number of matching trial rows.
         """
-        with self.meta_db_connection as conn:
+        with closing(self.meta_db_connection) as conn, conn:
             c = conn.cursor()
             if since:
                 c.execute(

@@ -7,6 +7,7 @@ including file format handling (zip, base64), validation, and compression.
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 
@@ -353,7 +354,7 @@ def process_marketdata(
     template = retrieve_template(template_name)
     cache = CacheManager()
 
-    with cache.meta_db_connection as conn:
+    with closing(cache.meta_db_connection) as conn, conn:
         c = conn.cursor()
         c.execute("select id from cache_metadata where template = ?", (template_name,))
         rows = c.fetchall()

@@ -5,6 +5,7 @@ S (SKIPPED), D (DUPLICATED), I (INVALID), C (CORRUPTED).
 """
 
 import tempfile
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -481,7 +482,7 @@ class TestRetryStatusIntegration:
         )
 
         # All status codes in the DB must be from canonical set
-        with temp_cache.meta_db_connection as conn:
+        with closing(temp_cache.meta_db_connection) as conn, conn:
             c = conn.cursor()
             c.execute(
                 "SELECT DISTINCT status_code FROM download_trials "

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -273,7 +274,7 @@ class DatasetCatalog(Singleton):
         created = created_at.isoformat() if created_at else now
         updated = updated_at.isoformat() if updated_at else now
 
-        with self._connection as conn:
+        with closing(self._connection) as conn, conn:
             c = conn.cursor()
             c.execute("SELECT id FROM dataset_catalog WHERE id = ?", (dataset_id,))
             if c.fetchone():
@@ -307,7 +308,6 @@ class DatasetCatalog(Singleton):
                         updated,
                     ),
                 )
-            conn.commit()
 
     def get_dataset_info(self, layer: str, dataset_name: str) -> DatasetInfo | None:
         """Retrieve dataset metadata from the catalog.
@@ -321,7 +321,7 @@ class DatasetCatalog(Singleton):
         """
         dataset_id = self._make_dataset_id(layer, dataset_name)
 
-        with self._connection as conn:
+        with closing(self._connection) as conn, conn:
             c = conn.cursor()
             c.execute("SELECT * FROM dataset_catalog WHERE id = ?", (dataset_id,))
             row = c.fetchone()
@@ -349,7 +349,7 @@ class DatasetCatalog(Singleton):
         Returns:
             List of DatasetInfo objects.
         """
-        with self._connection as conn:
+        with closing(self._connection) as conn, conn:
             c = conn.cursor()
             if layer:
                 c.execute(
@@ -386,10 +386,9 @@ class DatasetCatalog(Singleton):
         """
         dataset_id = self._make_dataset_id(layer, dataset_name)
 
-        with self._connection as conn:
+        with closing(self._connection) as conn, conn:
             c = conn.cursor()
             c.execute("DELETE FROM dataset_catalog WHERE id = ?", (dataset_id,))
-            conn.commit()
             return c.rowcount > 0
 
     def dataset_exists(self, layer: str, dataset_name: str) -> bool:
@@ -404,7 +403,7 @@ class DatasetCatalog(Singleton):
         """
         dataset_id = self._make_dataset_id(layer, dataset_name)
 
-        with self._connection as conn:
+        with closing(self._connection) as conn, conn:
             c = conn.cursor()
             c.execute("SELECT 1 FROM dataset_catalog WHERE id = ?", (dataset_id,))
             return c.fetchone() is not None

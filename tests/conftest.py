@@ -9,6 +9,7 @@ This module sets up the test environment, including:
 
 import os
 import shutil
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -71,11 +72,10 @@ def cleanup_cache_between_tests():
 
         # Clean metadata database
         try:
-            with man.meta_db_connection as conn:
+            with closing(man.meta_db_connection) as conn, conn:
                 c = conn.cursor()
                 c.execute("DELETE FROM cache_metadata")
                 c.execute("DELETE FROM download_trials")
-                conn.commit()
         except Exception:
             # If there's an issue with the database, just continue
             pass
