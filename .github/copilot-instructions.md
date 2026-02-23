@@ -89,6 +89,7 @@ Use these observed patterns as references:
 Always run commands via Poetry:
 
 ```bash
+poetry run python cli-ei.py
 poetry run pytest
 poetry run ruff check .
 poetry run ruff format .
