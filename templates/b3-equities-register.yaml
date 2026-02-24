@@ -43,16 +43,16 @@ fields:
     type: string
   - name: instrument_market
     description: Instrument market code
-    type: string
+    type: integer
   - name: instrument_segment
     description: Instrument segment code
-    type: string
+    type: integer
   - name: instrument_description
     description: Instrument description
     type: string
   - name: security_category
     description: Security category
-    type: string
+    type: integer
   - name: isin
     description: ISIN code
     type: string
@@ -73,7 +73,7 @@ fields:
     type: string
   - name: payment_type
     description: Payment type
-    type: string
+    type: integer
   - name: allocation_lot_size
     description: Allocation round lot size
     type: integer

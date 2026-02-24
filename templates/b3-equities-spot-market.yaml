@@ -10,5 +10,22 @@ description: >
   | 13 - UNIT
   | 21 - ETF FOREIGN INDEX
 etl:
-  function: brasa.etl.create_equities_spot_market_dataset
-  equities_dataset: b3-equities-register
+  pipeline:
+    - step: sql_query
+      datasets:
+        - staging.b3-equities-register
+      query: |+
+        -- B3 Equities Spot Market dataset
+        select
+          *
+        from
+          'staging.b3-equities-register'
+        where
+          instrument_market = 10 and
+          instrument_segment = 1 and
+          instrument_asset <> 'TAXA' and
+          trading_start_date <> '9999-12-31' and
+          security_category in (1, 11, 6, 21, 3, 13)
+
+writer:
+  layer: staging

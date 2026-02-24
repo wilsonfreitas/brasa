@@ -1,7 +1,102 @@
 id: b3-equities-returns
 description: Dataset de retornos de ações
 etl:
-  function: brasa.etl.create_equities_returns
-  equities_dataset: b3-equities-spot-market
-  marketdata_dataset: b3-bvbg086
-  cotahist_dataset: b3-cotahist
+  pipeline:
+    - step: sql_query
+      datasets:
+        - input.b3-bvbg086
+        - staging.b3-equities-spot-market
+        - staging.b3-cotahist
+        - staging.b3-listed-funds
+      query: |+
+        -- B3 Equities Returns dataset
+        WITH cotahist_20210610_base_data AS (
+            -- Single scan of the partitioned data
+            -- We filter symbols early using a JOIN for better performance than 'IN'
+            SELECT
+                t.refdate,
+                t.symbol,
+                t.close,
+                t.distribution_id,
+                COUNT(*) OVER (PARTITION BY t.symbol) as days_count
+            FROM 'staging.b3-cotahist' t
+            INNER JOIN 'staging.b3-equities-spot-market' s ON t.symbol = s.symbol
+            WHERE t.refdate IN ('2021-06-09', '2021-06-10')
+        ),
+        cotahist_20210610_calculated AS (
+            SELECT
+                refdate,
+                symbol,
+                close / LAG(close) OVER (PARTITION BY symbol ORDER BY refdate) AS close_ratio,
+                distribution_id - LAG(distribution_id) OVER (PARTITION BY symbol ORDER BY refdate) AS dist_change,
+                days_count
+            FROM cotahist_20210610_base_data
+        ),
+        cotahist_20210610_returns as (
+          SELECT
+              refdate,
+              symbol,
+              close_ratio - 1 AS pct_return,
+              ln(close_ratio) AS log_return -- 'ln' is standard, DuckDB also supports 'log'
+          FROM cotahist_20210610_calculated
+          WHERE days_count = 2      -- Ensures symbol was in both dates
+            AND dist_change = 0     -- Filters out dividends/splits
+            AND close_ratio IS NOT NULL -- Removes the first day (2021-06-09) which has no LAG
+        ),
+        bvbg86_returns as (
+          SELECT
+              t.refdate,
+              t.symbol,
+              (COALESCE(t.oscillation, 0) / 100) AS pct_return,
+              LN(1 + (COALESCE(t.oscillation, 0) / 100)) AS log_return
+          FROM 'input.b3-bvbg086' t
+          INNER JOIN 'staging.b3-equities-spot-market' s USING (symbol)
+        ),
+        cotahist_etfs_base_data as (
+          select
+            refdate,
+            symbol,
+            close / lag(close) OVER w AS close_ratio
+          from
+            'staging.b3-cotahist'
+          where
+            symbol in (select distinct symbol from 'staging.b3-listed-funds')
+          WINDOW w AS (PARTITION BY symbol ORDER BY refdate)
+        ),
+        cotahist_etfs_returns as (
+          select
+            refdate,
+            symbol,
+            (close_ratio - 1) as pct_return,
+            ln(close_ratio) as log_return
+          from cotahist_etfs_base_data
+          where
+            close_ratio is not NULL
+            and refdate < '2018-01-01'
+        )
+        SELECT * from cotahist_20210610_returns
+        UNION ALL
+        SELECT * FROM bvbg86_returns
+        UNION ALL
+        select * from cotahist_etfs_returns
+        order by refdate, symbol
+
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+
+fields:
+  - name: refdate
+    description: Data de referência
+    type: date
+  - name: symbol
+    description: Símbolo do ativo
+    type: character
+  - name: pct_return
+    description: Retorno percentual
+    type: numeric
+  - name: log_return
+    description: Retorno logarítmico
+    type: numeric

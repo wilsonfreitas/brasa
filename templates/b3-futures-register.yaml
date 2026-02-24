@@ -3,14 +3,21 @@ description: Dataset de dados cadastrais de contratos futuros da B3
 
 etl:
   pipeline:
-    - step: load
-      input: b3-bvbg028-future_contracts
-      layer: input
+    - step: sql_query
+      datasets:
+        - input.b3-bvbg028-future_contracts
+      query: |+
+        -- B3 Futures Register dataset
+        select
+          *
+        from
+          'input.b3-bvbg028-future_contracts'
+        where
+          refdate = (select max(refdate) from 'input.b3-bvbg028-future_contracts')
 
     - step: select_fields
-
-    - step: drop_duplicates
-      keep: first
+    - step: apply_fields
+      errors: coerce
 
 writer:
   layer: staging
@@ -33,7 +40,7 @@ fields:
     type: string
   - name: security_category
     description: Security category
-    type: string
+    type: integer
   - name: instrument_asset
     description: Instrument asset code
     type: string
@@ -45,10 +52,10 @@ fields:
     type: string
   - name: instrument_market
     description: Instrument market code
-    type: string
+    type: integer
   - name: instrument_segment
     description: Instrument segment code
-    type: string
+    type: integer
   - name: instrument_description
     description: Instrument description
     type: string
@@ -63,13 +70,13 @@ fields:
     type: date
   - name: value_type_code
     description: Value type code
-    type: string
+    type: integer
   - name: delivery_type
     description: Delivery type
-    type: string
+    type: integer
   - name: payment_type
     description: Payment type
-    type: string
+    type: integer
   - name: trading_currency
     description: Trading currency
     type: string
@@ -90,4 +97,4 @@ fields:
     type: string
   - name: underlying_security_proprietary
     description: Underlying security proprietary code
-    type: string
+    type: integer
