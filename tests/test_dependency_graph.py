@@ -17,7 +17,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from brasa.engine.dependency_graph import (
+    CyclicDependencyError,
     DatasetOutput,
+    ExecutionPlan,
+    ExecutionStep,
     TemplateDependencyGraph,
 )
 from brasa.engine.template import (
@@ -736,3 +739,803 @@ class TestTemplateLoadErrors:
         assert "good" in g
         assert "bad" not in g
         assert "failed to load" in caplog.text
+
+
+# ===================================================================
+# Phase 2: Topological Sort & Cycle Detection
+# ===================================================================
+
+
+# ===================================================================
+# TEST-009: Topological sort — simple chain
+# ===================================================================
+
+
+class TestTopologicalSortSimpleChain:
+    """Verify correct ordering for a linear chain.
+
+    Graph: dl-src → etl-mid → etl-end
+    Expected order: [dl-src, etl-mid, etl-end]
+    """
+
+    @pytest.fixture()
+    def graph(self) -> TemplateDependencyGraph:
+        src = _make_download_template("dl-src")
+        mid = _make_etl_template("etl-mid", input_datasets=["dl-src"])
+        end = _make_etl_template("etl-end", input_datasets=["staging.etl-mid"])
+        return _build_graph_from_templates([src, mid, end])
+
+    def test_full_chain(self, graph: TemplateDependencyGraph):
+        order = graph.topological_sort("etl-end")
+        assert order == ["dl-src", "etl-mid", "etl-end"]
+
+    def test_mid_node(self, graph: TemplateDependencyGraph):
+        order = graph.topological_sort("etl-mid")
+        assert order == ["dl-src", "etl-mid"]
+
+    def test_source_node(self, graph: TemplateDependencyGraph):
+        order = graph.topological_sort("dl-src")
+        assert order == ["dl-src"]
+
+    def test_unknown_template_raises(self, graph: TemplateDependencyGraph):
+        with pytest.raises(KeyError, match="not in the dependency graph"):
+            graph.topological_sort("nonexistent")
+
+
+# ===================================================================
+# TEST-010: Topological sort — diamond dependency
+# ===================================================================
+
+
+class TestTopologicalSortDiamond:
+    """Verify correct ordering for a diamond-shaped DAG.
+
+    Graph:
+        base → branch-a ↘
+                          merge
+        base → branch-b ↗
+
+    Expected: base comes first, then branch-a/branch-b (in any order
+    but deterministic via sorted), then merge last.
+    """
+
+    @pytest.fixture()
+    def graph(self) -> TemplateDependencyGraph:
+        src = _make_download_template("base")
+        etl_a = _make_etl_template("branch-a", input_datasets=["base"])
+        etl_b = _make_etl_template("branch-b", input_datasets=["base"])
+        merge = _make_etl_template(
+            "merge",
+            input_datasets=["staging.branch-a", "staging.branch-b"],
+        )
+        return _build_graph_from_templates([src, etl_a, etl_b, merge])
+
+    def test_diamond_order(self, graph: TemplateDependencyGraph):
+        order = graph.topological_sort("merge")
+        assert order[0] == "base"
+        assert order[-1] == "merge"
+        assert set(order[1:-1]) == {"branch-a", "branch-b"}
+
+    def test_diamond_all_present(self, graph: TemplateDependencyGraph):
+        order = graph.topological_sort("merge")
+        assert len(order) == 4
+        assert set(order) == {"base", "branch-a", "branch-b", "merge"}
+
+    def test_branch_only(self, graph: TemplateDependencyGraph):
+        """Sort for branch-a should not include branch-b or merge."""
+        order = graph.topological_sort("branch-a")
+        assert order == ["base", "branch-a"]
+
+
+# ===================================================================
+# TEST-011: Cycle detection
+# ===================================================================
+
+
+class TestCycleDetection:
+    """Verify detect_cycles() finds artificial cycles."""
+
+    def test_detects_simple_cycle(self):
+        """A → B → A should be detected as a cycle."""
+        t_a = _make_etl_template("t-a", input_datasets=["staging.t-b"])
+        t_b = _make_etl_template("t-b", input_datasets=["staging.t-a"])
+
+        with pytest.raises(CyclicDependencyError, match="Circular dependencies"):
+            _build_graph_from_templates([t_a, t_b])
+
+    def test_detects_three_node_cycle(self):
+        """A → B → C → A should be detected."""
+        t_a = _make_etl_template("t-a", input_datasets=["staging.t-c"])
+        t_b = _make_etl_template("t-b", input_datasets=["staging.t-a"])
+        t_c = _make_etl_template("t-c", input_datasets=["staging.t-b"])
+
+        with pytest.raises(CyclicDependencyError, match="Circular dependencies"):
+            _build_graph_from_templates([t_a, t_b, t_c])
+
+    def test_no_cycles_in_dag(self):
+        """A clean DAG should return empty list from detect_cycles."""
+        src = _make_download_template("src")
+        etl = _make_etl_template("etl", input_datasets=["src"])
+        g = _build_graph_from_templates([src, etl])
+
+        assert g.detect_cycles() == []
+
+    def test_topological_sort_raises_on_injected_cycle(self):
+        """Manually injecting a cycle into edges causes topological_sort to fail."""
+        src = _make_download_template("x-src")
+        mid = _make_etl_template("x-mid", input_datasets=["x-src"])
+        end = _make_etl_template("x-end", input_datasets=["staging.x-mid"])
+        g = _build_graph_from_templates([src, mid, end])
+
+        # Manually inject a cycle: x-src depends on x-end
+        g.edges["x-src"] = ["x-end"]
+
+        with pytest.raises(CyclicDependencyError, match="Cyclic dependency"):
+            g.topological_sort("x-end")
+
+
+# ===================================================================
+# TEST: get_ancestors
+# ===================================================================
+
+
+class TestGetAncestors:
+    """Verify get_ancestors returns all transitive upstream templates."""
+
+    @pytest.fixture()
+    def graph(self) -> TemplateDependencyGraph:
+        src = _make_download_template("dl-root")
+        mid = _make_etl_template("etl-mid", input_datasets=["dl-root"])
+        leaf = _make_etl_template("etl-leaf", input_datasets=["staging.etl-mid"])
+        return _build_graph_from_templates([src, mid, leaf])
+
+    def test_leaf_ancestors(self, graph: TemplateDependencyGraph):
+        assert graph.get_ancestors("etl-leaf") == {"dl-root", "etl-mid"}
+
+    def test_mid_ancestors(self, graph: TemplateDependencyGraph):
+        assert graph.get_ancestors("etl-mid") == {"dl-root"}
+
+    def test_root_ancestors(self, graph: TemplateDependencyGraph):
+        assert graph.get_ancestors("dl-root") == set()
+
+    def test_unknown_raises(self, graph: TemplateDependencyGraph):
+        with pytest.raises(KeyError, match="not in the dependency graph"):
+            graph.get_ancestors("ghost")
+
+
+class TestGetAncestorsDiamond:
+    """Verify get_ancestors with diamond DAG."""
+
+    def test_diamond_ancestors(self):
+        src = _make_download_template("root")
+        a = _make_etl_template("a", input_datasets=["root"])
+        b = _make_etl_template("b", input_datasets=["root"])
+        merge = _make_etl_template("merge", input_datasets=["staging.a", "staging.b"])
+        g = _build_graph_from_templates([src, a, b, merge])
+
+        assert g.get_ancestors("merge") == {"root", "a", "b"}
+        assert g.get_ancestors("a") == {"root"}
+        assert g.get_ancestors("b") == {"root"}
+
+
+# ===================================================================
+# TEST: get_descendants
+# ===================================================================
+
+
+class TestGetDescendants:
+    """Verify get_descendants returns all transitive downstream templates."""
+
+    @pytest.fixture()
+    def graph(self) -> TemplateDependencyGraph:
+        src = _make_download_template("dl-root")
+        mid = _make_etl_template("etl-mid", input_datasets=["dl-root"])
+        leaf = _make_etl_template("etl-leaf", input_datasets=["staging.etl-mid"])
+        return _build_graph_from_templates([src, mid, leaf])
+
+    def test_root_descendants(self, graph: TemplateDependencyGraph):
+        assert graph.get_descendants("dl-root") == {"etl-mid", "etl-leaf"}
+
+    def test_mid_descendants(self, graph: TemplateDependencyGraph):
+        assert graph.get_descendants("etl-mid") == {"etl-leaf"}
+
+    def test_leaf_descendants(self, graph: TemplateDependencyGraph):
+        assert graph.get_descendants("etl-leaf") == set()
+
+    def test_unknown_raises(self, graph: TemplateDependencyGraph):
+        with pytest.raises(KeyError, match="not in the dependency graph"):
+            graph.get_descendants("ghost")
+
+
+class TestGetDescendantsDiamond:
+    """Verify get_descendants with diamond DAG."""
+
+    def test_diamond_descendants(self):
+        src = _make_download_template("root")
+        a = _make_etl_template("a", input_datasets=["root"])
+        b = _make_etl_template("b", input_datasets=["root"])
+        merge = _make_etl_template("merge", input_datasets=["staging.a", "staging.b"])
+        g = _build_graph_from_templates([src, a, b, merge])
+
+        assert g.get_descendants("root") == {"a", "b", "merge"}
+        assert g.get_descendants("a") == {"merge"}
+        assert g.get_descendants("b") == {"merge"}
+        assert g.get_descendants("merge") == set()
+
+
+# ===================================================================
+# Integration: Phase 2 with real templates
+# ===================================================================
+
+
+class TestIntegrationPhase2WithRealTemplates:
+    """Run topological sort and ancestor/descendant queries against real templates."""
+
+    @pytest.fixture(scope="class")
+    def graph(self) -> TemplateDependencyGraph:
+        return TemplateDependencyGraph()
+
+    def test_no_cycles(self, graph: TemplateDependencyGraph):
+        """Real templates should have no cycles."""
+        assert graph.detect_cycles() == []
+
+    def test_topological_sort_b3_equities_register(
+        self, graph: TemplateDependencyGraph
+    ):
+        """Topological sort for b3-equities-register should start with b3-bvbg028."""
+        if "b3-equities-register" not in graph:
+            pytest.skip("b3-equities-register template not available")
+        order = graph.topological_sort("b3-equities-register")
+        assert order[0] == "b3-bvbg028"
+        assert order[-1] == "b3-equities-register"
+
+    def test_topological_sort_b3_equities_spot_market(
+        self, graph: TemplateDependencyGraph
+    ):
+        """Full chain: b3-bvbg028 → b3-equities-register → b3-equities-spot-market."""
+        if "b3-equities-spot-market" not in graph:
+            pytest.skip("b3-equities-spot-market template not available")
+        order = graph.topological_sort("b3-equities-spot-market")
+        assert order[0] == "b3-bvbg028"
+        assert order[-1] == "b3-equities-spot-market"
+        # b3-equities-register must come before b3-equities-spot-market
+        idx_reg = order.index("b3-equities-register")
+        idx_spot = order.index("b3-equities-spot-market")
+        assert idx_reg < idx_spot
+
+    def test_topological_sort_b3_cotahist(self, graph: TemplateDependencyGraph):
+        """b3-cotahist depends on b3-cotahist-yearly and b3-cotahist-daily."""
+        if "b3-cotahist" not in graph:
+            pytest.skip("b3-cotahist template not available")
+        order = graph.topological_sort("b3-cotahist")
+        assert order[-1] == "b3-cotahist"
+        assert "b3-cotahist-yearly" in order
+        assert "b3-cotahist-daily" in order
+
+    def test_ancestors_b3_equities_spot_market(self, graph: TemplateDependencyGraph):
+        """b3-equities-spot-market should have b3-bvbg028 and b3-equities-register as ancestors."""
+        if "b3-equities-spot-market" not in graph:
+            pytest.skip("b3-equities-spot-market template not available")
+        ancestors = graph.get_ancestors("b3-equities-spot-market")
+        assert "b3-bvbg028" in ancestors
+        assert "b3-equities-register" in ancestors
+
+    def test_descendants_b3_bvbg028(self, graph: TemplateDependencyGraph):
+        """b3-bvbg028 should have b3-equities-register as a descendant."""
+        if "b3-bvbg028" not in graph:
+            pytest.skip("b3-bvbg028 template not available")
+        descendants = graph.get_descendants("b3-bvbg028")
+        assert "b3-equities-register" in descendants
+
+    def test_source_node_topological_sort(self, graph: TemplateDependencyGraph):
+        """Source nodes should return a single-element list."""
+        download_templates = [
+            tid
+            for tid in graph.template_ids
+            if graph.get_template_type(tid) == "download"
+        ]
+        if not download_templates:
+            pytest.skip("No download templates available")
+        tid = download_templates[0]
+        order = graph.topological_sort(tid)
+        assert order == [tid]
+
+
+# ===================================================================
+# Phase 3: Staleness Detection
+# ===================================================================
+
+
+# ===================================================================
+# TEST: ExecutionStep dataclass
+# ===================================================================
+
+
+class TestExecutionStep:
+    """Verify ExecutionStep dataclass behaviour."""
+
+    def test_frozen(self):
+        step = ExecutionStep(
+            template_id="t1",
+            action="process",
+            reason="stale",
+            template_type="download",
+        )
+        with pytest.raises(AttributeError):
+            step.action = "skip"  # type: ignore[misc]
+
+    def test_fields(self):
+        step = ExecutionStep(
+            template_id="t1",
+            action="etl",
+            reason="output missing",
+            template_type="etl",
+        )
+        assert step.template_id == "t1"
+        assert step.action == "etl"
+        assert step.reason == "output missing"
+        assert step.template_type == "etl"
+
+
+# ===================================================================
+# TEST: ExecutionPlan dataclass
+# ===================================================================
+
+
+class TestExecutionPlan:
+    """Verify ExecutionPlan dataclass and properties."""
+
+    def test_empty_plan(self):
+        plan = ExecutionPlan(target_template="tgt")
+        assert plan.steps == []
+        assert plan.steps_to_execute == []
+        assert plan.steps_to_skip == []
+
+    def test_steps_to_execute_and_skip(self):
+        plan = ExecutionPlan(
+            target_template="tgt",
+            steps=[
+                ExecutionStep("a", "process", "stale", "download"),
+                ExecutionStep("b", "skip", "fresh", "download"),
+                ExecutionStep("c", "etl", "outdated", "etl"),
+                ExecutionStep("tgt", "skip", "up to date", "etl"),
+            ],
+        )
+        execute = plan.steps_to_execute
+        skip = plan.steps_to_skip
+        assert len(execute) == 2
+        assert execute[0].template_id == "a"
+        assert execute[1].template_id == "c"
+        assert len(skip) == 2
+        assert skip[0].template_id == "b"
+
+    def test_str_output(self):
+        plan = ExecutionPlan(
+            target_template="my-etl",
+            steps=[
+                ExecutionStep("dl-src", "process", "unprocessed", "download"),
+                ExecutionStep("my-etl", "etl", "output missing", "etl"),
+            ],
+        )
+        text = str(plan)
+        assert "my-etl" in text
+        assert "PROCESS" in text
+        assert "ETL" in text
+        assert "2 to execute" in text
+        assert "0 to skip" in text
+
+    def test_str_with_skips(self):
+        plan = ExecutionPlan(
+            target_template="tgt",
+            steps=[
+                ExecutionStep("a", "skip", "fresh", "download"),
+                ExecutionStep("tgt", "etl", "outdated", "etl"),
+            ],
+        )
+        text = str(plan)
+        assert "SKIP" in text
+        assert "1 to execute" in text
+        assert "1 to skip" in text
+
+
+# ===================================================================
+# TEST-012: Staleness detection for download templates (mocked cache)
+# ===================================================================
+
+
+class TestCheckDownloadTemplateStaleness:
+    """Verify _check_download_template_staleness with mocked CacheManager."""
+
+    def _make_graph(self):
+        """Build a simple graph with one download template."""
+        src = _make_download_template("dl-src")
+        return _build_graph_from_templates([src])
+
+    def test_no_cache_entries_means_not_stale(self):
+        """No cache rows → nothing downloaded → not stale."""
+        g = self._make_graph()
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_cursor.fetchall.return_value = []
+        mock_conn.cursor.return_value = mock_cursor
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+
+        with patch("brasa.engine.dependency_graph.CacheManager") as MockCacheManager:
+            mock_cache = MagicMock()
+            mock_cache.meta_db_connection = mock_conn
+            MockCacheManager.return_value = mock_cache
+
+            assert g._check_download_template_staleness("dl-src") is False
+
+    def test_empty_processed_files_means_stale(self):
+        """Cache row with empty processed_files JSON → stale."""
+        g = self._make_graph()
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_cursor.fetchall.return_value = [("{}",)]
+        mock_conn.cursor.return_value = mock_cursor
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+
+        with patch("brasa.engine.dependency_graph.CacheManager") as MockCacheManager:
+            mock_cache = MagicMock()
+            mock_cache.meta_db_connection = mock_conn
+            MockCacheManager.return_value = mock_cache
+
+            assert g._check_download_template_staleness("dl-src") is True
+
+    def test_null_processed_files_means_stale(self):
+        """Cache row with null/empty string → stale."""
+        g = self._make_graph()
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_cursor.fetchall.return_value = [("",)]
+        mock_conn.cursor.return_value = mock_cursor
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+
+        with patch("brasa.engine.dependency_graph.CacheManager") as MockCacheManager:
+            mock_cache = MagicMock()
+            mock_cache.meta_db_connection = mock_conn
+            MockCacheManager.return_value = mock_cache
+
+            assert g._check_download_template_staleness("dl-src") is True
+
+    def test_populated_processed_files_means_not_stale(self):
+        """Cache row with populated processed_files → not stale."""
+        import json
+
+        g = self._make_graph()
+        processed = json.dumps({"data": "/path/to/file.parquet"})
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_cursor.fetchall.return_value = [(processed,)]
+        mock_conn.cursor.return_value = mock_cursor
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+
+        with patch("brasa.engine.dependency_graph.CacheManager") as MockCacheManager:
+            mock_cache = MagicMock()
+            mock_cache.meta_db_connection = mock_conn
+            MockCacheManager.return_value = mock_cache
+
+            assert g._check_download_template_staleness("dl-src") is False
+
+    def test_mixed_rows_one_unprocessed_means_stale(self):
+        """Multiple cache rows, one unprocessed → stale."""
+        import json
+
+        g = self._make_graph()
+        processed = json.dumps({"data": "/path/to/file.parquet"})
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        # First row is processed, second is not
+        mock_cursor.fetchall.return_value = [(processed,), ("{}",)]
+        mock_conn.cursor.return_value = mock_cursor
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+
+        with patch("brasa.engine.dependency_graph.CacheManager") as MockCacheManager:
+            mock_cache = MagicMock()
+            mock_cache.meta_db_connection = mock_conn
+            MockCacheManager.return_value = mock_cache
+
+            assert g._check_download_template_staleness("dl-src") is True
+
+
+# ===================================================================
+# TEST: Staleness detection for ETL templates (mocked filesystem)
+# ===================================================================
+
+
+class TestCheckEtlTemplateStaleness:
+    """Verify _check_etl_template_staleness with mocked filesystem."""
+
+    def _make_graph(self):
+        """Build a graph: dl-src → etl-mid."""
+        src = _make_download_template("dl-src")
+        mid = _make_etl_template("etl-mid", input_datasets=["dl-src"])
+        return _build_graph_from_templates([src, mid])
+
+    def test_no_output_dir_means_stale(self, tmp_path):
+        """Missing output directory → stale."""
+        g = self._make_graph()
+
+        with patch("brasa.engine.dependency_graph.CacheManager") as MockCacheManager:
+            mock_cache = MagicMock()
+            # Point to a nonexistent directory
+            mock_cache.db_path.return_value = str(tmp_path / "nonexistent")
+            MockCacheManager.return_value = mock_cache
+
+            assert g._check_etl_template_staleness("etl-mid") is True
+
+    def test_empty_output_dir_means_stale(self, tmp_path):
+        """Output directory exists but has no parquet files → stale."""
+        g = self._make_graph()
+        output_dir = tmp_path / "staging" / "etl-mid"
+        output_dir.mkdir(parents=True)
+
+        with patch("brasa.engine.dependency_graph.CacheManager") as MockCacheManager:
+            mock_cache = MagicMock()
+            mock_cache.db_path.return_value = str(output_dir)
+            MockCacheManager.return_value = mock_cache
+
+            assert g._check_etl_template_staleness("etl-mid") is True
+
+    def test_output_newer_than_upstream_means_fresh(self, tmp_path):
+        """Output parquet newer than upstream → not stale."""
+        import time
+
+        g = self._make_graph()
+
+        # Create upstream parquet
+        upstream_dir = tmp_path / "input" / "dl-src"
+        upstream_dir.mkdir(parents=True)
+        upstream_pq = upstream_dir / "part-001.parquet"
+        upstream_pq.write_text("upstream")
+
+        time.sleep(0.05)
+
+        # Create output parquet (newer)
+        output_dir = tmp_path / "staging" / "etl-mid"
+        output_dir.mkdir(parents=True)
+        output_pq = output_dir / "part-001.parquet"
+        output_pq.write_text("output")
+
+        def mock_db_path(name):
+            return str(tmp_path / name)
+
+        with patch("brasa.engine.dependency_graph.CacheManager") as MockCacheManager:
+            mock_cache = MagicMock()
+            mock_cache.db_path.side_effect = mock_db_path
+            MockCacheManager.return_value = mock_cache
+
+            assert g._check_etl_template_staleness("etl-mid") is False
+
+    def test_upstream_newer_than_output_means_stale(self, tmp_path):
+        """Upstream parquet newer than output → stale."""
+        import time
+
+        g = self._make_graph()
+
+        # Create output parquet first (older)
+        output_dir = tmp_path / "staging" / "etl-mid"
+        output_dir.mkdir(parents=True)
+        output_pq = output_dir / "part-001.parquet"
+        output_pq.write_text("output")
+
+        time.sleep(0.05)
+
+        # Create upstream parquet (newer)
+        upstream_dir = tmp_path / "input" / "dl-src"
+        upstream_dir.mkdir(parents=True)
+        upstream_pq = upstream_dir / "part-001.parquet"
+        upstream_pq.write_text("upstream")
+
+        def mock_db_path(name):
+            return str(tmp_path / name)
+
+        with patch("brasa.engine.dependency_graph.CacheManager") as MockCacheManager:
+            mock_cache = MagicMock()
+            mock_cache.db_path.side_effect = mock_db_path
+            MockCacheManager.return_value = mock_cache
+
+            assert g._check_etl_template_staleness("etl-mid") is True
+
+    def test_no_upstream_parquets_means_fresh(self, tmp_path):
+        """Output exists but upstream has no parquets → fresh."""
+        g = self._make_graph()
+
+        # Create output parquet
+        output_dir = tmp_path / "staging" / "etl-mid"
+        output_dir.mkdir(parents=True)
+        (output_dir / "part-001.parquet").write_text("output")
+
+        # Upstream dir exists but is empty
+        upstream_dir = tmp_path / "input" / "dl-src"
+        upstream_dir.mkdir(parents=True)
+
+        def mock_db_path(name):
+            return str(tmp_path / name)
+
+        with patch("brasa.engine.dependency_graph.CacheManager") as MockCacheManager:
+            mock_cache = MagicMock()
+            mock_cache.db_path.side_effect = mock_db_path
+            MockCacheManager.return_value = mock_cache
+
+            assert g._check_etl_template_staleness("etl-mid") is False
+
+
+# ===================================================================
+# TEST-013: Execution plan — stale upstream
+# ===================================================================
+
+
+class TestExecutionPlanWithStaleUpstream:
+    """Verify execution plan marks stale upstreams for processing."""
+
+    def test_stale_download_triggers_process(self):
+        """Download with unprocessed files → action='process'."""
+        src = _make_download_template("dl-src")
+        etl = _make_etl_template("my-etl", input_datasets=["dl-src"])
+        g = _build_graph_from_templates([src, etl])
+
+        with (
+            patch.object(g, "_check_download_template_staleness", return_value=True),
+            patch.object(g, "_check_etl_template_staleness", return_value=True),
+        ):
+            plan = g.get_execution_plan("my-etl")
+
+        assert len(plan.steps) == 2
+        # First step: download template is stale → process
+        assert plan.steps[0].template_id == "dl-src"
+        assert plan.steps[0].action == "process"
+        assert plan.steps[0].template_type == "download"
+        # Second step: etl template
+        assert plan.steps[1].template_id == "my-etl"
+        assert plan.steps[1].action == "etl"
+        assert plan.steps[1].template_type == "etl"
+
+
+# ===================================================================
+# TEST-014: Execution plan — all fresh
+# ===================================================================
+
+
+class TestExecutionPlanAllFresh:
+    """Verify execution plan with all upstreams fresh."""
+
+    def test_all_fresh_only_target_etl(self):
+        """All upstreams processed and output up to date → all skip."""
+        src = _make_download_template("dl-src")
+        etl = _make_etl_template("my-etl", input_datasets=["dl-src"])
+        g = _build_graph_from_templates([src, etl])
+
+        with (
+            patch.object(g, "_check_download_template_staleness", return_value=False),
+            patch.object(g, "_check_etl_template_staleness", return_value=False),
+        ):
+            plan = g.get_execution_plan("my-etl")
+
+        assert len(plan.steps) == 2
+        assert plan.steps[0].action == "skip"
+        assert plan.steps[1].action == "skip"
+        assert len(plan.steps_to_execute) == 0
+        assert len(plan.steps_to_skip) == 2
+
+
+# ===================================================================
+# TEST-015: Execution plan — force mode
+# ===================================================================
+
+
+class TestExecutionPlanForceMode:
+    """Verify force=True marks all ancestors for execution."""
+
+    def test_force_all_executed(self):
+        """force=True → all templates in chain marked for execution."""
+        src = _make_download_template("dl-src")
+        mid = _make_etl_template("etl-mid", input_datasets=["dl-src"])
+        end = _make_etl_template("etl-end", input_datasets=["staging.etl-mid"])
+        g = _build_graph_from_templates([src, mid, end])
+
+        # Even though we don't mock staleness, force should override
+        plan = g.get_execution_plan("etl-end", force=True)
+
+        assert len(plan.steps) == 3
+        assert all(s.action != "skip" for s in plan.steps)
+
+        # Check ordering and correct action types
+        assert plan.steps[0].template_id == "dl-src"
+        assert plan.steps[0].action == "process"
+        assert plan.steps[0].reason == "forced execution"
+
+        assert plan.steps[1].template_id == "etl-mid"
+        assert plan.steps[1].action == "etl"
+
+        assert plan.steps[2].template_id == "etl-end"
+        assert plan.steps[2].action == "etl"
+
+    def test_force_single_download(self):
+        """force=True on a source node → process."""
+        src = _make_download_template("dl-src")
+        g = _build_graph_from_templates([src])
+
+        plan = g.get_execution_plan("dl-src", force=True)
+
+        assert len(plan.steps) == 1
+        assert plan.steps[0].action == "process"
+        assert plan.steps[0].template_type == "download"
+
+
+# ===================================================================
+# TEST: Execution plan — mixed stale/fresh ancestors
+# ===================================================================
+
+
+class TestExecutionPlanMixed:
+    """Verify execution plan with some stale and some fresh ancestors."""
+
+    def test_mixed_staleness(self):
+        """Diamond DAG with one stale branch and one fresh."""
+        base = _make_download_template("base")
+        branch_a = _make_etl_template("branch-a", input_datasets=["base"])
+        branch_b = _make_etl_template("branch-b", input_datasets=["base"])
+        merge = _make_etl_template(
+            "merge",
+            input_datasets=["staging.branch-a", "staging.branch-b"],
+        )
+        g = _build_graph_from_templates([base, branch_a, branch_b, merge])
+
+        def mock_download_staleness(tid):
+            return False  # base is fresh
+
+        def mock_etl_staleness(tid):
+            # branch-a is stale, branch-b is fresh
+            return tid in ("branch-a", "merge")
+
+        with (
+            patch.object(
+                g,
+                "_check_download_template_staleness",
+                side_effect=mock_download_staleness,
+            ),
+            patch.object(
+                g,
+                "_check_etl_template_staleness",
+                side_effect=mock_etl_staleness,
+            ),
+        ):
+            plan = g.get_execution_plan("merge")
+
+        step_map = {s.template_id: s for s in plan.steps}
+
+        assert step_map["base"].action == "skip"
+        assert step_map["branch-a"].action == "etl"
+        assert step_map["branch-b"].action == "skip"
+        assert step_map["merge"].action == "etl"
+
+        assert len(plan.steps_to_execute) == 2
+        assert len(plan.steps_to_skip) == 2
+
+
+# ===================================================================
+# TEST: Execution plan — unknown template raises
+# ===================================================================
+
+
+class TestExecutionPlanErrors:
+    """Verify error cases for get_execution_plan."""
+
+    def test_unknown_template_raises(self):
+        src = _make_download_template("dl-src")
+        g = _build_graph_from_templates([src])
+
+        with pytest.raises(KeyError, match="not in the dependency graph"):
+            g.get_execution_plan("nonexistent")
