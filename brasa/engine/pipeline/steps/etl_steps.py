@@ -157,6 +157,14 @@ class ConcatDatasetsStep(PipelineStep):
         concatenated = pyarrow.concat_tables(tables)
         return concatenated.to_pandas()
 
+    def get_input_datasets(self) -> list[str]:
+        """Get the list of input dataset names from the 'inputs' parameter.
+
+        Returns:
+            List of dataset names that are inputs to this step.
+        """
+        return self.params.get("inputs", [])
+
 
 @StepRegistry.register("dataset_filter")
 class DatasetFilterStep(PipelineStep):
