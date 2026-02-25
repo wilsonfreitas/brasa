@@ -466,6 +466,8 @@ def process_etl(
     template_name: str,
     verbosity: Verbosity = Verbosity.NORMAL,
     report_file: str | Path | None = None,
+    resolve_dependencies: bool = False,
+    force: bool = False,
 ) -> TaskReport:
     """Run an ETL process defined in a template.
 
@@ -474,14 +476,76 @@ def process_etl(
     - Function-based ETL (legacy): Uses a Python function for transformation.
     - Pipeline-based ETL (new): Uses declarative pipeline steps.
 
+    When ``resolve_dependencies=True``, the function uses the
+    :class:`~brasa.engine.orchestrator.PipelineOrchestrator` to
+    automatically discover and execute upstream dependencies before
+    running the target template.  The returned ``TaskReport`` is for
+    the target template only; the full orchestration report is logged.
+
     Args:
         template_name: Name of the ETL template to run.
         verbosity: Output verbosity level (QUIET, NORMAL, VERBOSE).
         report_file: Optional path to save the report (JSON or TXT).
+        resolve_dependencies: If ``True``, automatically process stale
+            upstream dependencies before running this ETL.  Defaults to
+            ``False`` for backward compatibility.
+        force: If ``True`` (and ``resolve_dependencies=True``), re-execute
+            all upstream templates regardless of staleness.
 
     Returns:
         TaskReport with results of the ETL operation.
     """
+    if resolve_dependencies:
+        from .orchestrator import PipelineOrchestrator
+
+        orchestrator = PipelineOrchestrator()
+        orch_report = orchestrator.execute(
+            template_name,
+            force=force,
+            verbosity=verbosity,
+        )
+
+        # Return the target template's report if available,
+        # otherwise return the last report from the orchestration
+        target_report = orch_report.step_reports.get(template_name)
+        if target_report is not None:
+            if report_file:
+                report_path = Path(report_file)
+                file_format = "json" if report_path.suffix == ".json" else "txt"
+                target_report.save_report(report_path, format=file_format)
+            return target_report
+
+        # If the target was skipped or orchestration failed before
+        # reaching it, fall through to direct execution below only
+        # if the orchestration succeeded (all upstreams fresh).
+        # If orchestration failed, create an error report.
+        if not orch_report.success:
+            report = TaskReport(
+                operation="etl",
+                template_name=template_name,
+                verbosity=verbosity,
+            )
+            report.start(total=1)
+            result = create_task_result_from_exception(
+                exception=RuntimeError(
+                    "Upstream dependency processing failed. " "Check logs for details."
+                ),
+                operation="etl",
+                template_name=template_name,
+                args={},
+                duration=orch_report.total_duration,
+                is_expected_error=True,
+            )
+            report.add_result(result)
+            report.finish()
+
+            if report_file:
+                report_path = Path(report_file)
+                file_format = "json" if report_path.suffix == ".json" else "txt"
+                report.save_report(report_path, format=file_format)
+
+            return report
+
     report = TaskReport(
         operation="etl",
         template_name=template_name,
