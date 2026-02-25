@@ -3,6 +3,7 @@ import json
 import shutil
 import sys
 from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
 
@@ -293,6 +294,50 @@ parser_sync_catalog.add_argument(
     help="output format (default: text)",
 )
 
+# Dependency graph commands
+parser_deps = subparsers.add_parser(
+    "deps", help="show upstream dependencies for a template"
+)
+parser_deps.add_argument("template", help="template name")
+
+parser_plan = subparsers.add_parser("plan", help="show execution plan for a template")
+parser_plan.add_argument("template", help="template name")
+parser_plan.add_argument(
+    "--force",
+    action="store_true",
+    help="mark all ancestors for execution regardless of staleness",
+)
+
+parser_run = subparsers.add_parser(
+    "run", help="execute a template with automatic dependency resolution"
+)
+parser_run.add_argument("template", help="template name")
+parser_run.add_argument(
+    "--force",
+    action="store_true",
+    help="re-execute all upstream templates regardless of staleness",
+)
+parser_run.add_argument(
+    "--dry-run",
+    action="store_true",
+    help="show execution plan without running anything",
+)
+add_verbosity_args(parser_run)
+
+parser_graph = subparsers.add_parser(
+    "graph", help="export the dependency graph in DOT format"
+)
+parser_graph.add_argument(
+    "--output",
+    metavar="FILE",
+    help="write DOT output to file (default: stdout)",
+)
+parser_graph.add_argument(
+    "--template",
+    metavar="NAME",
+    help="show only the subgraph for a specific template",
+)
+
 
 def _format_datasets_table(datasets) -> str:
     """Format datasets as a table string."""
@@ -407,6 +452,41 @@ def _format_migration_report(report, verbose: bool = False) -> str:
         lines.append("")
 
     lines.append(report.summary())
+    return "\n".join(lines)
+
+
+def _generate_dot(graph, template_id: str | None = None) -> str:
+    """Generate a DOT representation of the dependency graph.
+
+    Args:
+        graph: A ``TemplateDependencyGraph`` instance.
+        template_id: If given, restrict to the subgraph of this template
+            and its ancestors.
+
+    Returns:
+        A string in DOT format.
+    """
+    if template_id is not None:
+        ancestors = graph.get_ancestors(template_id)
+        nodes = ancestors | {template_id}
+    else:
+        nodes = set(graph.template_ids)
+
+    lines = ["digraph dependencies {", "  rankdir=LR;", "  node [shape=box];"]
+
+    for tid in sorted(nodes):
+        ttype = graph.get_template_type(tid)
+        if ttype == "download":
+            lines.append(f'  "{tid}" [style=filled, fillcolor=lightblue];')
+        else:
+            lines.append(f'  "{tid}" [style=filled, fillcolor=lightyellow];')
+
+    for tid in sorted(nodes):
+        for upstream in graph.get_upstream(tid):
+            if upstream in nodes:
+                lines.append(f'  "{upstream}" -> "{tid}";')
+
+    lines.append("}")
     return "\n".join(lines)
 
 
@@ -655,3 +735,99 @@ if __name__ == "__main__":
 
         if args.dry_run:
             print("\nRun without --dry-run to apply changes.")
+
+    elif args.command == "deps":
+        from .engine.dependency_graph import TemplateDependencyGraph
+
+        graph = TemplateDependencyGraph()
+        template = args.template
+        if template not in graph:
+            print(f"Error: Template '{template}' not found in dependency graph.")
+            sys.exit(1)
+
+        upstream = graph.get_upstream(template)
+        ancestors = graph.get_ancestors(template)
+        downstream = graph.get_downstream(template)
+        ttype = graph.get_template_type(template)
+        outputs = graph.get_outputs(template)
+
+        print(f"Template: {template} ({ttype})")
+        print(f"Outputs: {', '.join(o.dataset_id for o in outputs)}")
+        print()
+        if upstream:
+            print(f"Direct upstream ({len(upstream)}):")
+            for u in upstream:
+                print(f"  {u} ({graph.get_template_type(u)})")
+        else:
+            print("Direct upstream: (none)")
+        print()
+        if ancestors:
+            print(f"All ancestors ({len(ancestors)}):")
+            for a in sorted(ancestors):
+                print(f"  {a} ({graph.get_template_type(a)})")
+        else:
+            print("All ancestors: (none)")
+        print()
+        if downstream:
+            print(f"Direct downstream ({len(downstream)}):")
+            for d in downstream:
+                print(f"  {d} ({graph.get_template_type(d)})")
+        else:
+            print("Direct downstream: (none)")
+
+    elif args.command == "plan":
+        from .engine.dependency_graph import TemplateDependencyGraph
+
+        graph = TemplateDependencyGraph()
+        template = args.template
+        if template not in graph:
+            print(f"Error: Template '{template}' not found in dependency graph.")
+            sys.exit(1)
+
+        plan = graph.get_execution_plan(template, force=args.force)
+        print(plan)
+
+    elif args.command == "run":
+        from .engine.orchestrator import PipelineOrchestrator
+
+        verbosity = get_verbosity(args)
+        orchestrator = PipelineOrchestrator()
+        report = orchestrator.execute(
+            args.template,
+            force=args.force,
+            dry_run=args.dry_run,
+            verbosity=verbosity,
+        )
+        print(report.summary())
+
+        report_file = getattr(args, "report", None)
+        if report_file:
+            # Save the target template's report if available
+            target_report = report.step_reports.get(args.template)
+            if target_report:
+                report_path = Path(report_file)
+                file_format = "json" if report_path.suffix == ".json" else "txt"
+                target_report.save_report(report_path, format=file_format)
+
+        if not report.success:
+            sys.exit(1)
+
+    elif args.command == "graph":
+        from .engine.dependency_graph import TemplateDependencyGraph
+
+        graph = TemplateDependencyGraph()
+        template = getattr(args, "template", None)
+        if template and template not in graph:
+            print(f"Error: Template '{template}' not found in dependency graph.")
+            sys.exit(1)
+
+        dot = _generate_dot(graph, template_id=template)
+
+        output_file = getattr(args, "output", None)
+        if output_file:
+            with Path(output_file).open("w") as f:
+                f.write(dot)
+                f.write("\n")
+            print(f"Graph written to {output_file}")
+        else:
+            print(dot)

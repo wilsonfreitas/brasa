@@ -604,3 +604,42 @@ def process_etl(
         report.save_report(report_path, format=file_format)
 
     return report
+
+
+def get_dependency_graph():
+    """Build and return the template dependency graph.
+
+    Scans all pipeline-based templates and constructs a directed acyclic
+    graph (DAG) of their dependencies.  Legacy function-based templates
+    are excluded.
+
+    Returns:
+        A ``TemplateDependencyGraph`` instance.
+    """
+    from .dependency_graph import TemplateDependencyGraph
+
+    return TemplateDependencyGraph()
+
+
+def get_execution_plan(template_id: str, force: bool = False):
+    """Compute an execution plan for processing a template.
+
+    Builds the dependency graph, determines topological order,
+    checks staleness for each upstream template, and returns a plan
+    describing which steps need execution.
+
+    Args:
+        template_id: The target template to process.
+        force: If ``True``, all ancestors are marked for execution
+            regardless of staleness.
+
+    Returns:
+        An ``ExecutionPlan`` with ordered ``ExecutionStep`` entries.
+
+    Raises:
+        KeyError: If *template_id* is not in the dependency graph.
+    """
+    from .dependency_graph import TemplateDependencyGraph
+
+    graph = TemplateDependencyGraph()
+    return graph.get_execution_plan(template_id, force=force)

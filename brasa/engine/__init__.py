@@ -25,6 +25,8 @@ Public API:
 # Migrations
 from .api import (
     download_marketdata,
+    get_dependency_graph,
+    get_execution_plan,
     get_marketdata,
     process_etl,
     process_marketdata,
@@ -49,6 +51,15 @@ from .core import (
     load_function_by_name,
 )
 
+# Dependency graph
+from .dependency_graph import (
+    CyclicDependencyError,
+    DatasetOutput,
+    ExecutionPlan,
+    ExecutionStep,
+    TemplateDependencyGraph,
+)
+
 # Download internal function (for backwards compatibility)
 from .download import _download_marketdata
 
@@ -62,6 +73,9 @@ from .exceptions import (
 
 # Layers
 from .layers import DEFAULT_ETL_LAYER, DEFAULT_LAYER, LAYER_ORDER, DataLayer
+
+# Orchestrator
+from .orchestrator import OrchestratorReport, PipelineOrchestrator
 
 # Parsers
 from .parsers import (
@@ -122,14 +136,18 @@ __all__ = [
     "CacheMetadata",
     "CharacterFieldHandler",
     "CorruptedContentException",
+    "CyclicDependencyError",
     "DataLayer",
     "DatasetCatalog",
     "DatasetInfo",
+    "DatasetOutput",
     "DateFieldHandler",
     "DownloadAttemptStatus",
     "DownloadException",
     "DownloadResult",
     "DuplicatedFolderException",
+    "ExecutionPlan",
+    "ExecutionStep",
     "FieldHandler",
     "FieldHandlerFactory",
     "InvalidContentException",
@@ -141,12 +159,15 @@ __all__ = [
     "MigrationReport",
     "NumericFieldHandler",
     "NumericParser",
+    "OrchestratorReport",
+    "PipelineOrchestrator",
     "ProgressDisplay",
     "PtBRNumericParser",
     "Singleton",
     "TaskReport",
     "TaskResult",
     "TaskStatus",
+    "TemplateDependencyGraph",
     "TemplateField",
     "TemplateFields",
     "TemplatePart",
@@ -159,6 +180,8 @@ __all__ = [
     "create_task_result_skipped",
     "create_task_result_success",
     "download_marketdata",
+    "get_dependency_graph",
+    "get_execution_plan",
     "get_fname_part",
     "get_marketdata",
     "json_convert_from_object",
