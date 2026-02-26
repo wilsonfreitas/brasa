@@ -125,8 +125,25 @@ dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*" = ["S101", "ARG"]
-# Notebooks may have unused imports for demonstration
-"notebooks/**/*" = ["F401", "E402"]
+# Notebooks are exploratory code — relax rules that clash with interactive use
+"notebooks/**/*" = [
+    "F401",    # Unused imports (common for demonstration)
+    "E402",    # Module-level import not at top of file
+    "F811",    # Redefinition of unused variable (cell re-execution)
+    "F821",    # Undefined name (cross-cell variable references)
+    "B007",    # Loop control variable not used
+    "B018",    # Useless expression (notebook cell display)
+    "C408",    # Unnecessary dict() call
+    "C416",    # Unnecessary comprehension
+    "PTH",     # flake8-use-pathlib (not relevant for scratch code)
+    "PLW2901", # Loop variable overwritten
+    "PLR0911", # Too many return statements
+    "PLR0915", # Too many statements
+    "PLW0127", # Self-assignment
+    "SIM116",  # Use dict instead of if/elif chain
+    "RUF005",  # Consider iterable unpacking
+    "ARG",     # Unused arguments
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["brasa"]
