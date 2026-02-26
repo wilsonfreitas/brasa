@@ -13,6 +13,50 @@ from .engine import CacheManager, Verbosity, sync_catalog_from_disk
 from .queries import BrasaDB, describe_dataset, get_dataset, list_datasets
 from .util import DateRangeParser
 
+# Command groups for organized help display
+_COMMAND_GROUPS = {
+    "Setup": ["setup"],
+    "Execution": ["download", "process", "run"],
+    "Templates": ["deps", "plan", "graph"],
+    "Datasets": [
+        "list-unprocessed",
+        "list-datasets",
+        "describe-dataset",
+        "sync-catalog",
+        "head",
+    ],
+    "Database": ["create-views", "create-view", "list-tables", "query"],
+}
+
+
+class _GroupedHelpFormatter(argparse.HelpFormatter):
+    """HelpFormatter that displays subcommands organized into labeled sections."""
+
+    def _format_action(self, action):
+        if not isinstance(action, argparse._SubParsersAction):
+            return super()._format_action(action)
+
+        help_map = {a.dest: a.help or "" for a in action._choices_actions}
+
+        grouped_cmds = {cmd for cmds in _COMMAND_GROUPS.values() for cmd in cmds}
+        ungrouped = [c for c in action.choices if c not in grouped_cmds]
+
+        parts = []
+        for group_name, cmds in _COMMAND_GROUPS.items():
+            available = [c for c in cmds if c in action.choices]
+            if not available:
+                continue
+            parts.append(f"\n  {group_name}:\n")
+            for cmd in available:
+                parts.append(f"    {cmd:<24}{help_map.get(cmd, '')}\n")
+
+        if ungrouped:
+            parts.append("\n  Other:\n")
+            for cmd in ungrouped:
+                parts.append(f"    {cmd:<24}{help_map.get(cmd, '')}\n")
+
+        return "".join(parts)
+
 
 def add_verbosity_args(parser: argparse.ArgumentParser) -> None:
     """Add verbosity and report arguments to a parser."""
@@ -109,7 +153,8 @@ def _format_dataframe_for_display(
 
 
 parser = argparse.ArgumentParser(
-    description="Brasa CLI for downloading and processing market data"
+    description="Brasa CLI for downloading and processing market data",
+    formatter_class=_GroupedHelpFormatter,
 )
 
 subparsers = parser.add_subparsers(dest="command", title="Commands")
