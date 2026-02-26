@@ -19,6 +19,9 @@ poetry install
 # Run all tests
 poetry run pytest
 
+# Run tests without internet connection (skip integration tests)
+poetry run pytest --no-integration
+
 # Run a single test file
 poetry run pytest tests/test_templates.py
 
@@ -89,7 +92,8 @@ from brasa import download_marketdata, process_marketdata, process_etl, get_mark
 
 - pytest with `pythonpath = ["."]` configured in pyproject.toml
 - `conftest.py` sets `BRASA_DATA_PATH` to a temp directory (session-scoped) to isolate tests from real cache
-- Use `pytest.mark.skip` for tests depending on external/unstable APIs
+- Tests that require an internet connection are marked `@pytest.mark.integration` and can be skipped with `--no-integration`
+- Use `pytest.mark.skip` for tests depending on external/unstable APIs (broken endpoints, resources no longer available)
 - Tests live in `tests/test_*.py`
 
 ## Definition of Done — MANDATORY
