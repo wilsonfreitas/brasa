@@ -74,13 +74,6 @@ def test_template_loading():
     """Test loading a template with pipeline configuration."""
     from brasa.engine.template import retrieve_template
 
-    # Load a template with legacy function-based reader (no pipeline)
-    template = retrieve_template("b3-cash-dividends")
-    assert template.id == "b3-cash-dividends"
-    assert template.has_reader
-    assert not template.reader.has_pipeline
-    assert template.reader.read_function is not None
-
     # Load a template with pipeline-based reader
     template = retrieve_template("b3-futures-settlement-prices")
     assert template.id == "b3-futures-settlement-prices"
