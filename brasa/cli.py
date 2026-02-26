@@ -1,6 +1,7 @@
 import argparse
 import json
 import shutil
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -325,12 +326,19 @@ parser_run.add_argument(
 add_verbosity_args(parser_run)
 
 parser_graph = subparsers.add_parser(
-    "graph", help="export the dependency graph in DOT format"
+    "graph", help="export or render the dependency graph"
+)
+parser_graph.add_argument(
+    "--format",
+    metavar="FORMAT",
+    choices=["dot", "ascii", "png", "svg", "pdf"],
+    default="dot",
+    help="output format: dot (default), ascii, png, svg, pdf",
 )
 parser_graph.add_argument(
     "--output",
     metavar="FILE",
-    help="write DOT output to file (default: stdout)",
+    help="write output to file (default: stdout for text formats)",
 )
 parser_graph.add_argument(
     "--template",
@@ -488,6 +496,57 @@ def _generate_dot(graph, template_id: str | None = None) -> str:
 
     lines.append("}")
     return "\n".join(lines)
+
+
+def _render_ascii(graph, template_id: str | None = None) -> str:
+    """Render the dependency graph as an ASCII tree.
+
+    Args:
+        graph: A ``TemplateDependencyGraph`` instance.
+        template_id: If given, restrict to the subgraph of this template
+            and its ancestors.
+
+    Returns:
+        A string with the ASCII tree representation.
+    """
+    if template_id is not None:
+        ancestors = graph.get_ancestors(template_id)
+        nodes = ancestors | {template_id}
+    else:
+        nodes = set(graph.template_ids)
+
+    def _tree_lines(node: str, prefix: str, visited: set) -> list[str]:
+        ttype = graph.get_template_type(node)
+        tag = "[D]" if ttype == "download" else "[E]"
+        head = f"{tag} {node}"
+        if node in visited:
+            return [head + "  (already shown above)"]
+        visited = visited | {node}
+        upstream = sorted(u for u in graph.get_upstream(node) if u in nodes)
+        lines = [head]
+        for i, dep in enumerate(upstream):
+            is_last = i == len(upstream) - 1
+            connector = "└── " if is_last else "├── "
+            extension = "    " if is_last else "│   "
+            child_lines = _tree_lines(dep, prefix + extension, visited)
+            lines.append(prefix + connector + child_lines[0])
+            for cl in child_lines[1:]:
+                lines.append(cl)
+        return lines
+
+    if template_id is not None:
+        all_lines = _tree_lines(template_id, "", set())
+    else:
+        roots = sorted(
+            t for t in nodes if not any(d in nodes for d in graph.get_downstream(t))
+        )
+        all_lines = []
+        for root in roots:
+            all_lines.extend(_tree_lines(root, "", set()))
+            all_lines.append("")
+
+    legend = ["[D] = download   [E] = etl/processing", ""]
+    return "\n".join(legend + all_lines)
 
 
 if __name__ == "__main__":
@@ -821,13 +880,43 @@ if __name__ == "__main__":
             print(f"Error: Template '{template}' not found in dependency graph.")
             sys.exit(1)
 
+        fmt = getattr(args, "format", "dot")
+        output_file = getattr(args, "output", None)
         dot = _generate_dot(graph, template_id=template)
 
-        output_file = getattr(args, "output", None)
-        if output_file:
-            with Path(output_file).open("w") as f:
-                f.write(dot)
-                f.write("\n")
+        if fmt == "ascii":
+            text = _render_ascii(graph, template_id=template)
+            if output_file:
+                Path(output_file).write_text(text + "\n")
+                print(f"Graph written to {output_file}")
+            else:
+                print(text)
+        elif fmt == "dot":
+            if output_file:
+                with Path(output_file).open("w") as f:
+                    f.write(dot)
+                    f.write("\n")
+                print(f"Graph written to {output_file}")
+            else:
+                print(dot)
+        else:  # png, svg, pdf
+            if not output_file:
+                print(f"Error: --output FILE is required for --format {fmt}")
+                sys.exit(1)
+            if not shutil.which("dot"):
+                print(
+                    "Error: 'dot' command not found. "
+                    "Install graphviz: sudo apt install graphviz"
+                )
+                sys.exit(1)
+            result = subprocess.run(
+                ["dot", f"-T{fmt}", "-o", output_file],
+                input=dot,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            if result.returncode != 0:
+                print(f"Error: graphviz dot command failed:\n{result.stderr}")
+                sys.exit(1)
             print(f"Graph written to {output_file}")
-        else:
-            print(dot)
