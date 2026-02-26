@@ -92,6 +92,16 @@ from brasa import download_marketdata, process_marketdata, process_etl, get_mark
 - Use `pytest.mark.skip` for tests depending on external/unstable APIs
 - Tests live in `tests/test_*.py`
 
+## Definition of Done — MANDATORY
+
+**A task is NOT complete until all three checks pass.** This is non-negotiable:
+
+1. **Tests pass**: `poetry run pytest`
+2. **Ruff passes**: `poetry run ruff check . && poetry run ruff format --check .`
+3. **Pre-commit passes**: `poetry run pre-commit run --all-files`
+
+Never consider a task finished if any of these fail. Fix all issues before declaring the work done.
+
 ## Data Sources
 
 B3 (equities, futures, options, indexes), ANBIMA (fixed income, curves), BCB/SGS (CDI, SELIC, IPCA, FX), CVM (company filings), Tesouro Direto (treasury bonds).
