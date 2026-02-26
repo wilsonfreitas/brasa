@@ -15,6 +15,23 @@ from pathlib import Path
 import pytest
 
 
+def pytest_addoption(parser):
+    parser.addoption(
+        "--no-integration",
+        action="store_true",
+        default=False,
+        help="Skip tests marked as integration (require internet connection)",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--no-integration"):
+        skip = pytest.mark.skip(reason="integration test skipped (--no-integration)")
+        for item in items:
+            if "integration" in item.keywords:
+                item.add_marker(skip)
+
+
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_environment(tmp_path_factory):
     """

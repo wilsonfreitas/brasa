@@ -13,6 +13,7 @@ def test_download_marketdata_missing_args_error():
     assert exc_info.value.args[0] == "Missing argument refdate"
 
 
+@pytest.mark.integration
 def test_download_marketdata_with_refdate():
     meta = CacheMetadata("b3-companies-options")
     _download_marketdata(meta, refdate=datetime(2023, 5, 10))
@@ -27,12 +28,14 @@ def test_download_marketdata_with_refdate():
     assert len(meta.downloaded_files) == 1
 
 
+@pytest.mark.integration
 def test_download_marketdata_with_refdate_and_unzip():
     meta = CacheMetadata("b3-cotahist-daily")
     _download_marketdata(meta, refdate=datetime(2023, 5, 10))
     assert len(meta.downloaded_files) == 1
 
 
+@pytest.mark.integration
 def test_download_marketdata_with_refdate_and_unzip_recursive_with_1_file():
     meta = CacheMetadata("b3-bvbg087")
     _download_marketdata(meta, refdate=datetime(2023, 5, 10))
@@ -53,6 +56,7 @@ def test_download_marketdata_b3_url_encoded():
     assert len(meta.downloaded_files) == 1
 
 
+@pytest.mark.integration
 def test_download_marketdata_b3_url_encoded_with_null_argument():
     time.sleep(5)
     meta = CacheMetadata("b3-indexes-historical-prices")
