@@ -267,3 +267,85 @@ class TestMigrationOnInit:
                 CacheManager.__it__ = original_cache
             else:
                 CacheManager.__it__ = None
+
+
+class TestGetTemplatesWithUnprocessedDownloads:
+    """Tests for CacheManager.get_templates_with_unprocessed_downloads."""
+
+    def _make_meta(self, template: str, args: dict, downloaded: bool, processed: bool):
+        """Helper to build a CacheMetadata with controlled state."""
+        import hashlib
+
+        meta = CacheMetadata(template)
+        meta.download_args = args
+        # Use a deterministic but unique checksum derived from template+args
+        checksum = hashlib.md5(f"{template}{args}".encode()).hexdigest()[:8]
+        meta.download_checksum = checksum
+        if downloaded:
+            meta.add_downloaded_file(f"raw/{template}/{checksum}/file.csv.gz")
+        if processed:
+            meta.add_processed_file("data", f"db/input/{template}/2024-01-01.parquet")
+        return meta
+
+    def test_empty_cache_returns_empty_list(self, temp_cache):
+        result = temp_cache.get_templates_with_unprocessed_downloads()
+        assert result == []
+
+    def test_unprocessed_entry_is_returned(self, temp_cache):
+        meta = self._make_meta("tmpl-a", {"refdate": "2024-01-01"}, True, False)
+        temp_cache.save_meta(meta)
+
+        result = temp_cache.get_templates_with_unprocessed_downloads()
+        assert len(result) == 1
+        assert result[0]["template"] == "tmpl-a"
+        assert result[0]["count"] == 1
+
+    def test_processed_entry_not_returned(self, temp_cache):
+        meta = self._make_meta("tmpl-a", {"refdate": "2024-01-01"}, True, True)
+        temp_cache.save_meta(meta)
+
+        result = temp_cache.get_templates_with_unprocessed_downloads()
+        assert result == []
+
+    def test_not_downloaded_entry_not_returned(self, temp_cache):
+        meta = self._make_meta("tmpl-a", {"refdate": "2024-01-01"}, False, False)
+        temp_cache.save_meta(meta)
+
+        result = temp_cache.get_templates_with_unprocessed_downloads()
+        assert result == []
+
+    def test_invalid_download_not_returned(self, temp_cache):
+        meta = self._make_meta("tmpl-a", {"refdate": "2024-01-01"}, True, False)
+        meta.is_invalid_download = True
+        temp_cache.save_meta(meta)
+
+        result = temp_cache.get_templates_with_unprocessed_downloads()
+        assert result == []
+
+    def test_count_aggregated_per_template(self, temp_cache):
+        for day in ["2024-01-01", "2024-01-02", "2024-01-03"]:
+            meta = self._make_meta("tmpl-a", {"refdate": day}, True, False)
+            temp_cache.save_meta(meta)
+
+        result = temp_cache.get_templates_with_unprocessed_downloads()
+        assert len(result) == 1
+        assert result[0]["template"] == "tmpl-a"
+        assert result[0]["count"] == 3
+
+    def test_multiple_templates_sorted(self, temp_cache):
+        for template in ["tmpl-c", "tmpl-a", "tmpl-b"]:
+            meta = self._make_meta(template, {"refdate": "2024-01-01"}, True, False)
+            temp_cache.save_meta(meta)
+
+        result = temp_cache.get_templates_with_unprocessed_downloads()
+        assert [r["template"] for r in result] == ["tmpl-a", "tmpl-b", "tmpl-c"]
+
+    def test_mixed_processed_and_unprocessed(self, temp_cache):
+        processed = self._make_meta("tmpl-a", {"refdate": "2024-01-01"}, True, True)
+        temp_cache.save_meta(processed)
+        unprocessed = self._make_meta("tmpl-a", {"refdate": "2024-01-02"}, True, False)
+        temp_cache.save_meta(unprocessed)
+
+        result = temp_cache.get_templates_with_unprocessed_downloads()
+        assert len(result) == 1
+        assert result[0]["count"] == 1

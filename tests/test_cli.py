@@ -99,3 +99,23 @@ class TestHeadCommandValidation:
         parts = dataset_arg.split(".", 1)
         # Empty name should be considered invalid
         assert parts[1] == ""
+
+
+class TestListUnprocessedCommand:
+    """Tests for the list-unprocessed CLI command parser."""
+
+    def test_list_unprocessed_command_parser_exists(self) -> None:
+        args = cli.parser.parse_args(["list-unprocessed"])
+        assert args.command == "list-unprocessed"
+
+    def test_list_unprocessed_default_format_is_table(self) -> None:
+        args = cli.parser.parse_args(["list-unprocessed"])
+        assert args.format == "table"
+
+    def test_list_unprocessed_format_json(self) -> None:
+        args = cli.parser.parse_args(["list-unprocessed", "--format", "json"])
+        assert args.format == "json"
+
+    def test_list_unprocessed_format_table_explicit(self) -> None:
+        args = cli.parser.parse_args(["list-unprocessed", "--format", "table"])
+        assert args.format == "table"

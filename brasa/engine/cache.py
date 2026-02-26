@@ -808,6 +808,33 @@ class CacheManager(Singleton):
             )
         return result  # type: ignore[return-value]
 
+    def get_templates_with_unprocessed_downloads(self) -> list[dict]:
+        """Get download templates that have unprocessed cache entries.
+
+        An entry is considered unprocessed when it has downloaded files
+        but no processed (parquet) files and is not marked as invalid.
+
+        Returns:
+            List of dicts with ``template`` and ``count`` keys, ordered
+            by template name.  ``count`` is the number of unprocessed
+            cache entries for that template.
+        """
+        with closing(self.meta_db_connection) as conn, conn:
+            c = conn.cursor()
+            c.execute(
+                "SELECT template, COUNT(*) as count "
+                "FROM cache_metadata "
+                "WHERE downloaded_files NOT IN ('[]', '', 'null') "
+                "  AND downloaded_files IS NOT NULL "
+                "  AND (processed_files IN ('{}', '', 'null') "
+                "       OR processed_files IS NULL) "
+                "  AND (is_invalid_download IS NULL "
+                "       OR is_invalid_download != '1') "
+                "GROUP BY template "
+                "ORDER BY template"
+            )
+            return [{"template": row[0], "count": row[1]} for row in c.fetchall()]
+
     def process_without_checks(
         self, meta: CacheMetadata
     ) -> pd.DataFrame | dict[str, pd.DataFrame] | None:

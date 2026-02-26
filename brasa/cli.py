@@ -325,6 +325,17 @@ parser_run.add_argument(
 )
 add_verbosity_args(parser_run)
 
+parser_list_unprocessed = subparsers.add_parser(
+    "list-unprocessed",
+    help="list download templates with unprocessed (downloaded but not parsed) files",
+)
+parser_list_unprocessed.add_argument(
+    "--format",
+    choices=["table", "json"],
+    default="table",
+    help="output format (default: table)",
+)
+
 parser_graph = subparsers.add_parser(
     "graph", help="export or render the dependency graph"
 )
@@ -870,6 +881,24 @@ if __name__ == "__main__":
 
         if not report.success:
             sys.exit(1)
+
+    elif args.command == "list-unprocessed":
+        manager = CacheManager()
+        results = manager.get_templates_with_unprocessed_downloads()
+        if args.format == "json":
+            print(json.dumps(results, indent=2))
+        elif not results:
+            print("No templates with unprocessed downloads.")
+        else:
+            name_width = max(len(r["template"]) for r in results)
+            name_width = max(name_width, len("Template"))
+            print(f"{'Template':<{name_width}}  {'Unprocessed':>11}")
+            print("-" * (name_width + 13))
+            for r in results:
+                print(f"{r['template']:<{name_width}}  {r['count']:>11}")
+            print("-" * (name_width + 13))
+            total = sum(r["count"] for r in results)
+            print(f"{'Total':<{name_width}}  {total:>11}")
 
     elif args.command == "graph":
         from .engine.dependency_graph import TemplateDependencyGraph
