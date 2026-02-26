@@ -6,7 +6,8 @@ from datetime import datetime
 import brasa
 from brasa.util import DateRange
 
-period = DateRange(start=datetime(2024, 1, 1), end=datetime.today(), calendar="B3")
+# period = DateRange(start=datetime(2025, 1, 1), end=datetime.today(), calendar="B3")
+period = DateRange(start=datetime(2025, 1, 1), end=datetime(2025, 3, 23), calendar="B3")
 
 brasa.process_etl("bcb-data")
 brasa.download_marketdata("b3-bvbg087", refdate=period)
