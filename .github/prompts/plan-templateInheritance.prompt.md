@@ -19,7 +19,7 @@ TL;DR: Add an optional template compiler that resolves `extends` references, per
 6. Add tests to ensure compiled templates are identical in structure to current ones and that legacy templates load unchanged, likely in tests/test_templates.py.
 
 **Verification**
-- poetry run pytest tests/test_templates.py
+- uv run pytest tests/test_templates.py
 - Manual: run template compilation on the four templates and confirm runtime loads for existing templates are unchanged.
 
 **Decisions**

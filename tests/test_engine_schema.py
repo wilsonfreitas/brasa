@@ -62,9 +62,9 @@ class TestEngineSchemaGeneration:
             if field_name in schema.names:
                 field = schema.field(field_name)
                 # Should be decimal128 for financial data
-                assert pa.types.is_decimal(
-                    field.type
-                ), f"{field_name} should be decimal type"
+                assert pa.types.is_decimal(field.type), (
+                    f"{field_name} should be decimal type"
+                )
                 break
 
     def test_schema_from_pandas_compatible(self):

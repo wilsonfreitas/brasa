@@ -30,7 +30,7 @@ options:
 The quickest way to explore a template's ancestry in the terminal:
 
 ```bash
-poetry run python -m brasa.cli graph --template b3-equities-returns --format ascii
+uv run python -m brasa.cli graph --template b3-equities-returns --format ascii
 ```
 
 ```
@@ -61,10 +61,10 @@ string, suitable for further processing or storage:
 
 ```bash
 # Print to stdout
-poetry run python -m brasa.cli graph --template b3-equities-returns
+uv run python -m brasa.cli graph --template b3-equities-returns
 
 # Save to a file
-poetry run python -m brasa.cli graph --template b3-equities-returns --output graph.dot
+uv run python -m brasa.cli graph --template b3-equities-returns --output graph.dot
 ```
 
 ### Render an image with `dot`
@@ -81,15 +81,15 @@ Then render directly from the CLI:
 
 ```bash
 # PNG
-poetry run python -m brasa.cli graph --template b3-equities-returns \
+uv run python -m brasa.cli graph --template b3-equities-returns \
     --format png --output graph.png
 
 # SVG (scales well in browsers and reports)
-poetry run python -m brasa.cli graph --template b3-equities-returns \
+uv run python -m brasa.cli graph --template b3-equities-returns \
     --format svg --output graph.svg
 
 # PDF
-poetry run python -m brasa.cli graph --template b3-equities-returns \
+uv run python -m brasa.cli graph --template b3-equities-returns \
     --format pdf --output graph.pdf
 ```
 
@@ -100,15 +100,15 @@ layout and styling:
 
 ```bash
 # PNG via pipe
-poetry run python -m brasa.cli graph --template b3-equities-returns \
+uv run python -m brasa.cli graph --template b3-equities-returns \
     | dot -Tpng -o graph.png
 
 # SVG with a different layout engine (neato, fdp, circo, twopi…)
-poetry run python -m brasa.cli graph --template b3-equities-returns \
+uv run python -m brasa.cli graph --template b3-equities-returns \
     | dot -Tsvg -Kneato -o graph.svg
 
 # Open directly without saving (requires imagemagick)
-poetry run python -m brasa.cli graph --template b3-equities-returns \
+uv run python -m brasa.cli graph --template b3-equities-returns \
     | dot -Tpng | display
 ```
 
@@ -117,8 +117,8 @@ poetry run python -m brasa.cli graph --template b3-equities-returns \
 Omit `--template` to include every template in the registry:
 
 ```bash
-poetry run python -m brasa.cli graph --format ascii
-poetry run python -m brasa.cli graph --format svg --output full-graph.svg
+uv run python -m brasa.cli graph --format ascii
+uv run python -m brasa.cli graph --format svg --output full-graph.svg
 ```
 
 ---
@@ -126,7 +126,7 @@ poetry run python -m brasa.cli graph --format svg --output full-graph.svg
 ## `deps` — inspect a single template's links
 
 ```bash
-poetry run python -m brasa.cli deps b3-equities-returns
+uv run python -m brasa.cli deps b3-equities-returns
 ```
 
 ```

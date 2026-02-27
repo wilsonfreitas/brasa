@@ -13,7 +13,7 @@ When generating code for this repository:
 ## Technology Versions (Observed)
 
 - **Python**: ^3.10 (Ruff target version `py310`)
-- **Package Manager**: Poetry
+- **Package Manager**: uv
 - **Linter/Formatter**: Ruff (line length 88, double quotes)
 - **Type Checker**: mypy
 - **Testing**: pytest
@@ -86,14 +86,14 @@ Use these observed patterns as references:
 
 ## Tooling Commands
 
-Always run commands via Poetry:
+Always run commands via uv:
 
 ```bash
-poetry run python cli-ei.py
-poetry run pytest
-poetry run ruff check .
-poetry run ruff format .
-poetry run mypy brasa/
+uv run python cli-ei.py
+uv run pytest
+uv run ruff check .
+uv run ruff format .
+uv run mypy brasa/
 ```
 
 ## Public API Surface

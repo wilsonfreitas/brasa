@@ -490,7 +490,7 @@ class TemplateDependencyGraph:
         subgraph_nodes = ancestors | {template_id}
 
         # Build in-degree map and adjacency restricted to subgraph
-        in_degree: dict[str, int] = {tid: 0 for tid in subgraph_nodes}
+        in_degree: dict[str, int] = dict.fromkeys(subgraph_nodes, 0)
         for tid in subgraph_nodes:
             for upstream in self.edges.get(tid, []):
                 if upstream in subgraph_nodes:
@@ -514,7 +514,7 @@ class TemplateDependencyGraph:
             # Some nodes still have non-zero in-degree → cycle
             remaining = subgraph_nodes - set(result)
             raise CyclicDependencyError(
-                f"Cyclic dependency detected among templates: " f"{sorted(remaining)}"
+                f"Cyclic dependency detected among templates: {sorted(remaining)}"
             )
 
         return result
@@ -531,8 +531,8 @@ class TemplateDependencyGraph:
             is acyclic.
         """
         WHITE, GRAY, BLACK = 0, 1, 2
-        color: dict[str, int] = {tid: WHITE for tid in self.templates}
-        parent: dict[str, str | None] = {tid: None for tid in self.templates}
+        color: dict[str, int] = dict.fromkeys(self.templates, WHITE)
+        parent: dict[str, str | None] = dict.fromkeys(self.templates)
         cycles: list[list[str]] = []
 
         def _dfs(node: str) -> None:

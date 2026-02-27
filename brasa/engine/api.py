@@ -528,7 +528,7 @@ def process_etl(
             report.start(total=1)
             result = create_task_result_from_exception(
                 exception=RuntimeError(
-                    "Upstream dependency processing failed. " "Check logs for details."
+                    "Upstream dependency processing failed. Check logs for details."
                 ),
                 operation="etl",
                 template_name=template_name,

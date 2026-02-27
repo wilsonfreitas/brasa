@@ -134,7 +134,7 @@ This plan defines and implements a single, deterministic download status model f
 - **DEP-002**: Existing reporting framework in `brasa/engine/reporting.py`.
 - **DEP-003**: SQLite schema bootstrap in `sql/create-meta-db.sql` and cache initialization in `brasa/engine/cache.py`.
 - **DEP-004**: pytest test framework and fixtures in `tests/conftest.py`.
-- **DEP-005**: Python runtime script execution via Poetry (`poetry run python scripts/migrate_download_trials_status.py`).
+- **DEP-005**: Python runtime script execution via uv (`uv run python scripts/migrate_download_trials_status.py`).
 
 ## 5. Files
 

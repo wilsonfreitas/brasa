@@ -614,9 +614,9 @@ class TestIntegrationWithRealTemplates:
         """Download templates should have no upstream dependencies."""
         for tid in graph.template_ids:
             if graph.get_template_type(tid) == "download":
-                assert (
-                    graph.get_upstream(tid) == []
-                ), f"Download template '{tid}' should be a source node"
+                assert graph.get_upstream(tid) == [], (
+                    f"Download template '{tid}' should be a source node"
+                )
 
     def test_reverse_index_covers_all_outputs(self, graph: TemplateDependencyGraph):
         """Every output should be in the reverse index."""

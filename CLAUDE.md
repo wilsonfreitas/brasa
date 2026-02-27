@@ -6,40 +6,40 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **brasa** is a Python library for extracting, processing, and querying financial market data from Brazilian institutions (B3, ANBIMA, Tesouro Direto, CVM, BCB). It uses a template-driven ETL architecture where YAML templates in `templates/` declaratively define download, parsing, transformation, and storage pipelines.
 
-## Important: Always Use Poetry
+## Important: Always Use uv
 
-This project uses **Poetry** for dependency management. **Every** Python command must be run through `poetry run` — never use bare `python`, `pytest`, `ruff`, or `mypy` directly.
+This project uses **uv** for dependency management. **Every** Python command must be run through `uv run` — never use bare `python`, `pytest`, `ruff`, or `mypy` directly.
 
 ## Common Commands
 
 ```bash
 # Install dependencies
-poetry install
+uv sync
 
 # Run all tests
-poetry run pytest
+uv run pytest
 
 # Run tests without internet connection (skip integration tests)
-poetry run pytest --no-integration
+uv run pytest --no-integration
 
 # Run a single test file
-poetry run pytest tests/test_templates.py
+uv run pytest tests/test_templates.py
 
 # Run a specific test
-poetry run pytest tests/test_templates.py::test_function_name -v
+uv run pytest tests/test_templates.py::test_function_name -v
 
 # Linting
-poetry run ruff check .
-poetry run ruff check . --fix
+uv run ruff check .
+uv run ruff check . --fix
 
 # Formatting
-poetry run ruff format .
+uv run ruff format .
 
 # Type checking
-poetry run mypy brasa/
+uv run mypy brasa/
 
 # Pre-commit hooks
-poetry run pre-commit run --all-files
+uv run pre-commit run --all-files
 ```
 
 ## Architecture
@@ -86,7 +86,7 @@ from brasa import download_marketdata, process_marketdata, process_etl, get_mark
 - Type hints in new code
 - Imports: stdlib → third-party → local
 - Field names in templates: `snake_case`
-- All commands run through `poetry run`
+- All commands run through `uv run`
 
 ## Testing
 
@@ -100,9 +100,9 @@ from brasa import download_marketdata, process_marketdata, process_etl, get_mark
 
 **A task is NOT complete until all three checks pass.** This is non-negotiable:
 
-1. **Tests pass**: `poetry run pytest`
-2. **Ruff passes**: `poetry run ruff check . && poetry run ruff format --check .`
-3. **Pre-commit passes**: `poetry run pre-commit run --all-files`
+1. **Tests pass**: `uv run pytest`
+2. **Ruff passes**: `uv run ruff check . && uv run ruff format --check .`
+3. **Pre-commit passes**: `uv run pre-commit run --all-files`
 
 Never consider a task finished if any of these fail. Fix all issues before declaring the work done.
 

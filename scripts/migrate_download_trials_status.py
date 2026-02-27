@@ -7,7 +7,7 @@ to existing download_trials tables and backfills legacy rows:
     downloaded=0 -> status_code='F', status_name='FAILED'
 
 Usage:
-    poetry run python scripts/migrate_download_trials_status.py [CACHE_PATH]
+    uv run python scripts/migrate_download_trials_status.py [CACHE_PATH]
 
 If CACHE_PATH is omitted, uses $BRASA_DATA_PATH or ./.brasa-cache.
 """

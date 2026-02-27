@@ -200,7 +200,7 @@ def test_unified_reader_read_csv_auto_engine_large_file_return_pyarrow(tmp_path)
     # Create a large dummy file
     large_file = tmp_path / "large_auto.csv"
     content = "col_int,col_float\n" + "\n".join(
-        [f"{i},{i*1.0}" for i in range(100000)]
+        [f"{i},{i * 1.0}" for i in range(100000)]
     )  # ~2MB
     large_file.write_text(content)
 

@@ -403,8 +403,7 @@ class MarketDataDownloader:
         for code in self.retry_on_status_codes:
             if not (100 <= code <= 599):
                 raise ValueError(
-                    f"retry_on_status_codes values must be in "
-                    f"[100, 599], got {code}"
+                    f"retry_on_status_codes values must be in [100, 599], got {code}"
                 )
 
     def download_args(self, **kwargs) -> dict:
@@ -688,8 +687,7 @@ def reload_template(template_name: str) -> MarketDataTemplate:
         ValueError: If the template is not found or has ID mismatch.
     """
     # Remove from cache if present
-    if template_name in _template_cache:
-        del _template_cache[template_name]
+    _template_cache.pop(template_name, None)
     # Load fresh
     return retrieve_template(template_name)
 

@@ -211,7 +211,7 @@ python -m brasa.cli query "SELECT * FROM 'b3-cotahist-daily'"
 ## Next Steps for Users
 
 ### Getting Started
-1. Install: `poetry install`
+1. Install: `uv sync --all-groups`
 2. Setup: `python -m brasa.cli setup`
 3. Download data: `download_marketdata("b3-cotahist-daily", refdate=period)`
 4. Process: `process_marketdata("b3-cotahist-daily")`

@@ -8,49 +8,49 @@ This document covers the main commands for code linting, formatting, and pre-com
 
 ```bash
 # Check entire project
-poetry run ruff check .
+uv run ruff check .
 
 # Check specific directory
-poetry run ruff check brasa/
+uv run ruff check brasa/
 
 # Check specific file
-poetry run ruff check brasa/engine.py
+uv run ruff check brasa/engine.py
 
 # Show statistics of issues found
-poetry run ruff check brasa/ --statistics
+uv run ruff check brasa/ --statistics
 ```
 
 ### Auto-fix Linting Issues
 
 ```bash
 # Fix all auto-fixable issues
-poetry run ruff check . --fix
+uv run ruff check . --fix
 
 # Fix and exit with error if changes were made
-poetry run ruff check . --fix --exit-non-zero-on-fix
+uv run ruff check . --fix --exit-non-zero-on-fix
 ```
 
 ### Format Code
 
 ```bash
 # Format entire project
-poetry run ruff format .
+uv run ruff format .
 
 # Format specific directory
-poetry run ruff format brasa/
+uv run ruff format brasa/
 
 # Check formatting without making changes (dry-run)
-poetry run ruff format . --check
+uv run ruff format . --check
 
 # Show diff of what would change
-poetry run ruff format . --diff
+uv run ruff format . --diff
 ```
 
 ### Combined Lint + Format
 
 ```bash
 # Fix linting issues and format code
-poetry run ruff check . --fix && poetry run ruff format .
+uv run ruff check . --fix && uv run ruff format .
 ```
 
 ## Pre-commit Hooks
@@ -59,37 +59,37 @@ poetry run ruff check . --fix && poetry run ruff format .
 
 ```bash
 # Install pre-commit hooks (run once after cloning)
-poetry run pre-commit install
+uv run pre-commit install
 ```
 
 ### Running Pre-commit
 
 ```bash
 # Run on all files
-poetry run pre-commit run --all-files
+uv run pre-commit run --all-files
 
 # Run on staged files only (default behavior on commit)
-poetry run pre-commit run
+uv run pre-commit run
 
 # Run specific hook
-poetry run pre-commit run ruff --all-files
-poetry run pre-commit run ruff-format --all-files
+uv run pre-commit run ruff --all-files
+uv run pre-commit run ruff-format --all-files
 
 # Run on specific files
-poetry run pre-commit run --files brasa/engine.py brasa/api.py
+uv run pre-commit run --files brasa/engine.py brasa/api.py
 ```
 
 ### Managing Pre-commit
 
 ```bash
 # Update hooks to latest versions
-poetry run pre-commit autoupdate
+uv run pre-commit autoupdate
 
 # Clean pre-commit cache
-poetry run pre-commit clean
+uv run pre-commit clean
 
 # Uninstall hooks
-poetry run pre-commit uninstall
+uv run pre-commit uninstall
 ```
 
 ### Bypass Pre-commit (Emergency Only)

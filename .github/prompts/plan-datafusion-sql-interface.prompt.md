@@ -119,7 +119,7 @@
 
 - `datafusion >= 0.43.0` as optional dependency
 - Add to `[tool.poetry.extras]` for `analytics` extra: `datafusion`
-- Installation: `poetry install -E analytics` or `poetry add --group dev datafusion`
+- Installation: `uv sync -E analytics` or `poetry add --group dev datafusion`
 
 ### 11. Add DataFusion backend support to CLI in `brasa/cli.py`
 

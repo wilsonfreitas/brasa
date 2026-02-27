@@ -4,9 +4,9 @@
 
 ### Installation
 
-Using Poetry (recommended):
+Using uv (recommended):
 ```bash
-poetry install
+uv sync
 ```
 
 Using pip:
@@ -912,7 +912,7 @@ Existing cache databases are migrated automatically on startup. The
 You can also run the migration manually:
 
 ```bash
-poetry run python scripts/migrate_download_trials_status.py [CACHE_PATH]
+uv run python scripts/migrate_download_trials_status.py [CACHE_PATH]
 ```
 
 If `CACHE_PATH` is omitted, the script uses `$BRASA_DATA_PATH` or

@@ -74,7 +74,7 @@ This plan defines the implementation of a new ETL dataset named `brasa-industry-
 | TASK-012 | Update `tests/test_templates.py` with `test_brasa_industry_sectors_template_loads()` following existing pattern used by `test_brasa_companies_template_loads()`. | ✅ | 2026-02-20 |
 | TASK-013 | Assert: template id is `brasa-industry-sectors`, `is_etl=True`, `etl.is_pipeline=True`, and expected fields are present. | ✅ | 2026-02-20 |
 | TASK-014 | Add optional skipped integration test `test_brasa_industry_sectors_pipeline_execution()` with `@pytest.mark.skip` reason requiring local datalake in `staging.brasa-companies`. | ✅ | 2026-02-20 |
-| TASK-015 | Run validation commands: `poetry run pytest tests/test_templates.py -k industry_sectors`, `poetry run ruff check .`. | ✅ | 2026-02-20 |
+| TASK-015 | Run validation commands: `uv run pytest tests/test_templates.py -k industry_sectors`, `uv run ruff check .`. | ✅ | 2026-02-20 |
 
 ### Implementation Phase 4: Documentation and Operational Usage
 
@@ -85,7 +85,7 @@ This plan defines the implementation of a new ETL dataset named `brasa-industry-
 |------|-------------|-----------|------|
 | TASK-016 | Update `docs/TEMPLATES.md` with a short ETL-single-dataset example reference for `brasa-industry-sectors` and source `staging.brasa-companies`. | ✅ | 2026-02-20 |
 | TASK-017 | Update `README.md` or `docs/README.md` dataset section with one-line purpose: lookup table for sector taxonomy normalization. | ✅ | 2026-02-20 |
-| TASK-018 | Add runbook snippet: `poetry run brasa etl brasa-industry-sectors` (or repository-standard command equivalent) and expected output path in staging DB layer. | ✅ | 2026-02-20 |
+| TASK-018 | Add runbook snippet: `uv run brasa etl brasa-industry-sectors` (or repository-standard command equivalent) and expected output path in staging DB layer. | ✅ | 2026-02-20 |
 
 ## 3. Alternatives
 

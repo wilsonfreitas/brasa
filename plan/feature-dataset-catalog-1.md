@@ -393,28 +393,28 @@ class MigrationReport:
 
 ```bash
 # Basic migration - register all untracked datasets
-poetry run python -m brasa.cli sync-catalog
+uv run python -m brasa.cli sync-catalog
 
 # Migration with layer filter
-poetry run python -m brasa.cli sync-catalog --layer staging
+uv run python -m brasa.cli sync-catalog --layer staging
 
 # Dry-run to preview changes
-poetry run python -m brasa.cli sync-catalog --dry-run
+uv run python -m brasa.cli sync-catalog --dry-run
 
 # Force re-registration (overwrite existing entries)
-poetry run python -m brasa.cli sync-catalog --force
+uv run python -m brasa.cli sync-catalog --force
 
 # Verbose output showing schema details
-poetry run python -m brasa.cli sync-catalog --verbose
+uv run python -m brasa.cli sync-catalog --verbose
 
 # Output as JSON for programmatic processing
-poetry run python -m brasa.cli sync-catalog --format json
+uv run python -m brasa.cli sync-catalog --format json
 ```
 
 ### 8.6 Expected CLI Output
 
 ```
-$ poetry run python -m brasa.cli sync-catalog --dry-run
+$ uv run python -m brasa.cli sync-catalog --dry-run
 
 Scanning .brasa-cache/db/ for untracked datasets...
 
@@ -459,13 +459,13 @@ After migration, users can validate the catalog:
 
 ```bash
 # List all registered datasets
-poetry run python -m brasa.cli list-datasets
+uv run python -m brasa.cli list-datasets
 
 # Verify a specific dataset can be loaded with correct schema
-poetry run python -m brasa.cli head staging.b3-indexes-historical-prices
+uv run python -m brasa.cli head staging.b3-indexes-historical-prices
 
 # Compare catalog schema with template schema (if template exists)
-poetry run python -m brasa.cli describe-dataset input.b3-cotahist --compare-template
+uv run python -m brasa.cli describe-dataset input.b3-cotahist --compare-template
 ```
 
 ### 8.9 Migration Tasks (Detailed)

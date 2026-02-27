@@ -10,8 +10,8 @@
     "cSpell.language": "en,pt,pt-BR",
     "python.analysis.enablePytestSupport": false,
     "python.testing.autoTestDiscoverOnSaveEnabled": false,
-    "python-envs.defaultEnvManager": "ms-python.python:poetry",
-    "python-envs.defaultPackageManager": "ms-python.python:poetry",
+    "python-envs.defaultEnvManager": "ms-python.python:uv",
+    "python-envs.defaultPackageManager": "ms-python.python:uv",
     "python-envs.pythonProjects": [],
     "python.analysis.typeCheckingMode": "basic",
     // ==========================================================================

@@ -24,7 +24,7 @@ Legacy `downloaded=1` rows become `PASSED`; `downloaded=0` become `FAILED`.
 A standalone migration script is also available:
 
 ```bash
-poetry run python scripts/migrate_download_trials_status.py
+uv run python scripts/migrate_download_trials_status.py
 ```
 
 See [docs/USER_GUIDE.md](docs/USER_GUIDE.md#download-status-codes) for full details.

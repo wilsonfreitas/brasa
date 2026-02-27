@@ -82,9 +82,9 @@ class TestTemplateWithDatasets:
 
         for name, config in tpl.datasets.items():
             assert hasattr(config, "fields"), f"Dataset '{name}' missing fields"
-            assert isinstance(
-                config.fields, Fieldset
-            ), f"Dataset '{name}' fields is not a Fieldset"
+            assert isinstance(config.fields, Fieldset), (
+                f"Dataset '{name}' fields is not a Fieldset"
+            )
             assert len(config.fields) > 0, f"Dataset '{name}' has empty fieldset"
 
     @pytest.mark.xfail(reason="datasets parsing not yet implemented")

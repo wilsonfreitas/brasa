@@ -464,11 +464,10 @@ def test_needs_converter_used_only_for_read_csv():
         # All date/datetime fields must have a converter in read_csv path
         for f in date_fields:
             assert f.name in converters, (
-                f"Field '{f.name}' missing from read_csv converters "
-                f"(errors='{errors}')"
+                f"Field '{f.name}' missing from read_csv converters (errors='{errors}')"
             )
         # And all are also independently vectorizable in apply_types
         for f in date_fields:
-            assert adapter._can_vectorize_date(
-                f
-            ), f"Field '{f.name}' should still be vectorizable in apply_types"
+            assert adapter._can_vectorize_date(f), (
+                f"Field '{f.name}' should still be vectorizable in apply_types"
+            )

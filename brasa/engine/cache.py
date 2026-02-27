@@ -617,7 +617,7 @@ class CacheManager(Singleton):
                 )
             else:
                 c.execute(
-                    "SELECT COUNT(*) FROM download_trials " "WHERE cache_id = ?",
+                    "SELECT COUNT(*) FROM download_trials WHERE cache_id = ?",
                     (meta.id,),
                 )
             row = c.fetchone()

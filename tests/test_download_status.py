@@ -485,8 +485,7 @@ class TestRetryStatusIntegration:
         with closing(temp_cache.meta_db_connection) as conn, conn:
             c = conn.cursor()
             c.execute(
-                "SELECT DISTINCT status_code FROM download_trials "
-                "WHERE cache_id = ?",
+                "SELECT DISTINCT status_code FROM download_trials WHERE cache_id = ?",
                 (meta.id,),
             )
             codes = {row[0] for row in c.fetchall()}

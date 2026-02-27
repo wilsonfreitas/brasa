@@ -144,9 +144,9 @@ def test_brasa_companies_template_loads():
         "cvm_cnpj",
         "b3_cnpj",
     }
-    assert expected_fields.issubset(
-        field_names
-    ), f"Missing fields: {expected_fields - field_names}"
+    assert expected_fields.issubset(field_names), (
+        f"Missing fields: {expected_fields - field_names}"
+    )
 
 
 @pytest.mark.skip(
@@ -185,15 +185,15 @@ def test_brasa_industry_sectors_template_loads():
         "normalized_sector",
         "normalized_subsector",
     }
-    assert expected_fields.issubset(
-        field_names
-    ), f"Missing fields: {expected_fields - field_names}"
+    assert expected_fields.issubset(field_names), (
+        f"Missing fields: {expected_fields - field_names}"
+    )
 
     # Verify all fields are of type string
     for field in tpl.fields:
-        assert (
-            field.type_name == "string"
-        ), f"Field '{field.name}' expected type 'string', got '{field.type_name}'"
+        assert field.type_name == "string", (
+            f"Field '{field.name}' expected type 'string', got '{field.type_name}'"
+        )
 
 
 @pytest.mark.skip(reason="Requires local datalake dataset staging.brasa-companies")

@@ -74,7 +74,7 @@ This plan addresses the "database could not be opened" error encountered during 
 
 ## 6. Testing
 
-- **TEST-001**: Run `poetry run pytest` to ensure all tests pass and database operations function correctly.
+- **TEST-001**: Run `uv run pytest` to ensure all tests pass and database operations function correctly.
 - **TEST-002**: Run `process_marketdata` with multiple workers to verify the "database could not be opened" error no longer occurs.
 
 ## 7. Risks & Assumptions

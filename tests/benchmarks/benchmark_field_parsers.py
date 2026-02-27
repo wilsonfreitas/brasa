@@ -25,11 +25,11 @@ Usage
 -----
 Run with pytest (collects timings in report output):
 
-    poetry run pytest tests/benchmarks/benchmark_field_parsers.py -v -s
+    uv run pytest tests/benchmarks/benchmark_field_parsers.py -v -s
 
 Or run as a standalone script for plain-text report:
 
-    poetry run python tests/benchmarks/benchmark_field_parsers.py
+    uv run python tests/benchmarks/benchmark_field_parsers.py
 """
 
 from __future__ import annotations
@@ -244,7 +244,7 @@ def run_cand_001(
                 false_map = {"false", "f", "no", "n", "0", "off"}
                 lower = df[col].str.lower().str.strip()
                 mapped = lower.map(
-                    {**{v: True for v in true_map}, **{v: False for v in false_map}}
+                    {**dict.fromkeys(true_map, True), **dict.fromkeys(false_map, False)}
                 )
                 df[col] = mapped.astype("boolean")
 
@@ -854,9 +854,9 @@ def test_benchmark_parity_cand_001(benchmark_results):
         None,
     )
     assert row is not None
-    assert (
-        row.parity >= 0.999
-    ), f"CAND-001 parity {row.parity:.4f} < 0.999 (GATE-002 fail). Notes: {row.notes}"
+    assert row.parity >= 0.999, (
+        f"CAND-001 parity {row.parity:.4f} < 0.999 (GATE-002 fail). Notes: {row.notes}"
+    )
 
 
 @pytest.mark.benchmark
@@ -889,9 +889,9 @@ def test_benchmark_parity_cand_004(benchmark_results):
         None,
     )
     assert row is not None
-    assert (
-        row.parity >= 0.999
-    ), f"CAND-004 parity {row.parity:.4f} < 0.999 (GATE-002 fail). Notes: {row.notes}"
+    assert row.parity >= 0.999, (
+        f"CAND-004 parity {row.parity:.4f} < 0.999 (GATE-002 fail). Notes: {row.notes}"
+    )
 
 
 @pytest.mark.benchmark
@@ -908,9 +908,9 @@ def test_benchmark_parity_cand_002(benchmark_results):
     assert row is not None
     if row.notes.startswith("ERROR"):
         pytest.skip(f"CAND-002 error: {row.notes}")
-    assert (
-        row.parity >= 0.999
-    ), f"CAND-002 parity {row.parity:.4f} < 0.999 (GATE-002 fail). Notes: {row.notes}"
+    assert row.parity >= 0.999, (
+        f"CAND-002 parity {row.parity:.4f} < 0.999 (GATE-002 fail). Notes: {row.notes}"
+    )
 
 
 # ---------------------------------------------------------------------------

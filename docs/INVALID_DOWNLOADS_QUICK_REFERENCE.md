@@ -48,7 +48,7 @@ download_marketdata(template, arg1=value, reprocess=True)
 
 Run the test suite:
 ```bash
-poetry run pytest tests/test_invalid_downloads.py -v
+uv run pytest tests/test_invalid_downloads.py -v
 ```
 
 Expected: **10/10 tests pass**

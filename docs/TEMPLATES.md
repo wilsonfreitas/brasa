@@ -585,7 +585,7 @@ fields:
     type: string
 ```
 
-**Run:** `poetry run brasa etl brasa-industry-sectors`
+**Run:** `uv run brasa etl brasa-industry-sectors`
 **Output path:** `staging` layer dataset `brasa-industry-sectors` (parquet).
 
 ### Key Concepts

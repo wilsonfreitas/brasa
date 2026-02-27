@@ -80,7 +80,7 @@ This plan defines a deterministic refactor of the `PandasAdapter` conversion flo
 |------|-------------|-----------|------|
 | TASK-015 | Add/extend tests in `tests/` for parameterized `date` format conversion and parameterized numeric conversion (`thousands`, `decimal`, `dec`, `sign`) through `apply_types`. | ✓ | 2026-02-21 |
 | TASK-016 | Add regression test asserting no row-wise `apply` path is used for vectorizable `date` and `numeric` fields in `apply_types`. | ✓ | 2026-02-21 |
-| TASK-017 | Run validation commands: `poetry run pytest`, `poetry run ruff check .`, `poetry run mypy brasa/`; record failures only if introduced by this refactor. | ✓ (136 passed, 0 new failures) | 2026-02-21 |
+| TASK-017 | Run validation commands: `uv run pytest`, `uv run ruff check .`, `uv run mypy brasa/`; record failures only if introduced by this refactor. | ✓ (136 passed, 0 new failures) | 2026-02-21 |
 
 ## 3. Alternatives
 

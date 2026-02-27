@@ -565,8 +565,8 @@ class PandasAdapter:
             boolean (nullable) or object bool Series.
         """
         bool_map = {
-            **{v: True for v in self._BOOL_TRUE},
-            **{v: False for v in self._BOOL_FALSE},
+            **dict.fromkeys(self._BOOL_TRUE, True),
+            **dict.fromkeys(self._BOOL_FALSE, False),
         }
         lower = series.astype(str).str.lower().str.strip()
         mapped = lower.map(bool_map)

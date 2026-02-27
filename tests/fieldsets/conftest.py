@@ -70,7 +70,7 @@ def sample_csv_path_large(tmp_path):
     """Creates a larger temporary CSV file for testing PyArrow performance."""
     csv_content = "id,value\n"
     for i in range(100000):  # 100k rows
-        csv_content += f"{i},{i*100}\n"
+        csv_content += f"{i},{i * 100}\n"
     file_path = tmp_path / "large_test_data.csv"
     file_path.write_text(csv_content)
     return file_path

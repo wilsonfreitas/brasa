@@ -157,10 +157,10 @@ Create new test file `tests/test_b3_equities_register_pipeline.py` with:
 
 Before committing:
 - [ ] Template YAML is valid (check via template loader)
-- [ ] All tests pass (`poetry run pytest tests/test_b3_equities_register_pipeline.py`)
+- [ ] All tests pass (`uv run pytest tests/test_b3_equities_register_pipeline.py`)
 - [ ] Pipeline and legacy function produce identical DataFrames
 - [ ] Partitioned output structure is correct
-- [ ] No lint/format issues (`poetry run ruff check . --fix && poetry run ruff format .`)
+- [ ] No lint/format issues (`uv run ruff check . --fix && uv run ruff format .`)
 
 ### Step 4: Documentation (if needed)
 
