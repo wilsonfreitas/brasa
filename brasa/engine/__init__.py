@@ -63,6 +63,16 @@ from .dependency_graph import (
 # Download internal function (for backwards compatibility)
 from .download import _download_marketdata
 
+# Download plan
+from .download_plan import (
+    DownloadPlan,
+    DownloadPlanDefaults,
+    DownloadPlanReport,
+    DownloadPlanTask,
+    execute_download_plan,
+    resolve_plan_args,
+)
+
 # Exceptions
 from .exceptions import (
     CorruptedContentException,
@@ -144,6 +154,10 @@ __all__ = [
     "DateFieldHandler",
     "DownloadAttemptStatus",
     "DownloadException",
+    "DownloadPlan",
+    "DownloadPlanDefaults",
+    "DownloadPlanReport",
+    "DownloadPlanTask",
     "DownloadResult",
     "DuplicatedFolderException",
     "ExecutionPlan",
@@ -180,6 +194,7 @@ __all__ = [
     "create_task_result_skipped",
     "create_task_result_success",
     "download_marketdata",
+    "execute_download_plan",
     "get_dependency_graph",
     "get_execution_plan",
     "get_fname_part",
@@ -192,6 +207,7 @@ __all__ = [
     "process_etl",
     "process_marketdata",
     "reload_template",
+    "resolve_plan_args",
     "retrieve_template",
     "save_parquet_file",
     "save_partitioned_parquet_file",
