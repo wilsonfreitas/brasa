@@ -106,6 +106,10 @@ from brasa import download_marketdata, process_marketdata, process_etl, get_mark
 
 Never consider a task finished if any of these fail. Fix all issues before declaring the work done.
 
+## Plans
+
+Plans saved in `.claude/plans/` must use descriptive, kebab-case filenames that reflect their content. Example: `download-plan.md`, `refactor-cache-manager.md`.
+
 ## Data Sources
 
 B3 (equities, futures, options, indexes), ANBIMA (fixed income, curves), BCB/SGS (CDI, SELIC, IPCA, FX), CVM (company filings), Tesouro Direto (treasury bonds).
