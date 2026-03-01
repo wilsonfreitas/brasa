@@ -177,7 +177,16 @@ parser_download.add_argument(
     default="B3",
     choices=["B3", "ANBIMA", "actual"],
 )
-parser_download.add_argument("template", nargs="+", help="template names")
+parser_download.add_argument(
+    "--plan",
+    metavar="FILE",
+    help="path to a download plan YAML file (mutually exclusive with template names)",
+)
+parser_download.add_argument(
+    "template",
+    nargs="*",
+    help="template names (required unless --plan is used)",
+)
 add_verbosity_args(parser_download)
 
 parser_process = subparsers.add_parser(
@@ -610,24 +619,66 @@ if __name__ == "__main__":
     if args.command == "setup":
         man = CacheManager()
     elif args.command == "download":
-        if len(args.date) == 1:
-            date_range = DateRangeParser(args.calendar).parse(args.date[0])
-        else:
-            date_range = [datetime.strptime(d, "%Y-%m-%d") for d in args.date]
+        plan_file = getattr(args, "plan", None)
+        templates = list(args.template or [])
         verbosity = get_verbosity(args)
         report_file = getattr(args, "report", None)
-        if verbosity != Verbosity.QUIET:
+
+        if plan_file and templates:
             print(
-                "Status legend: .(passed) F(failed) E(error) "
-                "S(skipped) D(duplicated) I(invalid) C(corrupted)"
+                "Error: --plan and template names are mutually exclusive",
+                file=sys.stderr,
             )
-        for template in args.template:
-            download_marketdata(
-                template,
-                refdate=date_range,
+            sys.exit(1)
+        if not plan_file and not templates:
+            print(
+                "Error: either --plan or at least one template name is required",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        if plan_file:
+            from .engine.download_plan import DownloadPlan, execute_download_plan
+
+            plan = DownloadPlan.from_file(plan_file)
+            errors = plan.validate()
+            if errors:
+                for err in errors:
+                    print(f"Error: {err}", file=sys.stderr)
+                sys.exit(1)
+            refdate_override = None
+            if args.date:
+                if len(args.date) == 1:
+                    refdate_override = DateRangeParser(args.calendar).parse(
+                        args.date[0]
+                    )
+                else:
+                    refdate_override = [
+                        datetime.strptime(d, "%Y-%m-%d") for d in args.date
+                    ]
+            execute_download_plan(
+                plan,
+                refdate_override=refdate_override,
                 verbosity=verbosity,
                 report_file=report_file,
             )
+        else:
+            if len(args.date) == 1:
+                date_range = DateRangeParser(args.calendar).parse(args.date[0])
+            else:
+                date_range = [datetime.strptime(d, "%Y-%m-%d") for d in args.date]
+            if verbosity != Verbosity.QUIET:
+                print(
+                    "Status legend: .(passed) F(failed) E(error) "
+                    "S(skipped) D(duplicated) I(invalid) C(corrupted)"
+                )
+            for template in templates:
+                download_marketdata(
+                    template,
+                    refdate=date_range,
+                    verbosity=verbosity,
+                    report_file=report_file,
+                )
     elif args.command == "process":
         verbosity = get_verbosity(args)
         report_file = getattr(args, "report", None)
