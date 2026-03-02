@@ -448,7 +448,12 @@ class MarketDataDownloader:
         Raises:
             DownloadException: If download fails after all retry attempts.
         """
-        from .exceptions import DownloadException
+        from .exceptions import (
+            CorruptedContentException,
+            DownloadException,
+            DuplicatedFolderException,
+            InvalidContentException,
+        )
 
         args = self.download_args(**kwargs)
         max_attempts = 1 + self.retry_attempts
@@ -471,6 +476,17 @@ class MarketDataDownloader:
 
             # --- Exception-based failure ---
             if caught_err is not None:
+                # RTRY-003: non-retriable exceptions propagate immediately, without wrapping
+                if isinstance(
+                    caught_err,
+                    (
+                        InvalidContentException,
+                        CorruptedContentException,
+                        DuplicatedFolderException,
+                    ),
+                ):
+                    raise caught_err
+
                 last_err = caught_err
                 wrapped = (
                     caught_err

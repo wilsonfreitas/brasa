@@ -11,7 +11,7 @@ import pytz
 import requests
 from bcb import sgs
 
-from brasa.engine.exceptions import DownloadException
+from brasa.engine.exceptions import DownloadException, InvalidContentException
 
 
 @contextmanager
@@ -96,7 +96,9 @@ class B3PagedURLEncodedDownloader(B3URLEncodedDownloader):
         total_pages = obj["page"]["totalPages"]
         results = obj["results"]
         if len(results) == 0:
-            return None
+            raise InvalidContentException(
+                "No results returned for the given query parameters"
+            )
         while self.page < total_pages:
             self.page += 1
             fp = super().download()

@@ -222,7 +222,7 @@ class TestRetryNonRetriable:
             side_effect=InvalidContentException("empty file")
         )
 
-        with pytest.raises(DownloadException):
+        with pytest.raises(InvalidContentException):
             dl.download()
 
         # Only 1 attempt (no retries for InvalidContentException)
@@ -234,7 +234,7 @@ class TestRetryNonRetriable:
             side_effect=CorruptedContentException("truncated")
         )
 
-        with pytest.raises(DownloadException):
+        with pytest.raises(CorruptedContentException):
             dl.download()
 
         assert dl.download_function.call_count == 1
@@ -245,10 +245,27 @@ class TestRetryNonRetriable:
             side_effect=DuplicatedFolderException("exists")
         )
 
-        with pytest.raises(DownloadException):
+        with pytest.raises(DuplicatedFolderException):
             dl.download()
 
         assert dl.download_function.call_count == 1
+
+
+class TestInvalidContentPropagation:
+    """InvalidContentException propagates as-is through MarketDataDownloader."""
+
+    def test_invalid_content_exception_propagates_through_template(self):
+        """InvalidContentException raised in download function must propagate as-is."""
+        downloader = _make_downloader()
+        with (
+            patch.object(
+                downloader,
+                "download_function",
+                side_effect=InvalidContentException("no data"),
+            ),
+            pytest.raises(InvalidContentException),
+        ):
+            downloader.download()
 
 
 class TestRetryBackoff:

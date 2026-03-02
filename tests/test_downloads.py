@@ -73,7 +73,7 @@ def test_download_marketdata_b3_url_encoded_with_null_argument():
     _download_marketdata(meta, codeCVM="24910")
     assert len(meta.downloaded_files) == 1
 
-    # Skip b3-cash-dividends - API returns null file pointer for this specific query
+    # b3-cash-dividends with no matching records now raises InvalidContentException (not null fp)
     # time.sleep(5)
     # meta = CacheMetadata("b3-cash-dividends")
     # _download_marketdata(meta, tradingName="ABEV")
