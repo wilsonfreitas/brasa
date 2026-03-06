@@ -1,0 +1,44 @@
+id: b3-companies-names
+description: |+
+  Dataset de ativos de instrumentos listados na B3.
+  Este dataset é utilizado para obter códigos de empresas
+  listadas para fazer consulta nos datasets b3-cash-dividends e b3-company-details.
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - input.b3-company-info-info
+      query: |+
+        select refdate, code_cvm, trading_name, instrument_asset from (
+        select
+          distinct refdate,
+            codeCVM as code_cvm,
+            trim(tradingName) as trading_name,
+            issuingCompany as instrument_asset,
+            row_number() over (partition by codeCVM, tradingName, issuingCompany order by refdate desc) as row_num
+        from
+          'input.b3-company-info-info'
+        )
+        where row_num = 1 and code_cvm <> 0
+        order by refdate desc, instrument_asset
+    - step: select_fields
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: code_cvm
+    description: CVM code of the company
+    type: integer
+  - name: trading_name
+    description: Trading name of the company
+    type: string
+  - name: instrument_asset
+    description: Instrument asset code
+    type: string

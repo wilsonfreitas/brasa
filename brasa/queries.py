@@ -56,13 +56,36 @@ class BrasaDB:
 
     @classmethod
     def create_view(cls, template: str) -> None:
-        """Create a view for a single dataset (legacy method).
+        """Create a view for a single dataset with layer awareness.
 
-        Deprecated: Use create_all_views() instead for layer-aware view creation.
+        Looks up the template layer and creates a view named 'layer.template'.
+        Falls back to legacy behaviour (no layer prefix) if no layer is found.
         """
         man = CacheManager()
         con = cls.get_connection()
-        con.read_parquet(man.db_path(f"{template}/*.parquet")).create_view(template)
+
+        layer = get_template_layer(template)
+        view_name = f"{layer}.{template}" if layer else template
+
+        catalog = DatasetCatalog()
+        dataset_info = catalog.get_dataset_info(layer, template) if layer else None
+
+        if dataset_info is None:
+            # No catalog entry — create a minimal DatasetInfo with no partitioning
+            import pyarrow as pa
+
+            dataset_info = DatasetInfo(
+                id=f"{layer}/{template}" if layer else template,
+                layer=layer or "",
+                dataset_name=template,
+                schema=pa.schema([]),
+            )
+
+        success, msg = cls._create_single_view(
+            con, layer or "", template, dataset_info, man
+        )
+        if not success:
+            raise RuntimeError(f"Failed to create view '{view_name}': {msg}")
 
     @classmethod
     def create_views(cls) -> None:
@@ -70,12 +93,7 @@ class BrasaDB:
 
         Deprecated: Use create_all_views() instead for layer-aware view creation.
         """
-        man = CacheManager()
-        for p in Path(man.db_path("")).iterdir():
-            try:
-                p.name.index(".")
-            except ValueError:
-                cls.create_view(p.name)
+        cls.create_all_views()
 
     @classmethod
     def _create_single_view(
@@ -868,38 +886,32 @@ def _get_companies_industry_sectors(column) -> list[str]:
 
 def _get_companies_trading_names() -> list[str]:
     df = (
-        get_dataset("brasa-companies")
-        .filter(pc.field("company_status") == "ATIVO")
-        .filter(pc.field("asset_name") is not None)
+        get_dataset("b3-companies-names")
         .scanner(columns=["trading_name"])
         .to_table()
         .to_pandas()
     )
-    return list(df.trading_name.unique())
+    return df.trading_name.values.tolist()
 
 
 def _get_companies_names() -> list[str]:
     df = (
-        get_dataset("brasa-companies")
-        .filter(pc.field("company_status") == "ATIVO")
-        .filter(pc.field("asset_name") is not None)
-        .scanner(columns=["asset_name"])
+        get_dataset("b3-equities-instrument-assets")
+        .scanner(columns=["instrument_asset"])
         .to_table()
         .to_pandas()
     )
-    return list(df.asset_name.unique())
+    return df.instrument_asset.values.tolist()
 
 
 def _get_companies_cvm_codes() -> list[int]:
     df = (
-        get_dataset("cvm-companies-registration", layer="input")
-        .filter(pc.field("sit") == "ATIVO")
-        .scanner(columns=["code_cvm", "refdate"])
+        get_dataset("b3-companies-names")
+        .scanner(columns=["code_cvm"])
         .to_table()
         .to_pandas()
     )
-    df = df.groupby(["code_cvm"], sort=True).last().reset_index()
-    return [int(i) for i in df.code_cvm.unique()]
+    return df.code_cvm.values.tolist()
 
 
 def _get_indexes_names() -> list[str]:
