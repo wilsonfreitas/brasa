@@ -267,20 +267,34 @@ class TemplateDependencyGraph:
     ) -> list[str]:
         """Discover the dataset references that *template* depends on.
 
-        For download templates (source nodes) this always returns an
-        empty list.  For pipeline-based ETL templates it delegates to
-        ``ETLPipeline.get_input_datasets()``.
+        For download templates, extracts dataset refs from the ``dependencies:``
+        block (the ``from.datasets`` lists).  For pipeline-based ETL templates
+        it delegates to ``ETLPipeline.get_input_datasets()``.
 
         Args:
             template: A loaded ``MarketDataTemplate``.
 
         Returns:
             List of raw dataset reference strings (e.g.
-            ``"input.b3-bvbg028-equities"`` or ``"b3-futures-settlement-prices"``).
+            ``"staging.b3-indexes-composition"`` or ``"b3-futures-settlement-prices"``).
         """
-        # Download templates are source nodes — no upstream deps
+        # Download templates: extract dataset refs from the `dependencies:` block
         if template.has_reader:
-            return []
+            raw_deps = getattr(template, "dependencies", None)
+            if not raw_deps:
+                return []
+            refs: list[str] = []
+            for dep_entry in raw_deps:
+                if not isinstance(dep_entry, dict):
+                    continue
+                for dep_config in dep_entry.values():
+                    from_block = (
+                        dep_config.get("from", {})
+                        if isinstance(dep_config, dict)
+                        else {}
+                    )
+                    refs.extend(from_block.get("datasets", []))
+            return refs
 
         # ETL templates
         if template.is_etl and hasattr(template, "etl") and template.etl.is_pipeline:

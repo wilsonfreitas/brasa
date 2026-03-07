@@ -54,6 +54,7 @@ def _make_download_template(
     datasets: dict | None = None,
     writer_layer: str = "input",
     has_pipeline: bool = True,
+    dependencies: list | None = None,
 ) -> MarketDataTemplate:
     """Build a minimal download-type template mock.
 
@@ -62,6 +63,7 @@ def _make_download_template(
         datasets: If provided, creates a multi-output template.
         writer_layer: Writer layer string.
         has_pipeline: Whether the reader uses a pipeline.
+        dependencies: Raw dependencies block (list of dicts) as stored from YAML.
 
     Returns:
         A mock MarketDataTemplate.
@@ -94,6 +96,8 @@ def _make_download_template(
         }
     else:
         tmpl.datasets = None
+
+    tmpl.dependencies = dependencies
 
     return tmpl
 
@@ -610,13 +614,20 @@ class TestIntegrationWithRealTemplates:
         assert "b3-cotahist-yearly" in upstreams
         assert "b3-cotahist-daily" in upstreams
 
-    def test_download_templates_are_source_nodes(self, graph: TemplateDependencyGraph):
-        """Download templates should have no upstream dependencies."""
+    def test_download_templates_without_deps_are_source_nodes(
+        self, graph: TemplateDependencyGraph
+    ):
+        """Download templates without a ``dependencies:`` block should be source nodes."""
         for tid in graph.template_ids:
-            if graph.get_template_type(tid) == "download":
-                assert graph.get_upstream(tid) == [], (
-                    f"Download template '{tid}' should be a source node"
-                )
+            if graph.get_template_type(tid) != "download":
+                continue
+            tmpl = graph.templates[tid]
+            declared_deps = getattr(tmpl, "dependencies", None)
+            if declared_deps:
+                continue  # legitimately has upstream deps
+            assert graph.get_upstream(tid) == [], (
+                f"Download template '{tid}' should be a source node"
+            )
 
     def test_reverse_index_covers_all_outputs(self, graph: TemplateDependencyGraph):
         """Every output should be in the reverse index."""
@@ -1539,3 +1550,133 @@ class TestExecutionPlanErrors:
 
         with pytest.raises(KeyError, match="not in the dependency graph"):
             g.get_execution_plan("nonexistent")
+
+
+# ===================================================================
+# Download template dependencies: block in dependency graph
+# ===================================================================
+
+
+class TestDiscoverDependenciesDownloadTemplate:
+    """Verify _discover_dependencies parses the ``dependencies:`` block of download templates."""
+
+    def test_no_deps_attr_returns_empty(self):
+        """Download template with no ``dependencies`` attribute → []."""
+        tmpl = _make_download_template("dl-no-deps", dependencies=None)
+        assert TemplateDependencyGraph._discover_dependencies(tmpl) == []
+
+    def test_with_one_dep_entry(self):
+        """Download template with one dependency entry returns the dataset refs."""
+        raw_deps = [
+            {
+                "index": {
+                    "required": True,
+                    "from": {"datasets": ["staging.b3-indexes-composition"]},
+                }
+            }
+        ]
+        tmpl = _make_download_template("dl-with-deps", dependencies=raw_deps)
+        result = TemplateDependencyGraph._discover_dependencies(tmpl)
+        assert result == ["staging.b3-indexes-composition"]
+
+    def test_with_multiple_dep_entries_and_datasets(self):
+        """Multiple dep entries / multiple datasets per entry → all refs returned."""
+        raw_deps = [
+            {
+                "param_a": {
+                    "required": True,
+                    "from": {"datasets": ["staging.upstream-a", "input.upstream-b"]},
+                }
+            },
+            {
+                "param_b": {
+                    "required": False,
+                    "from": {"datasets": ["staging.upstream-c"]},
+                }
+            },
+        ]
+        tmpl = _make_download_template("dl-multi-deps", dependencies=raw_deps)
+        result = TemplateDependencyGraph._discover_dependencies(tmpl)
+        assert set(result) == {
+            "staging.upstream-a",
+            "input.upstream-b",
+            "staging.upstream-c",
+        }
+
+
+class TestDownloadTemplateDepsInGraph:
+    """Verify graph edges, ancestors, and downstream are correct for download templates with deps."""
+
+    def _build(self) -> TemplateDependencyGraph:
+        """Build: etl-upstream → (staging) → dl-with-deps."""
+        upstream_etl = _make_etl_template(
+            "etl-upstream",
+            input_datasets=[],
+            writer_layer="staging",
+            writer_dataset="etl-upstream",
+        )
+        raw_deps = [
+            {
+                "index": {
+                    "required": True,
+                    "from": {"datasets": ["staging.etl-upstream"]},
+                }
+            }
+        ]
+        dl = _make_download_template("dl-with-deps", dependencies=raw_deps)
+        return _build_graph_from_templates([upstream_etl, dl])
+
+    def test_edges_include_download_template_deps(self):
+        """Edge from dl-with-deps to etl-upstream appears in graph.edges."""
+        g = self._build()
+        assert "etl-upstream" in g.edges["dl-with-deps"]
+
+    def test_get_ancestors_download_template(self):
+        """get_ancestors() returns the upstream ETL for a download template with deps."""
+        g = self._build()
+        assert g.get_ancestors("dl-with-deps") == {"etl-upstream"}
+
+    def test_get_downstream_etl_visible_from_download_dep(self):
+        """get_downstream() on the upstream ETL returns the download template."""
+        g = self._build()
+        assert "dl-with-deps" in g.get_downstream("etl-upstream")
+
+
+class TestIntegrationDownloadTemplateDeps:
+    """Integration tests for real templates with dependencies: blocks."""
+
+    @pytest.fixture(scope="class")
+    def graph(self) -> TemplateDependencyGraph:
+        return TemplateDependencyGraph()
+
+    def test_b3_indexes_theoretical_portfolio_has_ancestor(
+        self, graph: TemplateDependencyGraph
+    ):
+        """b3-indexes-theoretical-portfolio declares a dep on b3-indexes-composition."""
+        if "b3-indexes-theoretical-portfolio" not in graph:
+            pytest.skip("b3-indexes-theoretical-portfolio template not available")
+        ancestors = graph.get_ancestors("b3-indexes-theoretical-portfolio")
+        assert any("b3-indexes-composition" in a for a in ancestors), (
+            f"Expected b3-indexes-composition in ancestors, got {ancestors}"
+        )
+
+    def test_b3_indexes_composition_consolidated_has_downstream(
+        self, graph: TemplateDependencyGraph
+    ):
+        """get_downstream() on the upstream ETL returns b3-indexes-theoretical-portfolio."""
+        upstream = next(
+            (
+                tid
+                for tid in graph.template_ids
+                if "b3-indexes-composition" in tid
+                and tid != "b3-indexes-theoretical-portfolio"
+            ),
+            None,
+        )
+        if upstream is None:
+            pytest.skip("b3-indexes-composition* template not available")
+        downstream = graph.get_descendants(upstream)
+        assert "b3-indexes-theoretical-portfolio" in downstream, (
+            f"Expected b3-indexes-theoretical-portfolio in descendants of {upstream}, "
+            f"got {downstream}"
+        )
