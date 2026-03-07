@@ -617,9 +617,6 @@ class TaskReport:
         if self._start_time and self._end_time:
             elapsed = (self._end_time - self._start_time).total_seconds()
 
-        self.console.print()
-        self.console.rule("[bold]SUMMARY[/bold]")
-
         # Build summary parts
         parts = []
         if passed:
@@ -651,7 +648,6 @@ class TaskReport:
             f"{self.template_name} {self.operation}: {', '.join(parts)} in {time_str}"
         )
         self.console.print(summary)
-        self.console.print()
 
     def save_report(self, filepath: str | Path, format: str = "json") -> None:
         """Save the report to a file.
