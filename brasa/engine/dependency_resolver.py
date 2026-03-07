@@ -79,6 +79,7 @@ def _run_sql(datasets: list[str], query: str) -> list:
 def resolve_dependencies(
     template,
     caller_args: dict,
+    _implicit_reports: list | None = None,
 ) -> dict:
     """Resolve declared dependencies and return injected arg values.
 
@@ -150,7 +151,12 @@ def resolve_dependencies(
 
             # Run upstream producing templates
             _run_upstream_templates(
-                template.id, arg_name, dataset_refs, graph, required
+                template.id,
+                arg_name,
+                dataset_refs,
+                graph,
+                required,
+                _implicit_reports=_implicit_reports,
             )
 
             # Run the SQL query to get resolved values
@@ -202,6 +208,7 @@ def _run_upstream_templates(
     dataset_refs: list[str],
     graph,
     required: bool,
+    _implicit_reports: list | None = None,
 ) -> None:
     """Run the upstream producing templates for the given dataset refs.
 
@@ -241,6 +248,9 @@ def _run_upstream_templates(
                 report = process_etl(producer)
             else:
                 report = process_marketdata(producer)
+
+            if _implicit_reports is not None:
+                _implicit_reports.append(report)
         except Exception as exc:
             if required:
                 raise DependencyResolutionError(

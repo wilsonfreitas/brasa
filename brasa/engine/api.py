@@ -270,7 +270,10 @@ def download_marketdata(
     template = retrieve_template(template_name)
 
     # Resolve declared dependencies and inject missing args
-    resolved = resolve_dependencies(template, kwargs)
+    implicit_reports: list[TaskReport] = []
+    resolved = resolve_dependencies(
+        template, kwargs, _implicit_reports=implicit_reports
+    )
     kwargs = {**kwargs, **resolved}
 
     cache = CacheManager()
@@ -332,6 +335,7 @@ def download_marketdata(
         report.add_result(result)
 
     report.finish()
+    report.dependency_reports = implicit_reports
 
     if report_file:
         report_path = Path(report_file)

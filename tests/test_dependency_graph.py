@@ -1680,3 +1680,45 @@ class TestIntegrationDownloadTemplateDeps:
             f"Expected b3-indexes-theoretical-portfolio in descendants of {upstream}, "
             f"got {downstream}"
         )
+
+    def test_execution_plan_includes_composition_consolidated(
+        self, graph: TemplateDependencyGraph
+    ):
+        """Execution plan for b3-indexes-theoretical-portfolio must include
+        b3-indexes-composition-consolidated before it.
+
+        This simulates the ``indexes-b3`` download plan, which lists
+        b3-indexes-theoretical-portfolio as a task.  Because that template
+        declares a dependency on ``staging.b3-indexes-composition`` — produced
+        by b3-indexes-composition-consolidated — the dependency graph must
+        schedule b3-indexes-composition-consolidated before
+        b3-indexes-theoretical-portfolio.
+        """
+        target = "b3-indexes-theoretical-portfolio"
+        consolidated = "b3-indexes-composition-consolidated"
+
+        if target not in graph:
+            pytest.skip(f"{target} template not available")
+        if consolidated not in graph:
+            pytest.skip(f"{consolidated} template not available")
+
+        with (
+            patch.object(
+                graph, "_check_download_template_staleness", return_value=True
+            ),
+            patch.object(graph, "_check_etl_template_staleness", return_value=True),
+        ):
+            plan = graph.get_execution_plan(target)
+
+        template_ids_in_plan = [s.template_id for s in plan.steps]
+
+        assert consolidated in template_ids_in_plan, (
+            f"{consolidated} missing from execution plan steps: {template_ids_in_plan}"
+        )
+
+        idx_consolidated = template_ids_in_plan.index(consolidated)
+        idx_target = template_ids_in_plan.index(target)
+        assert idx_consolidated < idx_target, (
+            f"{consolidated} (step {idx_consolidated}) must come before "
+            f"{target} (step {idx_target})"
+        )

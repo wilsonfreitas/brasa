@@ -446,6 +446,91 @@ class TestDownloadPlanReport:
 
 
 # ---------------------------------------------------------------------------
+# 6b. Implicit dependency reports
+# ---------------------------------------------------------------------------
+
+
+class TestImplicitDependencyReports:
+    def test_summary_shows_implicit_dep(self):
+        """[auto] section appears when implicit_task_reports is populated."""
+        report = DownloadPlanReport(plan_name="p")
+        report.task_reports["tmpl-a"] = _make_task_report("tmpl-a", [TaskStatus.PASSED])
+        dep_report = _make_task_report("dep-etl", [TaskStatus.PASSED])
+        report.implicit_task_reports["dep-etl"] = dep_report
+        summary = report.summary()
+        assert "[auto]" in summary
+        assert "dep-etl" in summary
+
+    def test_summary_no_auto_section_when_no_implicit(self):
+        """[auto] section is absent when implicit_task_reports is empty."""
+        report = DownloadPlanReport(plan_name="p")
+        report.task_reports["tmpl-a"] = _make_task_report("tmpl-a", [TaskStatus.PASSED])
+        summary = report.summary()
+        assert "[auto]" not in summary
+
+    def test_summary_totals_include_auto_count(self):
+        """Totals line shows ', N auto' when implicit reports are present."""
+        report = DownloadPlanReport(plan_name="p")
+        report.task_reports["tmpl-a"] = _make_task_report("tmpl-a", [TaskStatus.PASSED])
+        dep_report = _make_task_report("dep-etl", [TaskStatus.PASSED])
+        report.implicit_task_reports["dep-etl"] = dep_report
+        summary = report.summary()
+        assert "1 auto" in summary
+
+    def test_success_false_when_implicit_dep_fails(self):
+        """success is False when an implicit report has FAILED results."""
+        report = DownloadPlanReport(plan_name="p")
+        report.task_reports["tmpl-a"] = _make_task_report("tmpl-a", [TaskStatus.PASSED])
+        dep_report = _make_task_report("dep-etl", [TaskStatus.FAILED])
+        report.implicit_task_reports["dep-etl"] = dep_report
+        assert report.success is False
+
+    def test_execute_plan_collects_implicit_reports(self):
+        """Dependency reports on a TaskReport land in implicit_task_reports."""
+        plan = _make_plan(tasks_data=[{"template": "tmpl-a"}])
+
+        dep_report = _make_task_report("dep-etl", [TaskStatus.PASSED])
+
+        def fake_execute_task(task, resolved_args, verbosity):
+            task_report = _make_task_report(task.template, [TaskStatus.PASSED])
+            task_report.dependency_reports = [dep_report]
+            return task_report
+
+        with (
+            patch(
+                "brasa.engine.download_plan._execute_task",
+                side_effect=fake_execute_task,
+            ),
+        ):
+            result = execute_download_plan(plan, verbosity=Verbosity.QUIET)
+
+        assert "dep-etl" in result.implicit_task_reports
+        assert result.implicit_task_reports["dep-etl"] is dep_report
+
+    def test_implicit_report_not_duplicated_across_tasks(self):
+        """The same dependency template is only stored once in implicit_task_reports."""
+        plan = _make_plan(tasks_data=[{"template": "tmpl-a"}, {"template": "tmpl-b"}])
+
+        dep_report = _make_task_report("dep-etl", [TaskStatus.PASSED])
+
+        def fake_execute_task(task, resolved_args, verbosity):
+            task_report = _make_task_report(task.template, [TaskStatus.PASSED])
+            task_report.dependency_reports = [dep_report]
+            return task_report
+
+        with (
+            patch(
+                "brasa.engine.download_plan._execute_task",
+                side_effect=fake_execute_task,
+            ),
+        ):
+            result = execute_download_plan(plan, verbosity=Verbosity.QUIET)
+
+        # Only one entry for dep-etl even though two tasks each produced it
+        assert list(result.implicit_task_reports.keys()).count("dep-etl") == 1
+
+
+# ---------------------------------------------------------------------------
 # 7. Report saving
 # ---------------------------------------------------------------------------
 

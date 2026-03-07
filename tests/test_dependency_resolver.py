@@ -403,6 +403,90 @@ def test_run_upstream_optional_continues_on_report_failure():
 
 
 # ---------------------------------------------------------------------------
+# _run_upstream_templates — _implicit_reports collection
+# ---------------------------------------------------------------------------
+
+
+def test_run_upstream_appends_report_to_implicit_list():
+    """When _implicit_reports list is passed, the ETL report is appended to it."""
+    from brasa.engine.dependency_resolver import _run_upstream_templates
+
+    graph = _make_graph(producer="upstream-etl", template_type="etl")
+    mock_report = _make_report(success=True)
+    implicit: list = []
+
+    with patch("brasa.engine.api.process_etl", return_value=mock_report):
+        _run_upstream_templates(
+            "b3-company-info",
+            "issuingCompany",
+            ["staging.upstream-dataset"],
+            graph,
+            required=True,
+            _implicit_reports=implicit,
+        )
+
+    assert implicit == [mock_report]
+
+
+def test_run_upstream_does_not_append_when_no_list():
+    """When _implicit_reports is None (default), nothing is appended anywhere."""
+    from brasa.engine.dependency_resolver import _run_upstream_templates
+
+    graph = _make_graph(producer="upstream-etl", template_type="etl")
+    mock_report = _make_report(success=True)
+
+    with patch("brasa.engine.api.process_etl", return_value=mock_report):
+        # Should complete without error even when _implicit_reports is not passed
+        _run_upstream_templates(
+            "b3-company-info",
+            "issuingCompany",
+            ["staging.upstream-dataset"],
+            graph,
+            required=True,
+        )
+
+
+def test_resolve_dependencies_propagates_implicit_reports():
+    """_implicit_reports list is populated after resolve_dependencies call."""
+    tmpl = _make_template(
+        "b3-company-info",
+        dependencies=[
+            {
+                "issuingCompany": {
+                    "required": True,
+                    "from": {
+                        "datasets": ["staging.b3-equities-instrument-assets"],
+                        "query": "SELECT DISTINCT instrument_asset FROM 'staging.b3-equities-instrument-assets'",
+                    },
+                }
+            }
+        ],
+    )
+
+    graph = _make_graph(producer="b3-equities-instrument-assets", template_type="etl")
+    mock_report = _make_report(success=True)
+    implicit: list = []
+
+    with (
+        patch(
+            "brasa.engine.dependency_resolver.TemplateDependencyGraph",
+            return_value=graph,
+        ),
+        patch(
+            "brasa.engine.dependency_resolver._run_sql",
+            return_value=["ABEV"],
+        ),
+        patch(
+            "brasa.engine.api.process_etl",
+            return_value=mock_report,
+        ),
+    ):
+        resolve_dependencies(tmpl, {}, _implicit_reports=implicit)
+
+    assert implicit == [mock_report]
+
+
+# ---------------------------------------------------------------------------
 # download_marketdata integration
 # ---------------------------------------------------------------------------
 

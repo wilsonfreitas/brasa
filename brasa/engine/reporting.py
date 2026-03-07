@@ -408,6 +408,7 @@ class TaskReport:
         self._end_time: datetime | None = None
         self._progress: ProgressDisplay | None = None
         self._captured_warnings: list[tuple[str, TaskResult | None]] = []
+        self.dependency_reports: list[TaskReport] = []
 
     @property
     def success(self) -> bool:

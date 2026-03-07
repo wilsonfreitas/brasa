@@ -651,3 +651,135 @@ class TestProcessEtlWithResolveDependencies:
         mock_orch_instance.execute.assert_called_once_with(
             "my-etl", force=True, verbosity=Verbosity.QUIET
         )
+
+
+# ===================================================================
+# TEST: ETL staleness re-evaluation after upstream execution
+# ===================================================================
+
+
+class TestETLStalenessReEvaluation:
+    """Regression test: ETL planned as 'skip' should be promoted to 'etl'
+    if an upstream dependency was actually executed in the current run."""
+
+    def test_etl_promoted_when_upstream_executed(self):
+        """ETL step planned as 'skip' is re-evaluated and promoted to 'etl'
+        if a direct upstream was executed in the same run."""
+        src = _make_download_template("dl-src")
+        etl = _make_etl_template("my-etl", input_datasets=["dl-src"])
+        graph = _build_graph_from_templates([src, etl])
+
+        orchestrator = PipelineOrchestrator(graph=graph)
+
+        call_order = []
+
+        def mock_process_marketdata(template_name, **kwargs):
+            call_order.append(("process_marketdata", template_name))
+            return _make_success_report(template_name, "process")
+
+        def mock_process_etl(template_name, **kwargs):
+            call_order.append(("process_etl", template_name))
+            return _make_success_report(template_name, "etl")
+
+        # At plan-build time, ETL appears fresh (staleness=False).
+        # After upstream executes, re-evaluation returns True.
+        staleness_call_count = 0
+
+        def staleness_side_effect(template_id):
+            nonlocal staleness_call_count
+            staleness_call_count += 1
+            # First call: plan-build time — ETL looks fresh;
+            # second call: re-evaluation after upstream ran — ETL is stale
+            return staleness_call_count != 1
+
+        with (
+            patch.object(
+                graph, "_check_download_template_staleness", return_value=True
+            ),
+            patch.object(
+                graph,
+                "_check_etl_template_staleness",
+                side_effect=staleness_side_effect,
+            ),
+            patch(
+                "brasa.engine.api.process_marketdata",
+                side_effect=mock_process_marketdata,
+            ),
+            patch(
+                "brasa.engine.api.process_etl",
+                side_effect=mock_process_etl,
+            ),
+        ):
+            report = orchestrator.execute("my-etl", verbosity=Verbosity.QUIET)
+
+        # Both steps should have executed
+        assert call_order == [
+            ("process_marketdata", "dl-src"),
+            ("process_etl", "my-etl"),
+        ]
+        assert report.success is True
+        assert report.steps_executed == 2
+
+    def test_etl_not_promoted_when_staleness_still_false(self):
+        """ETL step remains skipped if re-evaluation still shows it fresh."""
+        src = _make_download_template("dl-src")
+        etl = _make_etl_template("my-etl", input_datasets=["dl-src"])
+        graph = _build_graph_from_templates([src, etl])
+
+        orchestrator = PipelineOrchestrator(graph=graph)
+
+        def mock_process_marketdata(template_name, **kwargs):
+            return _make_success_report(template_name, "process")
+
+        with (
+            patch.object(
+                graph, "_check_download_template_staleness", return_value=True
+            ),
+            # ETL is always fresh — even after upstream runs
+            patch.object(graph, "_check_etl_template_staleness", return_value=False),
+            patch(
+                "brasa.engine.api.process_marketdata",
+                side_effect=mock_process_marketdata,
+            ),
+            patch("brasa.engine.api.process_etl") as mock_pe,
+        ):
+            report = orchestrator.execute("my-etl", verbosity=Verbosity.QUIET)
+
+        mock_pe.assert_not_called()
+        assert report.steps_executed == 1
+        assert report.steps_skipped == 1
+
+    def test_etl_not_promoted_when_no_upstream_executed(self):
+        """ETL step is not re-evaluated if no upstream was executed."""
+        src = _make_download_template("dl-src")
+        etl = _make_etl_template("my-etl", input_datasets=["dl-src"])
+        graph = _build_graph_from_templates([src, etl])
+
+        orchestrator = PipelineOrchestrator(graph=graph)
+        staleness_calls: list[str] = []
+
+        def staleness_side_effect(template_id):
+            staleness_calls.append(template_id)
+            return False
+
+        with (
+            # Both upstream and ETL are fresh at plan-build time
+            patch.object(
+                graph, "_check_download_template_staleness", return_value=False
+            ),
+            patch.object(
+                graph,
+                "_check_etl_template_staleness",
+                side_effect=staleness_side_effect,
+            ),
+            patch("brasa.engine.api.process_marketdata") as mock_pm,
+            patch("brasa.engine.api.process_etl") as mock_pe,
+        ):
+            report = orchestrator.execute("my-etl", verbosity=Verbosity.QUIET)
+
+        mock_pm.assert_not_called()
+        mock_pe.assert_not_called()
+        # Only one staleness call at plan-build time; no re-evaluation
+        assert staleness_calls.count("my-etl") == 1
+        assert report.steps_executed == 0
+        assert report.steps_skipped == 2

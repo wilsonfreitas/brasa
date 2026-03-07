@@ -221,13 +221,32 @@ class PipelineOrchestrator:
             len(plan.steps_to_execute),
         )
 
-        for step in plan.steps:
-            if step.action == "skip":
-                logger.debug("Skipping '%s': %s", step.template_id, step.reason)
+        executed_templates: set[str] = set()
+
+        for i, step in enumerate(plan.steps):
+            # Re-evaluate ETL steps planned as "skip" if any upstream was executed
+            if step.action == "skip" and step.template_type == "etl":
+                upstreams = self.graph.edges.get(step.template_id, [])
+                if any(
+                    t in executed_templates for t in upstreams
+                ) and self.graph._check_etl_template_staleness(step.template_id):
+                    plan.steps[i] = ExecutionStep(
+                        template_id=step.template_id,
+                        action="etl",
+                        reason="upstream dependency was updated",
+                        template_type=step.template_type,
+                    )
+
+            current_step = plan.steps[i]
+            if current_step.action == "skip":
+                logger.debug(
+                    "Skipping '%s': %s", current_step.template_id, current_step.reason
+                )
                 continue
 
-            step_report = self._execute_step(step, verbosity)
-            report.step_reports[step.template_id] = step_report
+            step_report = self._execute_step(current_step, verbosity)
+            report.step_reports[current_step.template_id] = step_report
+            executed_templates.add(current_step.template_id)
 
             # Check for failures — stop execution on error
             has_error = any(

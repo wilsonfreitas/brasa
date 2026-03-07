@@ -183,6 +183,7 @@ class DownloadPlanReport:
 
     plan_name: str
     task_reports: dict[str, TaskReport] = field(default_factory=dict)
+    implicit_task_reports: dict[str, TaskReport] = field(default_factory=dict)
     _start_time: datetime | None = field(default=None, repr=False)
     _end_time: datetime | None = field(default=None, repr=False)
 
@@ -196,11 +197,47 @@ class DownloadPlanReport:
     @property
     def success(self) -> bool:
         """True if no task produced an ERROR or FAILED result."""
-        for report in self.task_reports.values():
+        for report in {**self.task_reports, **self.implicit_task_reports}.values():
             for result in report.results:
                 if result.status in (TaskStatus.ERROR, TaskStatus.FAILED):
                     return False
         return True
+
+    @staticmethod
+    def _format_elapsed(elapsed: float) -> str:
+        if elapsed >= 60:
+            minutes = int(elapsed // 60)
+            seconds = elapsed % 60
+            return f"{minutes}m {seconds:.1f}s"
+        return f"{elapsed:.1f}s"
+
+    @staticmethod
+    def _report_status_str(report: TaskReport, include_duplicated: bool = False) -> str:
+        passed = sum(1 for r in report.results if r.status == TaskStatus.PASSED)
+        failed = sum(
+            1
+            for r in report.results
+            if r.status in (TaskStatus.FAILED, TaskStatus.ERROR)
+        )
+        skipped = sum(1 for r in report.results if r.status == TaskStatus.SKIPPED)
+        duplicated = sum(1 for r in report.results if r.status == TaskStatus.DUPLICATED)
+        parts = []
+        if passed:
+            parts.append(f"{passed} passed")
+        if failed:
+            parts.append(f"{failed} failed")
+        if skipped:
+            parts.append(f"{skipped} skipped")
+        if include_duplicated and duplicated:
+            parts.append(f"{duplicated} duplicated")
+        return ", ".join(parts) if parts else "no results"
+
+    def _implicit_summary_lines(self) -> list[str]:
+        lines = ["", "  [auto] Dependencies executed:"]
+        for template, report in self.implicit_task_reports.items():
+            status_str = self._report_status_str(report)
+            lines.append(f"    {template:<38}  {status_str}")
+        return lines
 
     def summary(self) -> str:
         """Return a human-readable multi-line plan summary.
@@ -208,49 +245,35 @@ class DownloadPlanReport:
         Returns:
             Formatted string with per-template counts and overall totals.
         """
-        elapsed = self.total_duration
-        if elapsed >= 60:
-            minutes = int(elapsed // 60)
-            seconds = elapsed % 60
-            time_str = f"{minutes}m {seconds:.1f}s"
-        else:
-            time_str = f"{elapsed:.1f}s"
-
+        time_str = self._format_elapsed(self.total_duration)
         sep = "═" * 60
         lines = ["", sep, f" PLAN SUMMARY — {self.plan_name}", sep]
 
         ok_count = 0
         fail_count = 0
         for template, report in self.task_reports.items():
-            passed = sum(1 for r in report.results if r.status == TaskStatus.PASSED)
-            failed = sum(
+            status_str = self._report_status_str(report, include_duplicated=True)
+            failed_count = sum(
                 1
                 for r in report.results
                 if r.status in (TaskStatus.FAILED, TaskStatus.ERROR)
             )
-            skipped = sum(1 for r in report.results if r.status == TaskStatus.SKIPPED)
-            duplicated = sum(
-                1 for r in report.results if r.status == TaskStatus.DUPLICATED
-            )
-            parts = []
-            if passed:
-                parts.append(f"{passed} passed")
-            if failed:
-                parts.append(f"{failed} failed")
-            if skipped:
-                parts.append(f"{skipped} skipped")
-            if duplicated:
-                parts.append(f"{duplicated} duplicated")
-            status_str = ", ".join(parts) if parts else "no results"
             lines.append(f"  {template:<40}  {status_str}")
-            if failed:
+            if failed_count:
                 fail_count += 1
             else:
                 ok_count += 1
 
+        if self.implicit_task_reports:
+            lines.extend(self._implicit_summary_lines())
+
         lines.append("")
         n = len(self.task_reports)
-        lines.append(f"Download plan '{self.plan_name}': {n} templates in {time_str}")
+        n_auto = len(self.implicit_task_reports)
+        auto_str = f", {n_auto} auto" if n_auto else ""
+        lines.append(
+            f"Download plan '{self.plan_name}': {n} tasks{auto_str} in {time_str}"
+        )
         if fail_count:
             lines.append(
                 f"Overall: {ok_count} templates ok, {fail_count} with failures"
@@ -278,6 +301,13 @@ class DownloadPlanReport:
                         "results": [r.to_dict() for r in report.results],
                     }
                     for template, report in self.task_reports.items()
+                ],
+                "implicit_tasks": [
+                    {
+                        "template": template,
+                        "results": [r.to_dict() for r in report.results],
+                    }
+                    for template, report in self.implicit_task_reports.items()
                 ],
             }
             filepath.write_text(json.dumps(data, indent=2, default=str))
@@ -523,6 +553,12 @@ def execute_download_plan(
         plan_report.task_reports[task.template] = _execute_task(
             task, resolved_args, verbosity
         )
+        # Collect dependency reports from the task
+        task_report = plan_report.task_reports[task.template]
+        for dep_report in getattr(task_report, "dependency_reports", []):
+            name = dep_report.template_name
+            if name not in plan_report.implicit_task_reports:
+                plan_report.implicit_task_reports[name] = dep_report
 
     plan_report._end_time = datetime.now()
 
