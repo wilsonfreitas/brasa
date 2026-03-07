@@ -126,8 +126,10 @@ class OrchestratorReport:
             marker = "SKIP" if step.action == "skip" else step.action.upper()
             report = self.step_reports.get(step.template_id)
             if report and report.results:
-                statuses = [r.status.value for r in report.results]
-                status_str = ", ".join(statuses)
+                counts: dict[str, int] = {}
+                for r in report.results:
+                    counts[r.status.value] = counts.get(r.status.value, 0) + 1
+                status_str = ", ".join(f"{v}x{k}" for k, v in sorted(counts.items()))
             elif step.action == "skip":
                 status_str = "skipped"
             else:

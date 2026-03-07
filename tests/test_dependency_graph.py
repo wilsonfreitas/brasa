@@ -1359,6 +1359,45 @@ class TestCheckEtlTemplateStaleness:
 
             assert g._check_etl_template_staleness("etl-mid") is True
 
+    def test_old_partitions_do_not_cause_false_staleness(self, tmp_path):
+        """Newest output newer than upstream → fresh, even with old partitions."""
+        import time
+
+        g = self._make_graph()
+
+        # Create upstream parquet
+        upstream_dir = tmp_path / "input" / "dl-src"
+        upstream_dir.mkdir(parents=True)
+        upstream_pq = upstream_dir / "part-001.parquet"
+        upstream_pq.write_text("upstream")
+
+        time.sleep(0.05)
+
+        # Create output partitions: one old, one new (newer than upstream)
+        output_dir = tmp_path / "staging" / "etl-mid"
+        output_dir.mkdir(parents=True)
+        new_pq = output_dir / "part-new.parquet"
+        new_pq.write_text("new output")
+
+        old_pq = output_dir / "part-old.parquet"
+        old_pq.write_text("old output")
+        # Backdate the old partition to before the upstream
+        old_time = upstream_pq.stat().st_mtime - 1000
+        import os
+
+        os.utime(str(old_pq), (old_time, old_time))
+
+        def mock_db_path(name):
+            return str(tmp_path / name)
+
+        with patch("brasa.engine.dependency_graph.CacheManager") as MockCacheManager:
+            mock_cache = MagicMock()
+            mock_cache.db_path.side_effect = mock_db_path
+            MockCacheManager.return_value = mock_cache
+
+            # Should be fresh: newest output > newest upstream
+            assert g._check_etl_template_staleness("etl-mid") is False
+
     def test_no_upstream_parquets_means_fresh(self, tmp_path):
         """Output exists but upstream has no parquets → fresh."""
         g = self._make_graph()

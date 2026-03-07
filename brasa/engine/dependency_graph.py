@@ -716,8 +716,8 @@ class TemplateDependencyGraph:
         if not parquet_files:
             return True
 
-        # Get the oldest output modification time
-        output_mtime = min(f.stat().st_mtime for f in parquet_files)
+        # Get the newest output modification time (represents last ETL run)
+        output_mtime = max(f.stat().st_mtime for f in parquet_files)
 
         # Compare against upstream datasets
         for upstream_tid in self.edges.get(template_id, []):

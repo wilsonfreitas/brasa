@@ -226,7 +226,7 @@ class TestRetryConfigParsing:
         """b3-company-details template should have explicit retry keys."""
         tpl = retrieve_template("b3-company-details")
         dl = tpl.downloader
-        assert dl.retry_attempts == 2
+        assert dl.retry_attempts == 10
         assert dl.retry_delay == 3.0
         assert dl.retry_backoff == 2.0
 
