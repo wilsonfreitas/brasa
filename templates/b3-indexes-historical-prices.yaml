@@ -1,5 +1,14 @@
 id: b3-indexes-historical-prices
 description: Dados históricos de cotação dos índices da Bolsa
+
+dependencies:
+  - index:
+      required: true
+      from:
+        datasets:
+          - staging.b3-indexes-composition
+        query: "select distinct indexes from 'staging.b3-indexes-composition'"
+
 downloader:
   function: brasa.downloaders.b3_url_encoded_download
   validator: brasa.downloaders.validate_json_empty_file

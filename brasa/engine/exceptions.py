@@ -34,3 +34,13 @@ class CorruptedContentException(Exception):
     """
 
     pass
+
+
+class DependencyResolutionError(Exception):
+    """Raised when a template dependency cannot be resolved.
+
+    Used when a required upstream dataset cannot be processed or its
+    SQL query returns no rows. Aborts before any download starts.
+    """
+
+    pass

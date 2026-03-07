@@ -246,6 +246,10 @@ def download_marketdata(
     Downloads data in batch mode with pytest-style progress display.
     Supports downloading for multiple dates or parameter combinations.
 
+    If the template declares a ``dependencies`` block, upstream templates
+    are automatically executed and their output is used to populate any
+    missing download args before downloads begin.
+
     Args:
         template_name: Name of the template to use.
         reprocess: If True, force re-download even if data exists.
@@ -256,8 +260,19 @@ def download_marketdata(
 
     Returns:
         TaskReport with results of all download operations.
+
+    Raises:
+        DependencyResolutionError: If a required dependency cannot be
+            resolved. No downloads are started in this case.
     """
+    from .dependency_resolver import resolve_dependencies
+
     template = retrieve_template(template_name)
+
+    # Resolve declared dependencies and inject missing args
+    resolved = resolve_dependencies(template, kwargs)
+    kwargs = {**kwargs, **resolved}
+
     cache = CacheManager()
     kwargs_iter = KwargsIterator(kwargs)
 

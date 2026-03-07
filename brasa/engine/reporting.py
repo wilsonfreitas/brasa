@@ -409,6 +409,13 @@ class TaskReport:
         self._progress: ProgressDisplay | None = None
         self._captured_warnings: list[tuple[str, TaskResult | None]] = []
 
+    @property
+    def success(self) -> bool:
+        """Whether all results completed without errors or failures."""
+        return not any(
+            r.status in (TaskStatus.ERROR, TaskStatus.FAILED) for r in self.results
+        )
+
     def start(self, total: int) -> None:
         """Start collecting results.
 

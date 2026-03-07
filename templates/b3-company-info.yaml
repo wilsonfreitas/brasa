@@ -1,6 +1,14 @@
 id: b3-company-info
 description: Informação suplementar das companhias listadas na Bolsa
 
+dependencies:
+  - issuingCompany:
+      required: true
+      from:
+        datasets:
+          - staging.b3-equities-instrument-assets
+        query: "SELECT instrument_asset FROM 'staging.b3-equities-instrument-assets'"
+
 downloader:
   function: brasa.downloaders.b3_url_encoded_download
   validator: brasa.downloaders.validate_json_empty_file

@@ -1,5 +1,14 @@
 id: b3-indexes-theoretical-portfolio
 description: Carteira Teórica dos índices da B3 com pesos e posições
+
+dependencies:
+  - index:
+      required: true
+      from:
+        datasets:
+          - staging.b3-indexes-composition
+        query: "select distinct indexes from 'staging.b3-indexes-composition'"
+
 downloader:
   function: brasa.downloaders.b3_paged_url_encoded_download
   url: https://sistemaswebb3-listados.b3.com.br/indexProxy/indexCall/GetTheoricalPortfolio
@@ -12,6 +21,7 @@ downloader:
     language: pt-br
     index: ~
   extra-key: date
+
 reader:
   locale: pt
   encoding: latin1
