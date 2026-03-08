@@ -8,7 +8,7 @@ etl:
       columns: [refdate, symbol, log_return]
     - name: b3-indexes-returns
       columns: [refdate, symbol, log_return]
-    - name: b3-etfs-returns-before-20180101
+    - name: b3-equities-etfs-returns
       columns: [refdate, symbol, log_return]
     - name: brasa-returns-missing-data
       columns: [refdate, symbol, log_return]

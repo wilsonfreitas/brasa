@@ -1,0 +1,72 @@
+id: b3-equities-etfs-returns
+description: Dataset de retornos de ETFs de renda variável negociados na B3
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - input.b3-bvbg086
+        - staging.b3-cotahist
+        - staging.b3-equities-spot-market
+      query: |+
+        -- B3 Equity ETFs Returns dataset
+        -- Includes: domestic equity ETFs (security_category=3)
+        WITH etf_symbols AS (
+          SELECT DISTINCT symbol
+          FROM 'staging.b3-equities-spot-market'
+          WHERE security_category = 3
+        ),
+        cotahist_etfs_base_data as (
+          select
+            refdate,
+            symbol,
+            close / lag(close) OVER w AS close_ratio
+          from
+            'staging.b3-cotahist'
+          where
+            symbol in (select symbol from etf_symbols)
+          WINDOW w AS (PARTITION BY symbol ORDER BY refdate)
+        ),
+        cotahist_etfs_returns as (
+          select
+            refdate,
+            symbol,
+            (close_ratio - 1) as pct_return,
+            ln(close_ratio) as log_return
+          from cotahist_etfs_base_data
+          where
+            close_ratio is not NULL
+            and (refdate < '2018-01-01' or refdate = '2021-06-10')
+        ),
+        bvbg86_etfs_returns as (
+          SELECT
+            t.refdate,
+            t.symbol,
+            (COALESCE(t.oscillation, 0) / 100) AS pct_return,
+            LN(1 + (COALESCE(t.oscillation, 0) / 100)) AS log_return
+          FROM 'input.b3-bvbg086' t
+          INNER JOIN etf_symbols s USING (symbol)
+        )
+        SELECT * from cotahist_etfs_returns
+        UNION ALL
+        SELECT * FROM bvbg86_etfs_returns
+        order by refdate, symbol
+
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+
+fields:
+  - name: refdate
+    description: Data de referência
+    type: date
+  - name: symbol
+    description: Símbolo do ativo
+    type: character
+  - name: pct_return
+    description: Retorno percentual
+    type: numeric
+  - name: log_return
+    description: Retorno logarítmico
+    type: numeric

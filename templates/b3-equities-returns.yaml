@@ -7,10 +7,15 @@ etl:
         - input.b3-bvbg086
         - staging.b3-equities-spot-market
         - staging.b3-cotahist
-        - staging.b3-listed-funds
       query: |+
         -- B3 Equities Returns dataset
-        WITH cotahist_20210610_base_data AS (
+        -- Includes: shares (security_category=11), BDRs (1), units (13)
+        WITH equity_symbols AS (
+          SELECT DISTINCT symbol
+          FROM 'staging.b3-equities-spot-market'
+          WHERE security_category IN (1, 11, 13)
+        ),
+        cotahist_20210610_base_data AS (
             -- Single scan of the partitioned data
             -- We filter symbols early using a JOIN for better performance than 'IN'
             SELECT
@@ -20,7 +25,7 @@ etl:
                 t.distribution_id,
                 COUNT(*) OVER (PARTITION BY t.symbol) as days_count
             FROM 'staging.b3-cotahist' t
-            INNER JOIN 'staging.b3-equities-spot-market' s ON t.symbol = s.symbol
+            INNER JOIN equity_symbols s ON t.symbol = s.symbol
             WHERE t.refdate IN ('2021-06-09', '2021-06-10')
         ),
         cotahist_20210610_calculated AS (
@@ -50,35 +55,11 @@ etl:
               (COALESCE(t.oscillation, 0) / 100) AS pct_return,
               LN(1 + (COALESCE(t.oscillation, 0) / 100)) AS log_return
           FROM 'input.b3-bvbg086' t
-          INNER JOIN 'staging.b3-equities-spot-market' s USING (symbol)
-        ),
-        cotahist_etfs_base_data as (
-          select
-            refdate,
-            symbol,
-            close / lag(close) OVER w AS close_ratio
-          from
-            'staging.b3-cotahist'
-          where
-            symbol in (select distinct symbol from 'staging.b3-listed-funds')
-          WINDOW w AS (PARTITION BY symbol ORDER BY refdate)
-        ),
-        cotahist_etfs_returns as (
-          select
-            refdate,
-            symbol,
-            (close_ratio - 1) as pct_return,
-            ln(close_ratio) as log_return
-          from cotahist_etfs_base_data
-          where
-            close_ratio is not NULL
-            and refdate < '2018-01-01'
+          INNER JOIN equity_symbols s USING (symbol)
         )
         SELECT * from cotahist_20210610_returns
         UNION ALL
         SELECT * FROM bvbg86_returns
-        UNION ALL
-        select * from cotahist_etfs_returns
         order by refdate, symbol
 
     - step: apply_fields
