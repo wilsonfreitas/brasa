@@ -710,6 +710,7 @@ if __name__ == "__main__":
     elif args.command == "create-view":
         for template in args.template:
             BrasaDB.create_view(template)
+            print(f"View created: {template}")
     elif args.command == "list-tables":
         tables = BrasaDB.list_tables()
         if not tables:
