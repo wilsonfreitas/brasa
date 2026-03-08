@@ -1,0 +1,65 @@
+id: b3-company-symbols
+description: >
+    All traded symbols (tickers) for B3-listed companies, with ISIN.
+    One row per traded symbol (ticker code), derived from the latest snapshot of
+    input.b3-company-details. Rows without a ticker code (companies not actively
+    traded or missing code data) are excluded.
+    Company-level data lives in staging.brasa-companies.
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - input.b3-company-details
+      query: |+
+        -- B3 Company Symbols
+        --
+        -- One row per traded symbol (ticker), with ISIN and company linkage.
+        --
+        -- Source:
+        -- - input.b3-company-details: one row per ticker per company per refdate.
+        --   The `code` column holds the ticker symbol (e.g. PETR3, PETR4, AMER11).
+        --   The `isin` column holds the ISIN for that specific ticker.
+        --
+        -- Strategy:
+        -- Deduplicate to latest snapshot per (issuingCompany, code) pair using
+        -- ROW_NUMBER() OVER (PARTITION BY issuingCompany, code ORDER BY refdate DESC).
+        -- Only rows with a non-NULL code are included.
+        WITH latest AS (
+            SELECT *,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY issuingCompany, code ORDER BY refdate DESC
+                   ) AS rn
+            FROM 'input.b3-company-details'
+            WHERE code IS NOT NULL
+        )
+        SELECT
+            code                         AS symbol,
+            isin,
+            issuingCompany               AS issuing_company,
+            CAST(codeCVM AS VARCHAR)     AS code_cvm,
+            market
+        FROM latest
+        WHERE rn = 1
+        ORDER BY symbol
+
+writer:
+  layer: staging
+  dataset: b3-company-symbols
+
+fields:
+  - name: symbol
+    description: Traded ticker symbol (e.g. PETR3, PETR4, AMER11, JBSS32)
+    type: string
+  - name: isin
+    description: ISIN code for this specific ticker
+    type: string
+  - name: issuing_company
+    description: B3 short company code (e.g. PETR, BBAS) — links to staging.brasa-companies
+    type: string
+  - name: code_cvm
+    description: CVM company code — links to staging.brasa-companies
+    type: string
+  - name: market
+    description: Listing market (NOVO MERCADO, BOLSA, BOVESPA NIVEL 2, BDR / CDA, etc.)
+    type: string

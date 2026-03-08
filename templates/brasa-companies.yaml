@@ -1,5 +1,10 @@
 id: brasa-companies
-description: BOLSA-registered companies consolidated dataset from CVM and B3
+description: >
+    BOLSA-registered companies consolidated dataset from CVM, B3 company details,
+    and B3 company info. Filters to BOLSA (stock exchange) registered companies only,
+    anchored on CVM registration as the authoritative source. Enriches with B3 identity,
+    industry classification, capital structure, and share information.
+    Symbol/ticker-level data (ISIN, traded code) lives in staging.b3-company-symbols.
 
 etl:
   pipeline:
@@ -7,74 +12,96 @@ etl:
       datasets:
         - input.cvm-companies-registration
         - input.b3-company-details
+        - input.b3-company-info-info
       query: |+
         -- BOLSA-registered companies consolidated dataset
         --
-        -- Consolidates CVM company registration data with B3 listed company details.
-        -- Filters to BOLSA (stock exchange) registered companies only.
-        -- Deduplicates B3 data by selecting the latest snapshot per company.
-        -- LEFT joins on CVM (authoritative) anchor table.
+        -- Sources:
+        -- - input.cvm-companies-registration: authoritative company registry (filtered to BOLSA)
+        -- - input.b3-company-details: B3 identity, industry, and market metadata
+        --   (one row per ticker per refdate; deduplicated to one row per company)
+        -- - input.b3-company-info-info: B3 capital structure and share information
+        --   (one row per company per refdate; deduplicated to latest)
         --
-        -- Output columns:
-        -- - code_cvm: CVM 6-digit company code (primary identifier)
-        -- - company_name: Official company name (COALESCE B3 > CVM)
-        -- - trading_name: Trading name / commercial denomination (COALESCE B3 > CVM)
-        -- - asset_name: B3 listing name (NULL if not listed)
-        -- - company_status: Company status from CVM (ATIVO, CANCELADA, SUSPENSO)
-        -- - isin: ISIN code for equity instruments (NULL if not available)
-        -- - industry_classification: B3 raw industry classification (NULL if not listed)
-        -- - sector_level1: B3 primary sector (NULL if not listed)
-        -- - sector_level2: B3 subsector (NULL if not listed)
-        -- - sector_level3: B3 segment (NULL if not listed)
-        -- - cvm_cnpj: CNPJ from CVM data
-        -- - b3_cnpj: CNPJ from B3 data (validation, NULL if not listed)
+        -- Join strategy:
+        -- 1. cvm_latest: latest CVM registration per company (partitioned by cnpj_cia)
+        -- 2. details_latest: latest B3 company-details row per company (partitioned by codeCVM),
+        --    collapsing multiple tickers to one company record
+        -- 3. info_latest: latest B3 company-info row per company (partitioned by issuingCompany)
+        -- 4. LEFT JOIN from CVM anchor → details (on code_cvm) → info (on issuingCompany)
+        --
+        -- Symbol/ISIN data is intentionally excluded — see staging.b3-company-symbols.
         WITH cvm_latest AS (
-            -- CVM Companies Registration data (deduplicated by CNPJ)
-            -- Each company has a single record per refdate; we filter to latest
             SELECT DISTINCT
-                CAST(code_cvm AS VARCHAR) as code_cvm,
-                cnpj_cia as cvm_cnpj,
-                denom_social as company_name,
-                denom_comerc as trading_name,
-                sit as company_status,
-                tp_merc,
+                CAST(code_cvm AS VARCHAR) AS code_cvm,
+                cnpj_cia                 AS cvm_cnpj,
+                denom_social             AS company_name,
+                denom_comerc             AS trading_name,
+                sit                      AS company_status,
                 refdate,
-                ROW_NUMBER() OVER (PARTITION BY cnpj_cia ORDER BY refdate DESC) as rn
+                ROW_NUMBER() OVER (PARTITION BY cnpj_cia ORDER BY refdate DESC) AS rn
             FROM 'input.cvm-companies-registration'
             WHERE tp_merc = 'BOLSA'
         ),
-        b3_latest AS (
-            -- B3 Company Details data (deduplicated by company code and refdate)
-            -- Multiple refdates per company; we select the latest snapshot
-            SELECT DISTINCT
-                CAST(codeCVM AS VARCHAR) as code_cvm,
-                issuingCompany,
-                companyName,
-                cnpj as b3_cnpj,
-                tradingName,
-                isin,
-                industryClassification,
-                ROW_NUMBER() OVER (PARTITION BY CAST(codeCVM AS VARCHAR) ORDER BY refdate DESC) as rn
+        details_latest AS (
+            SELECT *,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY CAST(codeCVM AS VARCHAR) ORDER BY refdate DESC
+                   ) AS rn
             FROM 'input.b3-company-details'
+        ),
+        info_latest AS (
+            SELECT *,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY issuingCompany ORDER BY refdate DESC
+                   ) AS rn
+            FROM 'input.b3-company-info-info'
         )
         SELECT
             cvm.code_cvm,
-            COALESCE(b3.companyName, cvm.company_name) as company_name,
-            COALESCE(b3.tradingName, cvm.trading_name) as trading_name,
-            b3.issuingCompany as asset_name,
+            COALESCE(det.companyName, cvm.company_name)              AS company_name,
+            COALESCE(inf.tradingName, det.tradingName,
+                     cvm.trading_name)                                AS trading_name,
+            det.issuingCompany                                        AS issuing_company,
             cvm.company_status,
-            b3.isin,
-            b3.industryClassification as industry_classification,
+            det.cnpj,
+            cvm.cvm_cnpj,
+            det.industryClassification                                AS industry_classification,
+            det.industryClassificationEng                             AS industry_classification_eng,
             -- Split B3 industry classification into hierarchy levels
             -- Pattern: "Level 1 / Level 2 / Level 3"
-            TRIM(SPLIT_PART(b3.industryClassification, '/', 1)) as sector_level1,
-            TRIM(SPLIT_PART(b3.industryClassification, '/', 2)) as sector_level2,
-            TRIM(SPLIT_PART(b3.industryClassification, '/', 3)) as sector_level3,
-            cvm.cvm_cnpj,
-            b3.b3_cnpj
+            TRIM(SPLIT_PART(det.industryClassification, '/', 1))     AS sector_level1,
+            TRIM(SPLIT_PART(det.industryClassification, '/', 2))     AS sector_level2,
+            TRIM(SPLIT_PART(det.industryClassification, '/', 3))     AS sector_level3,
+            det.activity,
+            det.website,
+            det.status,
+            det.market,
+            det.marketIndicator                                       AS market_indicator,
+            det.institutionCommon                                     AS institution_common,
+            det.institutionPreferred                                  AS institution_preferred,
+            det.hasQuotation                                          AS has_quotation,
+            det.hasEmissions                                          AS has_emissions,
+            det.hasBDR                                                AS has_bdr,
+            det.typeBDR                                               AS type_bdr,
+            det.describleCategoryBVMF                                 AS describe_category_bvmf,
+            inf.segment,
+            inf.stockCapital                                          AS stock_capital,
+            inf.quotedPerSharSince                                    AS quoted_per_shar_since,
+            inf.commonSharesForm                                      AS common_shares_form,
+            inf.preferredSharesForm                                   AS preferred_shares_form,
+            inf.hasCommom                                             AS has_common,
+            inf.hasPreferred                                          AS has_preferred,
+            inf.roundLot                                              AS round_lot,
+            inf.numberCommonShares                                    AS number_common_shares,
+            inf.numberPreferredShares                                 AS number_preferred_shares,
+            inf.totalNumberShares                                     AS total_number_shares
         FROM cvm_latest cvm
-        LEFT JOIN b3_latest b3 ON cvm.code_cvm = b3.code_cvm
-        WHERE (cvm.rn = 1 OR cvm.rn IS NULL) AND (b3.rn = 1 OR b3.rn IS NULL)
+        LEFT JOIN details_latest det
+            ON cvm.code_cvm = CAST(det.codeCVM AS VARCHAR) AND det.rn = 1
+        LEFT JOIN info_latest inf
+            ON det.issuingCompany = inf.issuingCompany AND inf.rn = 1
+        WHERE cvm.rn = 1
         ORDER BY cvm.company_name
 
 writer:
@@ -86,22 +113,28 @@ fields:
     description: CVM 6-digit company code (primary identifier)
     type: string
   - name: company_name
-    description: Official company name
+    description: Official company name (B3 companyName preferred, fallback to CVM denom_social)
     type: string
   - name: trading_name
-    description: Trading name / commercial denomination
+    description: Trading / commercial name (B3 info preferred, then B3 details, then CVM)
     type: string
-  - name: asset_name
-    description: B3 listing name (from issuingCompany)
+  - name: issuing_company
+    description: B3 short company code (e.g. PETR, BBAS)
     type: string
   - name: company_status
-    description: Company status (ATIVO, CANCELADA, SUSPENSO)
+    description: Company status from CVM (ATIVO, CANCELADA, SUSPENSO)
     type: string
-  - name: isin
-    description: ISIN code for equity instruments
+  - name: cnpj
+    description: CNPJ from B3 data
+    type: string
+  - name: cvm_cnpj
+    description: CNPJ from CVM data
     type: string
   - name: industry_classification
-    description: B3 hierarchical industry classification (raw)
+    description: B3 hierarchical industry classification in Portuguese (raw)
+    type: string
+  - name: industry_classification_eng
+    description: B3 hierarchical industry classification in English (raw)
     type: string
   - name: sector_level1
     description: B3 primary sector (Level 1)
@@ -112,9 +145,72 @@ fields:
   - name: sector_level3
     description: B3 segment (Level 3)
     type: string
-  - name: cvm_cnpj
-    description: CNPJ from CVM data
+  - name: activity
+    description: Business activity description
     type: string
-  - name: b3_cnpj
-    description: CNPJ from B3 data (for validation)
+  - name: website
+    description: Company website URL
     type: string
+  - name: status
+    description: B3 listing status (A = active)
+    type: string
+  - name: market
+    description: Listing market (NOVO MERCADO, BOLSA, BALCAO NAO ORG., etc.)
+    type: string
+  - name: market_indicator
+    description: Numeric market indicator code
+    type: string
+  - name: institution_common
+    description: Custodian institution for common shares
+    type: string
+  - name: institution_preferred
+    description: Custodian institution for preferred shares
+    type: string
+  - name: has_quotation
+    description: Whether the company has active price quotations
+    type: string
+  - name: has_emissions
+    description: Whether the company has debt emissions
+    type: string
+  - name: has_bdr
+    description: Whether the company has Brazilian Depositary Receipts (BDRs)
+    type: string
+  - name: type_bdr
+    description: BDR type (if applicable)
+    type: string
+  - name: describe_category_bvmf
+    description: BVMF category description
+    type: string
+  - name: segment
+    description: B3 governance segment (NM, N1, N2, MB, BOLSA, etc.)
+    type: string
+  - name: stock_capital
+    description: Total stock capital value (R$)
+    type: numeric
+  - name: quoted_per_shar_since
+    description: Date when shares first started trading
+    type: date
+  - name: common_shares_form
+    description: Form of common shares (e.g. Escritural)
+    type: string
+  - name: preferred_shares_form
+    description: Form of preferred shares (e.g. Escritural)
+    type: string
+  - name: has_common
+    description: Whether the company has common shares (ON)
+    type: string
+  - name: has_preferred
+    description: Whether the company has preferred shares (PN)
+    type: string
+  - name: round_lot
+    description: Standard trading lot size
+    type: numeric
+  - name: number_common_shares
+    description: Total number of common shares outstanding
+    type: numeric
+  - name: number_preferred_shares
+    description: Total number of preferred shares outstanding
+    type: numeric
+  - name: total_number_shares
+    description: Total shares outstanding (common + preferred)
+    type: numeric
