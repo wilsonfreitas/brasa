@@ -96,7 +96,7 @@ class CacheMetadata:
         self.download_checksum: str = ""
         self.download_args: dict[str, Any] = {}
         self._downloaded_files: list[str] = []
-        self._processed_files: dict[str, str] = {}
+        self._is_processed: bool = False
         self.extra_key: str = ""
         self.processing_errors: str = ""
         self.is_invalid_download: bool = False
@@ -111,7 +111,7 @@ class CacheMetadata:
             "download_args": self.download_args,
             "template": self.template,
             "downloaded_files": self.downloaded_files,
-            "processed_files": self.processed_files,
+            "processed_files": self._is_processed,
             "extra_key": self.extra_key,
             "processing_errors": self.processing_errors,
             "is_invalid_download": self.is_invalid_download,
@@ -121,7 +121,16 @@ class CacheMetadata:
     def from_dict(self, kwargs) -> None:
         """Load metadata from a dictionary."""
         for k, v in kwargs.items():
-            setattr(self, k, v)
+            if k == "processed_files":
+                # Migration: old format was a dict; new format is a bool
+                if isinstance(v, dict):
+                    self._is_processed = bool(v)  # non-empty dict → True
+                elif isinstance(v, bool):
+                    self._is_processed = v
+                else:
+                    self._is_processed = bool(v)  # handles int 0/1
+            else:
+                setattr(self, k, v)
 
     def normalize_path(self, path: str) -> str:
         """Normalize path separators for cross-platform compatibility."""
@@ -138,17 +147,21 @@ class CacheMetadata:
         self._downloaded_files = value
 
     @property
-    def processed_files(self) -> dict[str, str]:
-        """Dictionary of processed file names to paths."""
-        return self._processed_files
+    def is_processed(self) -> bool:
+        """Whether this download has been successfully processed."""
+        return self._is_processed
 
-    @processed_files.setter
-    def processed_files(self, value: dict[str, str]) -> None:
-        self._processed_files = value
+    @is_processed.setter
+    def is_processed(self, value: bool) -> None:
+        self._is_processed = value
 
-    def add_processed_file(self, key: str, path: str) -> None:
-        """Add a processed file."""
-        self._processed_files[key] = path
+    def mark_as_processed(self) -> None:
+        """Mark this download as successfully processed."""
+        self._is_processed = True
+
+    def mark_as_unprocessed(self) -> None:
+        """Mark this download as not yet processed."""
+        self._is_processed = False
 
     def add_downloaded_file(self, path: str) -> None:
         """Add a downloaded file."""
@@ -158,10 +171,6 @@ class CacheMetadata:
         """Remove a downloaded file."""
         if path in self._downloaded_files:
             self._downloaded_files.remove(path)
-
-    def remove_processed_file(self, key: str) -> None:
-        """Remove a processed file."""
-        self._processed_files.pop(key, None)
 
     @property
     def id(self) -> str:
@@ -206,6 +215,7 @@ class CacheManager(Singleton):
             self.create_meta_db()
         else:
             self._migrate_download_trials()
+            self._migrate_processed_files()
         # Initialize the dataset catalog table
         self._init_dataset_catalog()
 
@@ -295,6 +305,31 @@ class CacheManager(Singleton):
         c.execute(
             "UPDATE download_trials SET status_code = 'F', status_name = 'FAILED' "
             "WHERE status_code IS NULL AND downloaded = '0'"
+        )
+
+        db_conn.commit()
+        db_conn.close()
+
+    def _migrate_processed_files(self) -> None:
+        """Migrate processed_files column from dict JSON to bool JSON (idempotent).
+
+        Old format: '{}' (unprocessed) or '{"data": "path/..."}' (processed)
+        New format: 'false' or 'true'
+        """
+        db_conn = sqlite3.connect(database=self.cache_path(self.meta_db_filename))
+        c = db_conn.cursor()
+
+        # Already-migrated rows have 'true' or 'false' — skip them.
+        # Convert empty/null dict → 'false'
+        c.execute(
+            "UPDATE cache_metadata SET processed_files = 'false' "
+            "WHERE processed_files IN ('{}', '', 'null') OR processed_files IS NULL"
+        )
+        # Convert any remaining JSON object (old dict format) → 'true'
+        c.execute(
+            "UPDATE cache_metadata SET processed_files = 'true' "
+            "WHERE processed_files NOT IN ('{}', '', 'null', 'false', 'true') "
+            "  AND processed_files IS NOT NULL"
         )
 
         db_conn.commit()
@@ -443,7 +478,7 @@ class CacheManager(Singleton):
                     json.dumps(meta.download_args, default=json_convert_from_object),
                     meta.template,
                     json.dumps(meta.downloaded_files, default=json_convert_from_object),
-                    json.dumps(meta.processed_files, default=json_convert_from_object),
+                    json.dumps(meta.is_processed),
                     meta.extra_key,
                     meta.processing_errors,
                     "1" if meta.is_invalid_download else "0",
@@ -463,7 +498,7 @@ class CacheManager(Singleton):
                     json.dumps(meta.download_args, default=json_convert_from_object),
                     meta.template,
                     json.dumps(meta.downloaded_files, default=json_convert_from_object),
-                    json.dumps(meta.processed_files, default=json_convert_from_object),
+                    json.dumps(meta.is_processed),
                     meta.extra_key,
                     meta.processing_errors,
                     "1" if meta.is_invalid_download else "0",
@@ -484,12 +519,13 @@ class CacheManager(Singleton):
             shutil.rmtree(folder, ignore_errors=False)
 
     def clean_meta_db_folder(self, meta: CacheMetadata) -> None:
-        """Clean the database folder for a cache entry."""
-        # warn(f"Cleaning meta db {meta.download_args}", stacklevel=2)
-        for processed_fname in meta.processed_files.values():
-            full_path = Path(self.cache_path(processed_fname))
-            if full_path.is_file():
-                full_path.unlink()
+        """Clean the database folder for a cache entry.
+
+        Note: With partitioned datasets, output paths are shared across
+        entries and cannot be cleaned per-entry. Use check_orphan_db()
+        in doctor to find orphaned db folders instead.
+        """
+        pass
 
     def clean_meta_db(self, meta: CacheMetadata) -> None:
         """Remove metadata from the database."""
@@ -644,18 +680,15 @@ class CacheManager(Singleton):
         """Load processed market data from cache."""
         if reprocess:
             self.read_marketdata(meta)
-        if len(meta.processed_files) > 0:
-            dfs = {
-                key: pd.read_parquet(self.cache_path(fname))
-                for key, fname in meta.processed_files.items()
-            }
-            if len(dfs) == 1:
-                return dfs["data"]
-            else:
-                return dfs
-        else:
+        if not meta.is_processed:
             warn("No processed files", stacklevel=2)
             return None
+        warn(
+            "load_marketdata() cannot load by path for partitioned datasets. "
+            "Use get_marketdata() instead.",
+            stacklevel=2,
+        )
+        return None
 
     def download_marketdata(self, meta: CacheMetadata) -> DownloadResult:
         """Download market data and save to cache.
@@ -826,7 +859,7 @@ class CacheManager(Singleton):
                 "FROM cache_metadata "
                 "WHERE downloaded_files NOT IN ('[]', '', 'null') "
                 "  AND downloaded_files IS NOT NULL "
-                "  AND (processed_files IN ('{}', '', 'null') "
+                "  AND (processed_files IN ('{}', '', 'null', 'false') "
                 "       OR processed_files IS NULL) "
                 "  AND (is_invalid_download IS NULL "
                 "       OR is_invalid_download != '1') "

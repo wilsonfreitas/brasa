@@ -153,7 +153,7 @@ def _build_result_from_download(
             args=args,
             duration=duration,
             downloaded_files=meta.downloaded_files,
-            processed_files=meta.processed_files,
+            is_processed=meta.is_processed,
             captured_warnings=captured_warnings,
         )
     else:
@@ -164,7 +164,7 @@ def _build_result_from_download(
             args=args,
             duration=duration,
             downloaded_files=meta.downloaded_files,
-            processed_files=meta.processed_files,
+            is_processed=meta.is_processed,
             captured_warnings=captured_warnings,
             is_expected_error=dl.is_expected_error,
         )
@@ -226,7 +226,7 @@ def _build_result_skipped(
         args=args,
         duration=duration,
         downloaded_files=meta.downloaded_files,
-        processed_files=meta.processed_files,
+        is_processed=meta.is_processed,
     )
     result.extra_info["download_status_code"] = "S"
     result.extra_info["download_status_name"] = "SKIPPED"
@@ -296,7 +296,7 @@ def download_marketdata(
         meta.extra_key = template.downloader.extra_key
         meta.download_args = args
         meta.downloaded_files = []
-        meta.processed_files = {}
+        meta.is_processed = False
 
         with capture_warnings() as captured_warnings:
             should_download = _should_download(cache, meta, reprocess)
@@ -405,7 +405,7 @@ def process_marketdata(
 
         with capture_warnings() as captured_warnings:
             try:
-                should_process = reprocess or len(meta.processed_files) == 0
+                should_process = reprocess or not meta.is_processed
 
                 if should_process:
                     meta.processing_errors = ""
@@ -425,7 +425,7 @@ def process_marketdata(
                         args=meta.download_args,
                         duration=duration,
                         downloaded_files=meta.downloaded_files,
-                        processed_files=meta.processed_files,
+                        is_processed=meta.is_processed,
                         captured_warnings=captured_warnings,
                     )
                 else:
@@ -438,7 +438,7 @@ def process_marketdata(
                         args=meta.download_args,
                         duration=duration,
                         downloaded_files=meta.downloaded_files,
-                        processed_files=meta.processed_files,
+                        is_processed=meta.is_processed,
                     )
 
             except Exception as ex:
@@ -456,7 +456,7 @@ def process_marketdata(
                     args=meta.download_args,
                     duration=duration,
                     downloaded_files=meta.downloaded_files,
-                    processed_files=meta.processed_files,
+                    is_processed=meta.is_processed,
                     captured_warnings=captured_warnings,
                     is_expected_error=False,
                 )

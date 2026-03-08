@@ -238,7 +238,7 @@ class TaskResult:
     error_traceback: str | None = None
     warnings: list[str] = field(default_factory=list)
     downloaded_files: list[str] = field(default_factory=list)
-    processed_files: dict[str, str] = field(default_factory=dict)
+    is_processed: bool = False
     extra_info: dict[str, Any] = field(default_factory=dict)
     timestamp: datetime = field(default_factory=datetime.now)
 
@@ -255,7 +255,7 @@ class TaskResult:
             "error_traceback": self.error_traceback,
             "warnings": self.warnings,
             "downloaded_files": self.downloaded_files,
-            "processed_files": self.processed_files,
+            "is_processed": self.is_processed,
             "extra_info": {k: str(v) for k, v in self.extra_info.items()},
             "timestamp": self.timestamp.isoformat(),
         }
@@ -568,11 +568,11 @@ class TaskReport:
         else:
             text.append("(none)\n", style="dim")
 
-        text.append("  Processed files:  ", style="dim")
-        if result.processed_files:
-            text.append(f"{len(result.processed_files)} files\n")
+        text.append("  Processed:        ", style="dim")
+        if result.is_processed:
+            text.append("processed\n")
         else:
-            text.append("(none)\n", style="dim")
+            text.append("(not processed)\n", style="dim")
 
         # Traceback
         if result.error_traceback:
@@ -814,7 +814,7 @@ def create_task_result_from_exception(
     args: dict[str, Any],
     duration: float,
     downloaded_files: list[str] | None = None,
-    processed_files: dict[str, str] | None = None,
+    is_processed: bool = False,
     captured_warnings: list[str] | None = None,
     is_expected_error: bool = False,
 ) -> TaskResult:
@@ -827,7 +827,7 @@ def create_task_result_from_exception(
         args: Arguments used for the operation.
         duration: Duration of the operation in seconds.
         downloaded_files: List of downloaded files.
-        processed_files: Dict of processed files.
+        is_processed: Whether the entry was processed.
         captured_warnings: List of captured warnings.
         is_expected_error: If True, marks as FAILED; otherwise ERROR.
 
@@ -845,7 +845,7 @@ def create_task_result_from_exception(
         error_traceback=traceback.format_exc(),
         warnings=captured_warnings or [],
         downloaded_files=downloaded_files or [],
-        processed_files=processed_files or {},
+        is_processed=is_processed,
     )
 
 
@@ -855,7 +855,7 @@ def create_task_result_success(
     args: dict[str, Any],
     duration: float,
     downloaded_files: list[str] | None = None,
-    processed_files: dict[str, str] | None = None,
+    is_processed: bool = False,
     captured_warnings: list[str] | None = None,
 ) -> TaskResult:
     """Create a successful TaskResult.
@@ -866,7 +866,7 @@ def create_task_result_success(
         args: Arguments used for the operation.
         duration: Duration of the operation in seconds.
         downloaded_files: List of downloaded files.
-        processed_files: Dict of processed files.
+        is_processed: Whether the entry was processed.
         captured_warnings: List of captured warnings.
 
     Returns:
@@ -883,7 +883,7 @@ def create_task_result_success(
         duration_seconds=duration,
         warnings=captured_warnings or [],
         downloaded_files=downloaded_files or [],
-        processed_files=processed_files or {},
+        is_processed=is_processed,
     )
 
 
@@ -893,7 +893,7 @@ def create_task_result_skipped(
     args: dict[str, Any],
     duration: float,
     downloaded_files: list[str] | None = None,
-    processed_files: dict[str, str] | None = None,
+    is_processed: bool = False,
 ) -> TaskResult:
     """Create a skipped TaskResult.
 
@@ -903,7 +903,7 @@ def create_task_result_skipped(
         args: Arguments used for the operation.
         duration: Duration of the operation in seconds.
         downloaded_files: List of downloaded files.
-        processed_files: Dict of processed files.
+        is_processed: Whether the entry was processed.
 
     Returns:
         A TaskResult indicating the task was skipped.
@@ -915,5 +915,5 @@ def create_task_result_skipped(
         args=args,
         duration_seconds=duration,
         downloaded_files=downloaded_files or [],
-        processed_files=processed_files or {},
+        is_processed=is_processed,
     )

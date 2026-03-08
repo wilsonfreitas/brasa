@@ -51,28 +51,24 @@ def get_fname_part(meta: CacheMetadata, df: pd.DataFrame) -> str:
     return fname_part
 
 
-def save_parquet_file(
-    meta: CacheMetadata, folder: str, processed_files_name: str, df: pd.DataFrame
-) -> None:
+def save_parquet_file(meta: CacheMetadata, folder: str, df: pd.DataFrame) -> None:
     """Save a DataFrame to a single parquet file.
 
     Args:
         meta: Cache metadata to update with processed file info.
         folder: Target folder for the parquet file.
-        processed_files_name: Key for the processed files registry.
         df: DataFrame to save.
     """
     man = CacheManager()
     fname_part = get_fname_part(meta, df)
     fname = str(Path(folder) / man.parquet_file_name(fname_part))
-    meta.add_processed_file(processed_files_name, fname)
     df.to_parquet(man.cache_path(fname))
+    meta.mark_as_processed()
 
 
 def save_partitioned_parquet_file(
     meta: CacheMetadata,
     folder: str,
-    processed_files_name: str,
     df: pd.DataFrame,
     partition_cols: list[str],
     schema: pa.Schema = None,
@@ -85,7 +81,6 @@ def save_partitioned_parquet_file(
     Args:
         meta: Cache metadata to update with processed file info.
         folder: Target folder for parquet files.
-        processed_files_name: Key for the processed files registry.
         df: DataFrame to save.
         partition_cols: Columns to use for partitioning.
         schema: Optional PyArrow schema for type enforcement.
@@ -110,7 +105,7 @@ def save_partitioned_parquet_file(
             partition_cols=partition_cols,
             existing_data_behavior="delete_matching",
         )
-    meta.add_processed_file(processed_files_name, folder)
+    meta.mark_as_processed()
 
     # Register dataset in catalog if layer and dataset_name are provided
     if layer and dataset_name:
@@ -173,7 +168,6 @@ def _process_multi_dataset_output(
                 save_partitioned_parquet_file(
                     meta,
                     folder,
-                    output_name,
                     dx,
                     template.writer.partitioning,
                     schema=schema,
@@ -189,13 +183,11 @@ def _process_multi_dataset_output(
 
         for name, dx in df.items():
             if dx.shape[0] > 0:
-                pfn = template.reader.multi[name]
                 # Extract dataset name from folder path
                 dataset_name = Path(db_folder[name]).name
                 save_partitioned_parquet_file(
                     meta,
                     db_folder[name],
-                    pfn,
                     dx,
                     template.writer.partitioning,
                     schema=schema,
@@ -231,7 +223,6 @@ def _read_marketdata(meta: CacheMetadata) -> None:
         save_partitioned_parquet_file(
             meta,
             folder,
-            "data",
             df,
             template.writer.partitioning,
             schema=schema,

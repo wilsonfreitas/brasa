@@ -284,7 +284,7 @@ class TestGetTemplatesWithUnprocessedDownloads:
         if downloaded:
             meta.add_downloaded_file(f"raw/{template}/{checksum}/file.csv.gz")
         if processed:
-            meta.add_processed_file("data", f"db/input/{template}/2024-01-01.parquet")
+            meta.mark_as_processed()
         return meta
 
     def test_empty_cache_returns_empty_list(self, temp_cache):

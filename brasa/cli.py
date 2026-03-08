@@ -26,6 +26,7 @@ _COMMAND_GROUPS = {
         "head",
     ],
     "Database": ["create-views", "create-view", "list-tables", "query"],
+    "Maintenance": ["doctor"],
 }
 
 
@@ -412,6 +413,42 @@ parser_graph.add_argument(
 )
 
 
+parser_doctor = subparsers.add_parser(
+    "doctor",
+    help="diagnose cache health: orphan files, missing data, schema drift, date gaps",
+)
+parser_doctor.add_argument(
+    "--fix",
+    action="store_true",
+    help="apply all auto-fixable issues",
+)
+parser_doctor.add_argument(
+    "--yes",
+    action="store_true",
+    help="skip confirmation prompt when using --fix",
+)
+parser_doctor.add_argument(
+    "--category",
+    nargs="+",
+    metavar="CATEGORY",
+    choices=["raw", "db", "meta", "templates", "gaps"],
+    help="run only specific categories: raw, db, meta, templates, gaps",
+)
+parser_doctor.add_argument(
+    "--template",
+    nargs="+",
+    metavar="TEMPLATE",
+    help="restrict date-gaps and stale-etl checks to specific templates",
+)
+parser_doctor.add_argument(
+    "--since",
+    type=int,
+    default=30,
+    metavar="DAYS",
+    help="for date-gap checks, look back this many days (default: 30)",
+)
+
+
 def _format_datasets_table(datasets) -> str:
     """Format datasets as a table string."""
     if not datasets:
@@ -526,6 +563,43 @@ def _format_migration_report(report, verbose: bool = False) -> str:
 
     lines.append(report.summary())
     return "\n".join(lines)
+
+
+def _print_doctor_report(report) -> None:
+    """Print a formatted doctor report to stdout."""
+    SEV_PREFIX = {"error": "  \u2717", "warning": "  \u26a0", "info": "  i"}
+
+    print("\nBrasa Doctor")
+    print("════════════")
+
+    if not report.issues:
+        print("\n  ✓  No issues found.")
+        print(f"\n{'─' * 36}")
+        print("Summary: no issues")
+        return
+
+    # Group by category
+    categories: dict[str, list] = {}
+    for issue in report.issues:
+        categories.setdefault(issue.category, []).append(issue)
+
+    for category, issues in categories.items():
+        print(f"\n{category}")
+        for issue in issues:
+            icon = SEV_PREFIX.get(issue.severity, "  ?")
+            print(f"{icon}  {issue.description}")
+            for detail in issue.details[:10]:
+                print(f"       {detail}")
+            if len(issue.details) > 10:
+                print(f"       … and {len(issue.details) - 10} more")
+            if issue.fixable:
+                print("     → fixable: run with --fix to apply")
+
+    print(f"\n{'─' * 36}")
+    summary = report.summary()
+    print(f"Summary: {summary}")
+    if report.fixable():
+        print("Run `brasa doctor --fix` to apply auto-fixes.")
 
 
 def _generate_dot(graph, template_id: str | None = None) -> str:
@@ -1048,3 +1122,43 @@ if __name__ == "__main__":
                 print(f"Error: graphviz dot command failed:\n{result.stderr}")
                 sys.exit(1)
             print(f"Graph written to {output_file}")
+
+    elif args.command == "doctor":
+        from .engine.doctor import run_doctor
+
+        categories = getattr(args, "category", None)
+        template_filter = getattr(args, "template", None)
+        since_days = getattr(args, "since", 30)
+        do_fix = getattr(args, "fix", False)
+        skip_confirm = getattr(args, "yes", False)
+
+        report = run_doctor(
+            categories=categories,
+            template_filter=template_filter,
+            since_days=since_days,
+        )
+
+        _print_doctor_report(report)
+
+        if do_fix and report.fixable():
+            if not skip_confirm:
+                answer = (
+                    input(f"\nApply {len(report.fixable())} fix(es)? [y/N] ")
+                    .strip()
+                    .lower()
+                )
+                if answer != "y":
+                    print("Aborted.")
+                    sys.exit(0)
+            for issue in report.fixable():
+                if issue.fix_fn is not None:
+                    try:
+                        issue.fix_fn()
+                        print(f"  Fixed: {issue.code}")
+                    except Exception as exc:
+                        print(f"  Error fixing {issue.code}: {exc}")
+        elif do_fix:
+            print("\nNo fixable issues found.")
+
+        if report.errors():
+            sys.exit(1)
