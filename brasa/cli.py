@@ -663,10 +663,12 @@ if __name__ == "__main__":
                 report_file=report_file,
             )
         else:
-            if len(args.date) == 1:
-                date_range = DateRangeParser(args.calendar).parse(args.date[0])
-            else:
-                date_range = [datetime.strptime(d, "%Y-%m-%d") for d in args.date]
+            date_range = None
+            if args.date:
+                if len(args.date) == 1:
+                    date_range = DateRangeParser(args.calendar).parse(args.date[0])
+                else:
+                    date_range = [datetime.strptime(d, "%Y-%m-%d") for d in args.date]
             if verbosity != Verbosity.QUIET:
                 print(
                     "Status legend: .(passed) F(failed) E(error) "
