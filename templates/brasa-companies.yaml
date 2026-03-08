@@ -69,10 +69,10 @@ etl:
             det.industryClassification                                AS industry_classification,
             det.industryClassificationEng                             AS industry_classification_eng,
             -- Split B3 industry classification into hierarchy levels
-            -- Pattern: "Level 1 / Level 2 / Level 3"
-            TRIM(SPLIT_PART(det.industryClassification, '/', 1))     AS sector_level1,
-            TRIM(SPLIT_PART(det.industryClassification, '/', 2))     AS sector_level2,
-            TRIM(SPLIT_PART(det.industryClassification, '/', 3))     AS sector_level3,
+            -- Pattern: "Sector / Subsector / Segment"
+            TRIM(SPLIT_PART(det.industryClassification, '/', 1))     AS sector,
+            TRIM(SPLIT_PART(det.industryClassification, '/', 2))     AS subsector,
+            TRIM(SPLIT_PART(det.industryClassification, '/', 3))     AS segment,
             det.activity,
             det.website,
             det.status,
@@ -136,14 +136,14 @@ fields:
   - name: industry_classification_eng
     description: B3 hierarchical industry classification in English (raw)
     type: string
-  - name: sector_level1
-    description: B3 primary sector (Level 1)
+  - name: sector
+    description: B3 primary sector
     type: string
-  - name: sector_level2
-    description: B3 subsector (Level 2)
+  - name: subsector
+    description: B3 subsector
     type: string
-  - name: sector_level3
-    description: B3 segment (Level 3)
+  - name: segment
+    description: B3 segment
     type: string
   - name: activity
     description: Business activity description

@@ -12,23 +12,23 @@ tags: ['data', 'etl', 'templates', 'industry-classification', 'staging']
 
 ![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
 
-This plan defines the implementation of a new ETL dataset named `brasa-industry-sectors` in the `staging` layer. The dataset is a deterministic lookup table generated from `staging.brasa-companies` using `sector_level1` and `sector_level2`, with mappings to standard taxonomies (GICS and ICB) and a custom normalized sector/subsector model based on the mapping logic already drafted in the `7. Industry Sector Classification Mapping` section of `notebooks/datalake-companies-investigation.ipynb`.
+This plan defines the implementation of a new ETL dataset named `brasa-industry-sectors` in the `staging` layer. The dataset is a deterministic lookup table generated from `staging.brasa-companies` using `sector` and `subsector`, with mappings to standard taxonomies (GICS and ICB) and a custom normalized sector/subsector model based on the mapping logic already drafted in the `7. Industry Sector Classification Mapping` section of `notebooks/datalake-companies-investigation.ipynb`.
 
 ## 1. Requirements & Constraints
 
 - **REQ-001**: Create a new template file `templates/brasa-industry-sectors.yaml` with `id: brasa-industry-sectors`.
 - **REQ-002**: Implement as an ETL pipeline template (`etl.pipeline`) and not as `etl.function`.
 - **REQ-003**: Use `staging.brasa-companies` as the only source dataset.
-- **REQ-004**: Build output keys from `sector_level1` and `sector_level2` with `DISTINCT` semantics.
-- **REQ-005**: Output must include at minimum: `sector_level1`, `sector_level2`, `gics_sector`, `icb_sector`, `normalized_sector`, `normalized_subsector`.
+- **REQ-004**: Build output keys from `sector` and `subsector` with `DISTINCT` semantics.
+- **REQ-005**: Output must include at minimum: `sector`, `subsector`, `gics_sector`, `icb_sector`, `normalized_sector`, `normalized_subsector`.
 - **REQ-006**: Mapping values must be copied exactly from the notebook section `7. Industry Sector Classification Mapping` for overlapping tuples.
-- **REQ-007**: Keep explicit fallback value `Other` for unmapped `(sector_level1, sector_level2)` tuples.
+- **REQ-007**: Keep explicit fallback value `Other` for unmapped `(sector, subsector)` tuples.
 - **REQ-008**: Persist output in `staging` layer using dataset name `brasa-industry-sectors`.
 - **REQ-009**: Ensure template loads through `MarketDataTemplate` and is discoverable via `retrieve_template`.
 - **REQ-010**: Add automated test coverage for template loading and expected field set.
 - **SEC-001**: SQL must not execute dynamic string interpolation from runtime user input.
-- **DAT-001**: Exclude rows where `sector_level1` is null or empty after trim.
-- **DAT-002**: Trim whitespace in `sector_level1` and `sector_level2` before mapping.
+- **DAT-001**: Exclude rows where `sector` is null or empty after trim.
+- **DAT-002**: Trim whitespace in `sector` and `subsector` before mapping.
 - **CON-001**: Do not modify `templates/brasa-companies.yaml` schema in this scope.
 - **CON-002**: Do not introduce new Python ETL functions unless pipeline steps are insufficient.
 - **CON-003**: Keep compatibility with Python `^3.10` and current dependencies in `pyproject.toml`.
@@ -44,10 +44,10 @@ This plan defines the implementation of a new ETL dataset named `brasa-industry-
 
 | Task | Description | Completed | Date |
 |------|-------------|-----------|------|
-| TASK-001 | Extract canonical mapping tuples from `notebooks/datalake-companies-investigation.ipynb` section `7. Industry Sector Classification Mapping`: `gics_mapping`, `icb_mapping`, and `subsector_mapping` keyed by `(sector_level1, sector_level2)`. | ✅ | 2026-02-20 |
-| TASK-002 | Normalize source-column assumptions from `templates/brasa-companies.yaml`: `sector_level1` and `sector_level2` are already generated from `industry_classification` split logic. | ✅ | 2026-02-20 |
-| TASK-003 | Define fallback policy: unmapped `sector_level1` -> `gics_sector='Unclassified'` and `icb_sector='Unclassified'`; unmapped tuple -> `normalized_subsector='Other'`. | ✅ | 2026-02-20 |
-| TASK-004 | Define deterministic sort order for output rows: `ORDER BY sector_level1, sector_level2`. | ✅ | 2026-02-20 |
+| TASK-001 | Extract canonical mapping tuples from `notebooks/datalake-companies-investigation.ipynb` section `7. Industry Sector Classification Mapping`: `gics_mapping`, `icb_mapping`, and `subsector_mapping` keyed by `(sector, subsector)`. | ✅ | 2026-02-20 |
+| TASK-002 | Normalize source-column assumptions from `templates/brasa-companies.yaml`: `sector` and `subsector` are already generated from `industry_classification` split logic. | ✅ | 2026-02-20 |
+| TASK-003 | Define fallback policy: unmapped `sector` -> `gics_sector='Unclassified'` and `icb_sector='Unclassified'`; unmapped tuple -> `normalized_subsector='Other'`. | ✅ | 2026-02-20 |
+| TASK-004 | Define deterministic sort order for output rows: `ORDER BY sector, subsector`. | ✅ | 2026-02-20 |
 
 ### Implementation Phase 2: Create New ETL Template
 
@@ -58,9 +58,9 @@ This plan defines the implementation of a new ETL dataset named `brasa-industry-
 |------|-------------|-----------|------|
 | TASK-005 | Add file `templates/brasa-industry-sectors.yaml` with metadata sections: `id`, `description`, `etl.pipeline`, `writer`, and `fields`. | ✅ | 2026-02-20 |
 | TASK-006 | In `etl.pipeline`, add `step: sql_query` with `datasets: [staging.brasa-companies]`. | ✅ | 2026-02-20 |
-| TASK-007 | Implement SQL CTE `base` selecting distinct trimmed `sector_level1`, `sector_level2` from `'staging.brasa-companies'`, filtering null/blank `sector_level1`. | ✅ | 2026-02-20 |
-| TASK-008 | Implement SQL mapping using deterministic `CASE` expressions for `gics_sector` and `icb_sector` based on `sector_level1`. | ✅ | 2026-02-20 |
-| TASK-009 | Implement SQL mapping for `normalized_sector` (English normalized level-1) and `normalized_subsector` based on `(sector_level1, sector_level2)` with `Other` fallback. | ✅ | 2026-02-20 |
+| TASK-007 | Implement SQL CTE `base` selecting distinct trimmed `sector`, `subsector` from `'staging.brasa-companies'`, filtering null/blank `sector`. | ✅ | 2026-02-20 |
+| TASK-008 | Implement SQL mapping using deterministic `CASE` expressions for `gics_sector` and `icb_sector` based on `sector`. | ✅ | 2026-02-20 |
+| TASK-009 | Implement SQL mapping for `normalized_sector` (English normalized level-1) and `normalized_subsector` based on `(sector, subsector)` with `Other` fallback. | ✅ | 2026-02-20 |
 | TASK-010 | Set `writer.layer: staging` and `writer.dataset: brasa-industry-sectors`. | ✅ | 2026-02-20 |
 | TASK-011 | Define explicit `fields` entries with `type: string` for all output columns. | ✅ | 2026-02-20 |
 
@@ -92,7 +92,7 @@ This plan defines the implementation of a new ETL dataset named `brasa-industry-
 - **ALT-001**: Keep mapping only in notebook code cells. Rejected because notebooks are not deterministic production ETL artifacts.
 - **ALT-002**: Implement mapping in `brasa/etl.py` Python function. Rejected because pipeline YAML + `sql_query` is simpler, declarative, and aligned with current template standards.
 - **ALT-003**: Join against an external CSV mapping file. Rejected to avoid extra artifact lifecycle and synchronization risk.
-- **ALT-004**: Derive `normalized_subsector` only from `sector_level1`. Rejected because objective requires `sector_level1` + `sector_level2` granular lookup.
+- **ALT-004**: Derive `normalized_subsector` only from `sector`. Rejected because objective requires `sector` + `subsector` granular lookup.
 
 ## 4. Dependencies
 
@@ -121,7 +121,7 @@ This plan defines the implementation of a new ETL dataset named `brasa-industry-
 
 - **RISK-001**: Notebook mapping and production SQL mapping can diverge over time. Mitigation: include exact tuple mapping extraction in `TASK-001` and keep mapping centralized in one template.
 - **RISK-002**: New sectors can appear in source data and remain unmapped. Mitigation: explicit fallback values and periodic review process.
-- **RISK-003**: If source dataset schema changes (`sector_level1/2` renamed), ETL fails. Mitigation: load tests and template contract checks.
+- **RISK-003**: If source dataset schema changes (`sector/2` renamed), ETL fails. Mitigation: load tests and template contract checks.
 - **ASSUMPTION-001**: `staging.brasa-companies` remains available before this ETL is executed.
 - **ASSUMPTION-002**: Sector hierarchy values in source remain Portuguese labels as in current notebook mapping.
 - **ASSUMPTION-003**: `sql_query` step supports all required SQL constructs without custom Python extension.

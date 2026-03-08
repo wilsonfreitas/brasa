@@ -258,12 +258,12 @@ Detailed 45+ granular subsector classifications:
 File: `consolidated_with_classification.parquet` (163.86 KB)
 
 Additional columns for classification-mapped dataset:
-- `sector_level1`: B3 primary sector
-- `sector_level2`: B3 subsector
-- `sector_level3`: B3 segment
+- `sector`: B3 primary sector
+- `subsector`: B3 subsector
+- `segment`: B3 segment
 - `gics_sector`: Global standard (12 sectors)
 - `icb_sector`: Industry benchmark (12 sectors)
-- `subsector`: English granular category (45+ values)
+- `normalized_subsector`: English granular category (45+ values)
 
 ## Next Steps for ELT Template Creation
 

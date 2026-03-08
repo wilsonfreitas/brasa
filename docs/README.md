@@ -306,7 +306,7 @@ result = con.execute("""
 
 **Company Data**:
 - `brasa-companies`: BOLSA-registered companies (consolidated CVM + B3, ETL)
-- `brasa-industry-sectors`: Sector taxonomy lookup table — maps B3 `sector_level1`/`sector_level2` to GICS, ICB, and normalized English sector/subsector names (ETL, source: `staging.brasa-companies`)
+- `brasa-industry-sectors`: Sector taxonomy lookup table — maps B3 `sector`/`subsector` to GICS, ICB, and normalized English sector/subsector names (ETL, source: `staging.brasa-companies`)
 - `b3-company-info`: Company information
 - `b3-cash-dividends`: Dividend events
 - `b3-companies-properties`: Company metadata (ETL)

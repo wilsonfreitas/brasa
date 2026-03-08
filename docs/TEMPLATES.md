@@ -520,7 +520,7 @@ fields:
 
 **Template:** `brasa-industry-sectors`
 
-Produces a deterministic lookup table by joining and mapping `sector_level1`/`sector_level2` values from `staging.brasa-companies` to standard GICS, ICB, and normalized sector taxonomies using a single `sql_query` step.
+Produces a deterministic lookup table by joining and mapping `sector`/`subsector` values from `staging.brasa-companies` to standard GICS, ICB, and normalized sector taxonomies using a single `sql_query` step.
 
 **Source:** `staging.brasa-companies` (produced by `templates/brasa-companies.yaml`)
 **Output:** `staging.brasa-industry-sectors`
@@ -529,7 +529,7 @@ Produces a deterministic lookup table by joining and mapping `sector_level1`/`se
 id: brasa-industry-sectors
 description: >
   Industry sector lookup table derived from staging.brasa-companies.
-  Maps B3 sector hierarchy (sector_level1, sector_level2) to GICS, ICB,
+  Maps B3 sector hierarchy (sector, subsector) to GICS, ICB,
   and normalized English sector/subsector names.
 
 etl:
@@ -540,16 +540,16 @@ etl:
       query: |+
         WITH base AS (
             SELECT DISTINCT
-                TRIM(sector_level1) AS sector_level1,
-                TRIM(sector_level2) AS sector_level2
+                TRIM(sector) AS sector,
+                TRIM(subsector) AS subsector
             FROM 'staging.brasa-companies'
-            WHERE sector_level1 IS NOT NULL
-              AND TRIM(sector_level1) <> ''
+            WHERE sector IS NOT NULL
+              AND TRIM(sector) <> ''
         )
         SELECT
-            sector_level1,
-            sector_level2,
-            CASE sector_level1
+            sector,
+            subsector,
+            CASE sector
                 WHEN 'Financeiro' THEN 'Financials'
                 -- ... full CASE expression in template
                 ELSE 'Unclassified'
@@ -558,27 +558,27 @@ etl:
             ELSE 'Other'
             END AS normalized_subsector
         FROM base
-        ORDER BY sector_level1, sector_level2
+        ORDER BY sector, subsector
 
 writer:
   layer: staging
   dataset: brasa-industry-sectors
 
 fields:
-  - name: sector_level1
+  - name: sector
     description: B3 primary sector (Portuguese label, trimmed)
     type: string
-  - name: sector_level2
+  - name: subsector
     description: B3 subsector (Portuguese label, trimmed)
     type: string
   - name: gics_sector
-    description: GICS standard sector mapped from sector_level1
+    description: GICS standard sector mapped from sector
     type: string
   - name: icb_sector
-    description: ICB standard sector mapped from sector_level1
+    description: ICB standard sector mapped from sector
     type: string
   - name: normalized_sector
-    description: English normalized name for sector_level1
+    description: English normalized name for sector
     type: string
   - name: normalized_subsector
     description: English normalized subsector; falls back to 'Other' for unmapped tuples

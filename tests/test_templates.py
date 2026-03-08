@@ -138,9 +138,9 @@ def test_brasa_companies_template_loads():
         "company_status",
         "isin",
         "industry_classification",
-        "sector_level1",
-        "sector_level2",
-        "sector_level3",
+        "sector",
+        "subsector",
+        "segment",
         "cvm_cnpj",
         "b3_cnpj",
     }
@@ -178,8 +178,8 @@ def test_brasa_industry_sectors_template_loads():
     # Verify mandatory output fields are defined
     field_names = {f.name for f in tpl.fields}
     expected_fields = {
-        "sector_level1",
-        "sector_level2",
+        "sector",
+        "subsector",
         "gics_sector",
         "icb_sector",
         "normalized_sector",
