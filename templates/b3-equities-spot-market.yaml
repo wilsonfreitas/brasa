@@ -1,7 +1,9 @@
 id: b3-equities-spot-market
 description: >
-  | Dataset de dados cadastrais de ações fitrando mercado à vista e
-  | instrumentos válidos:
+  | Dataset de dados cadastrais de ações fitrando mercado à vista (instrument_market = 10),
+  | segmento de ações (instrument_segment = 1) da B3 (Bolsa de Valores do Brasil)
+  | e instrumentos válidos para análise de ações, excluindo instrumentos como 'TAXA' e '9999-12-31'
+  | e filtrando por categorias específicas.
   |
   | 1 - BDR
   | 3 - ETF EQUITIES

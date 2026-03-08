@@ -4,11 +4,19 @@ description: |+
   Este dataset é utilizado para obter códigos de empresas
   listadas para fazer consulta no dataset b3-company-info.
 
+  Utiliza os seguintes filtros:
+  - Mercado à vista (instrument_market = 10)
+  - Segmento de ações (instrument_segment = 1)
+  - Exclui instrumentos como 'TAXA' e '9999-12-31'
+  - Filtra por categorias específicas:
+    - 11 - SHARES
+    - 13 - UNIT
+
 etl:
   pipeline:
     - step: sql_query
       datasets:
-        - input.b3-bvbg028-equities
+        - staging.b3-equities-register
       query: |+
         -- B3 Equities Register dataset
         select refdate, instrument_asset from (
@@ -16,7 +24,7 @@ etl:
             distinct refdate, instrument_asset,
             row_number() over (partition by instrument_asset order by refdate desc) as row_num
           from
-            'input.b3-bvbg028-equities'
+            'staging.b3-equities-register'
           where
             security_category in (11, 13)
             and instrument_market = 10

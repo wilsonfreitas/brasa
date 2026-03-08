@@ -1,5 +1,12 @@
 id: b3-equities-register
-description: Dataset de dados cadastrais de ações
+description: >
+  | Dataset de dados cadastrais de ações da B3 (Bolsa de Valores do Brasil).
+  | Este dataset contém informações detalhadas sobre os instrumentos financeiros
+  | listados na B3, incluindo dados de registro, características dos ativos,
+  | e informações corporativas.
+  | Os dados são a data de referência mais recente disponível,
+  | garantindo que as informações estejam atualizadas para análises e pesquisas
+  | relacionadas ao mercado de ações brasileiro.
 
 etl:
   pipeline:
