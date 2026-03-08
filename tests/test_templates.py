@@ -16,14 +16,14 @@ from brasa.fieldsets import Fieldset
 
 
 def test_load_template():
-    tpl = MarketDataTemplate("templates/bcb-sgs-data.yaml")
+    tpl = MarketDataTemplate("templates/bcb/bcb-sgs-data.yaml")
 
     assert tpl.has_downloader
     assert tpl.has_reader
 
 
 def test_template_load_fields():
-    tpl = MarketDataTemplate("templates/bcb-sgs-data.yaml")
+    tpl = MarketDataTemplate("templates/bcb/bcb-sgs-data.yaml")
 
     assert tpl.has_downloader
     assert tpl.has_reader
@@ -116,7 +116,7 @@ def test_run_query_step_loads():
 
 def test_brasa_companies_template_loads():
     """Test that the brasa-companies template loads correctly."""
-    tpl = MarketDataTemplate("templates/brasa-companies.yaml")
+    tpl = MarketDataTemplate("templates/brasa/brasa-companies.yaml")
 
     assert tpl.id == "brasa-companies"
     assert tpl.is_etl
@@ -163,7 +163,7 @@ def test_brasa_companies_pipeline_execution():
 
 def test_brasa_industry_sectors_template_loads():
     """Test that the brasa-industry-sectors template loads correctly."""
-    tpl = MarketDataTemplate("templates/brasa-industry-sectors.yaml")
+    tpl = MarketDataTemplate("templates/brasa/brasa-industry-sectors.yaml")
 
     assert tpl.id == "brasa-industry-sectors"
     assert tpl.is_etl
