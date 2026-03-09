@@ -4,6 +4,7 @@ This module handles the downloading of market data from remote sources,
 including file format handling (zip, base64), validation, and compression.
 """
 
+import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -30,6 +31,8 @@ from .reporting import (
     to_task_status,
 )
 from .template import retrieve_template
+
+logger = logging.getLogger(__name__)
 
 
 def _should_download(cache: CacheManager, meta: CacheMetadata, reprocess: bool) -> bool:  # noqa: PLR0911
@@ -353,10 +356,15 @@ def _touch_output_marker(cache: CacheManager, template, report: "TaskReport") ->
     has_processed = any(r.status == TaskStatus.PASSED for r in report.results)
     if has_processed:
         try:
-            output_folder = cache.db_folder(template)
-            _touch_marker(cache.cache_path(output_folder))
-        except Exception:
-            pass
+            if hasattr(template, "datasets") and template.datasets:
+                folders = cache.db_folders(template)
+                for folder in folders.values():
+                    _touch_marker(cache.cache_path(folder))
+            else:
+                output_folder = cache.db_folder(template)
+                _touch_marker(cache.cache_path(output_folder))
+        except Exception as exc:
+            logger.debug("Failed to touch output marker: %s", exc)
 
 
 def process_marketdata(
