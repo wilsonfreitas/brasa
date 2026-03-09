@@ -1,0 +1,79 @@
+id: b3-otc-trade-information
+filename: ~
+filetype: CSV
+description: Negócios Balcão
+downloader:
+  function: brasa.downloaders.datetime_download
+  url: https://bvmf.bmfbovespa.com.br/NegociosRealizados/Registro/DownloadArquivoDiretorio?data=%d-%m-%Y
+  format: base64
+  decoded_format: csv
+  args:
+    refdate: ~
+reader:
+  function: brasa.readers.read_b3_otc_trade_information
+  encoding: latin1
+  locale: pt
+  separator: ";"
+  skip: 2
+  comment: ""
+fields:
+  - name: instrument_type
+    description: Tipo Instrumento Financeiro
+    handler:
+      type: character
+  - name: issuer
+    description: Instrumento Financeiro
+    handler:
+      type: character
+  - name: symbol
+    description: Código IF
+    handler:
+      type: character
+  - name: traded_quantity
+    description: Quantidade Negociada
+    handler:
+      type: numeric
+      format: pt-br
+  - name: traded_price
+    description: Preco Negócio
+    handler:
+      type: numeric
+      format: pt-br
+  - name: volume
+    description: Volume Financeiro R$
+    handler:
+      type: numeric
+      format: pt-br
+  - name: traded_interest_rate
+    description: Taxa Negócio
+    handler:
+      type: numeric
+      format: pt-br
+  - name: trade_source
+    description: Origem Negócio
+  - name: trade_time
+    description: Horario Negócio
+    handler:
+      type: POSIXct
+      format: "%H:%M:%S"
+  - name: trade_date
+    description: Data do negócio
+    handler:
+      type: Date
+      format: "%d/%m/%Y"
+  - name: trade_id
+    description: Código Identificador do Negócio
+    handler:
+      type: character
+  - name: isin
+    description: ISIN
+    handler:
+      type: character
+  - name: settlement_date
+    description: ISIN
+    handler:
+      type: character
+  - name: trade_status
+    description: ISIN
+    handler:
+      type: character
