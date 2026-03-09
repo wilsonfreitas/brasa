@@ -296,6 +296,20 @@ def _run_upstream_templates(
             continue
         seen_producers.add(producer)
 
+        # --- Freshness check ---
+        output_paths = graph.get_dataset_paths(producer)
+        input_paths = graph.get_input_dataset_paths(producer)
+        if all(_is_output_fresh(op, input_paths) for op in output_paths):
+            logger.info(
+                "Skipping upstream template '%s' for dependency '%s' of '%s': "
+                "output is fresh",
+                producer,
+                arg_name,
+                template_id,
+            )
+            continue
+        # --- End freshness check ---
+
         template_type = graph.get_template_type(producer)
         logger.info(
             "Running upstream template '%s' (%s) for dependency '%s' of '%s'",
@@ -342,3 +356,8 @@ def _run_upstream_templates(
                 template_id,
                 producer,
             )
+            continue
+
+        # Touch marker on successful processing
+        for op in output_paths:
+            _touch_marker(op)

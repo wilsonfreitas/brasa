@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from brasa.engine.dependency_resolver import (
     _is_output_fresh,
@@ -142,3 +142,56 @@ class TestGraphDatasetPaths:
             input_paths = graph.get_input_dataset_paths("b3-etl")
         assert len(input_paths) == 1
         assert "input/b3-raw" in input_paths[0]
+
+
+class TestRunUpstreamSkipsFresh:
+    """Tests that _run_upstream_templates skips fresh upstream templates."""
+
+    @patch("brasa.engine.dependency_resolver._is_output_fresh", return_value=True)
+    def test_skips_when_output_fresh(self, mock_fresh):
+        from brasa.engine.dependency_resolver import _run_upstream_templates
+
+        graph = MagicMock()
+        graph.get_producer.return_value = "b3-indexes-consolidated"
+        graph.get_template_type.return_value = "etl"
+        graph.get_dataset_paths.return_value = ["/cache/db/staging/b3-idx"]
+        graph.get_input_dataset_paths.return_value = ["/cache/db/input/b3-raw"]
+
+        with (
+            patch("brasa.engine.api.process_etl") as mock_etl,
+            patch("brasa.engine.api.process_marketdata") as mock_pm,
+        ):
+            _run_upstream_templates(
+                "consumer-template",
+                "index",
+                ["staging.b3-indexes-composition"],
+                graph,
+                required=True,
+            )
+            mock_etl.assert_not_called()
+            mock_pm.assert_not_called()
+
+    @patch("brasa.engine.dependency_resolver._is_output_fresh", return_value=False)
+    def test_runs_when_output_stale(self, mock_fresh):
+        from brasa.engine.dependency_resolver import _run_upstream_templates
+
+        graph = MagicMock()
+        graph.get_producer.return_value = "b3-indexes-consolidated"
+        graph.get_template_type.return_value = "etl"
+        graph.get_dataset_paths.return_value = ["/cache/db/staging/b3-idx"]
+        graph.get_input_dataset_paths.return_value = ["/cache/db/input/b3-raw"]
+
+        mock_report = MagicMock()
+        mock_report.success = True
+
+        with patch(
+            "brasa.engine.api.process_etl", return_value=mock_report
+        ) as mock_etl:
+            _run_upstream_templates(
+                "consumer-template",
+                "index",
+                ["staging.b3-indexes-composition"],
+                graph,
+                required=True,
+            )
+            mock_etl.assert_called_once_with("b3-indexes-consolidated")
