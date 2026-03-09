@@ -8,11 +8,73 @@ argument values before any download begins.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from .dependency_graph import TemplateDependencyGraph
 from .exceptions import DependencyResolutionError
 
 logger = logging.getLogger(__name__)
+
+MARKER_NAME = ".last_processed"
+
+
+def _touch_marker(dataset_dir: str) -> None:
+    """Write or update a ``.last_processed`` marker in *dataset_dir*.
+
+    If the directory does not exist the call is a no-op.
+
+    Args:
+        dataset_dir: Absolute path to the dataset's parquet folder.
+    """
+    dirpath = Path(dataset_dir)
+    if not dirpath.is_dir():
+        return
+    marker = dirpath / MARKER_NAME
+    marker.touch()
+
+
+def _get_latest_mtime(directory: str) -> float:
+    """Return the most recent mtime of any file in *directory* (recursive).
+
+    Args:
+        directory: Absolute path to a directory.
+
+    Returns:
+        Most recent mtime, or 0.0 if directory is empty or missing.
+    """
+    dirpath = Path(directory)
+    if not dirpath.is_dir():
+        return 0.0
+    latest = 0.0
+    for entry in dirpath.rglob("*"):
+        if entry.is_file() and entry.name != MARKER_NAME:
+            latest = max(latest, entry.stat().st_mtime)
+    return latest
+
+
+def _is_output_fresh(output_dir: str, input_dirs: list[str]) -> bool:
+    """Check whether a dataset's output is fresher than all its inputs.
+
+    Args:
+        output_dir: Absolute path to the output dataset folder.
+        input_dirs: Absolute paths to input dataset folders.
+
+    Returns:
+        ``True`` if the ``.last_processed`` marker in *output_dir* is
+        newer than the latest file in every *input_dir*.  ``False``
+        when the marker is missing, *output_dir* doesn't exist, or any
+        input is newer.
+    """
+    marker = Path(output_dir) / MARKER_NAME
+    if not marker.exists():
+        return False
+    marker_mtime = marker.stat().st_mtime
+
+    for input_dir in input_dirs:
+        input_mtime = _get_latest_mtime(input_dir)
+        if input_mtime > marker_mtime:
+            return False
+    return True
 
 
 def _dataset_ref_to_id(ref: str) -> str:
