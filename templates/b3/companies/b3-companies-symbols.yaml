@@ -1,4 +1,4 @@
-id: b3-company-symbols
+id: b3-companies-symbols
 description: >
     All traded symbols (tickers) for B3-listed companies, with ISIN.
     One row per traded symbol (ticker code), derived from the latest snapshot of
@@ -45,7 +45,7 @@ etl:
 
 writer:
   layer: staging
-  dataset: b3-company-symbols
+  dataset: b3-companies-symbols
 
 fields:
   - name: symbol
