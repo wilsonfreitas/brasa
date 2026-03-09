@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import time
+from unittest.mock import patch
 
 from brasa.engine.dependency_resolver import (
     _is_output_fresh,
     _touch_marker,
+)
+from tests.test_dependency_graph import (
+    _build_graph_from_templates,
+    _make_download_template,
+    _make_etl_template,
 )
 
 MARKER_NAME = ".last_processed"
@@ -100,3 +106,39 @@ class TestIsOutputFresh:
         assert (
             _is_output_fresh(str(output_dir), [str(old_input), str(new_input)]) is False
         )
+
+
+class TestGraphDatasetPaths:
+    """Tests for TemplateDependencyGraph.get_dataset_paths."""
+
+    def test_returns_output_paths(self, tmp_path):
+        dl = _make_download_template("b3-raw")
+        etl = _make_etl_template(
+            "b3-etl",
+            ["input/b3-raw"],
+            writer_layer="staging",
+            writer_dataset="b3-processed",
+        )
+        graph = _build_graph_from_templates([dl, etl])
+        with patch("brasa.engine.dependency_graph.CacheManager") as MockCM:
+            instance = MockCM.return_value
+            instance.db_path.side_effect = lambda name: str(tmp_path / name)
+            output_paths = graph.get_dataset_paths("b3-etl")
+        assert len(output_paths) == 1
+        assert "staging/b3-processed" in output_paths[0]
+
+    def test_returns_input_paths(self, tmp_path):
+        dl = _make_download_template("b3-raw")
+        etl = _make_etl_template(
+            "b3-etl",
+            ["input/b3-raw"],
+            writer_layer="staging",
+            writer_dataset="b3-processed",
+        )
+        graph = _build_graph_from_templates([dl, etl])
+        with patch("brasa.engine.dependency_graph.CacheManager") as MockCM:
+            instance = MockCM.return_value
+            instance.db_path.side_effect = lambda name: str(tmp_path / name)
+            input_paths = graph.get_input_dataset_paths("b3-etl")
+        assert len(input_paths) == 1
+        assert "input/b3-raw" in input_paths[0]

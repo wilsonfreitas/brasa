@@ -466,6 +466,32 @@ class TemplateDependencyGraph:
             raise KeyError(f"Template '{template_id}' is not in the dependency graph.")
         return list(self.outputs[template_id])
 
+    def get_dataset_paths(self, template_id: str) -> list[str]:
+        """Return absolute filesystem paths for all datasets produced by *template_id*.
+
+        Args:
+            template_id: Template identifier.
+
+        Returns:
+            List of absolute paths to dataset folders.
+        """
+        outputs = self.get_outputs(template_id)
+        man = CacheManager()
+        return [man.db_path(out.dataset_id) for out in outputs]
+
+    def get_input_dataset_paths(self, template_id: str) -> list[str]:
+        """Return absolute filesystem paths for all input datasets of *template_id*.
+
+        Args:
+            template_id: Template identifier.
+
+        Returns:
+            List of absolute paths to input dataset folders.
+        """
+        refs = self.dependency_refs.get(template_id, [])
+        man = CacheManager()
+        return [man.db_path(ref) for ref in refs]
+
     def get_producer(self, dataset_id: str) -> str | None:
         """Return the template that produces *dataset_id*, or None.
 
