@@ -7,15 +7,17 @@ the engine package, including the Singleton pattern and JSON serialization helpe
 import abc
 import re
 from collections.abc import Callable
-from datetime import datetime
+from datetime import date, datetime
 
 
 def json_convert_from_object(obj):
     """Convert Python objects to JSON-serializable format.
 
-    Handles datetime serialization to ISO format.
+    Handles datetime and date serialization to ISO format.
     """
     if isinstance(obj, datetime):
+        return obj.isoformat()
+    if isinstance(obj, date):
         return obj.isoformat()
     raise TypeError(f"Object of type '{type(obj).__name__}' is not JSON serializable")
 
