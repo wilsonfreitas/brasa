@@ -679,7 +679,9 @@ def list_templates() -> list[str]:
         Sorted list of template names (without .yaml extension).
     """
     templates_dir = _get_templates_dir()
-    return sorted(f.stem for f in templates_dir.rglob("*.yaml"))
+    return sorted(
+        f.stem for f in templates_dir.rglob("*.yaml") if "legacy" not in f.parts
+    )
 
 
 def clear_template_cache() -> None:
@@ -729,7 +731,11 @@ def retrieve_template(template_name: str) -> MarketDataTemplate:
         return _template_cache[template_name]
 
     templates_dir = _get_templates_dir()
-    matches = list(templates_dir.rglob(f"{template_name}.yaml"))
+    matches = [
+        f
+        for f in templates_dir.rglob(f"{template_name}.yaml")
+        if "legacy" not in f.parts
+    ]
 
     if not matches:
         available = list_templates()
