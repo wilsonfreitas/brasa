@@ -21,6 +21,7 @@ from .reporting import (
     DownloadAttemptStatus,
     TaskReport,
     TaskResult,
+    TaskStatus,
     Verbosity,
     capture_warnings,
     create_task_result_from_exception,
@@ -345,6 +346,19 @@ def download_marketdata(
     return report
 
 
+def _touch_output_marker(cache: CacheManager, template, report: "TaskReport") -> None:
+    """Touch .last_processed marker if any results in the report passed."""
+    from .dependency_resolver import _touch_marker
+
+    has_processed = any(r.status == TaskStatus.PASSED for r in report.results)
+    if has_processed:
+        try:
+            output_folder = cache.db_folder(template)
+            _touch_marker(cache.cache_path(output_folder))
+        except Exception:
+            pass
+
+
 def process_marketdata(
     template_name: str,
     reprocess: bool = False,
@@ -472,6 +486,8 @@ def process_marketdata(
             report.add_result(result)
 
     report.finish()
+
+    _touch_output_marker(cache, template, report)
 
     if report_file:
         report_path = Path(report_file)

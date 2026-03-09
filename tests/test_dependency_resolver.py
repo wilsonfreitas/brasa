@@ -39,6 +39,9 @@ def _make_graph(producer: str | None = "upstream-template", template_type: str =
     graph = MagicMock()
     graph.get_producer.return_value = producer
     graph.get_template_type.return_value = template_type
+    # Return a non-existent path so the freshness check fails and processing runs
+    graph.get_dataset_paths.return_value = ["/nonexistent/output/path"]
+    graph.get_input_dataset_paths.return_value = []
     return graph
 
 

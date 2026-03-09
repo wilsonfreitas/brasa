@@ -208,6 +208,10 @@ class ETLPipeline:
 
         logger.info(f"Wrote ETL output to {output_path}")
 
+        from brasa.engine.dependency_resolver import _touch_marker
+
+        _touch_marker(output_path)
+
     def __repr__(self) -> str:
         step_names = [s.name or s.__class__.__name__ for s in self.steps]
         return f"ETLPipeline(steps={step_names})"
