@@ -120,3 +120,86 @@ Also remove the sign fields from the `fields:` list.
 - String values in single quotes: `date(format='%Y%m%d')`
 - Multiple params comma-separated: `numeric(dec=2, decimal=',')`
 - `numeric(dec=0.0)` for integers stored as fixed-width numbers → prefer `integer` in new templates
+
+## Pipeline Steps Reference
+
+Comprehensive reference of all registered pipeline steps organized by category.
+
+### I/O Steps (Reading Data)
+
+| Step | Parameters | Description |
+|---|---|---|
+| `read_csv` | `separator`, `skip`, `header`, `names`, `converters` | Read CSV file with optional custom separator and header |
+| `read_fwf` | `colspecs`, `names`, `skip`, `dtype` | Read fixed-width format files (plain or gzip); derives column specs from field widths |
+| `read_json` | `orient`, `path` | Read JSON file (supports gzip) into DataFrame |
+| `read_excel` | `sheet`, `skip`, `header` | Read Excel file into DataFrame |
+
+### Column Manipulation Steps
+
+| Step | Parameters | Description |
+|---|---|---|
+| `set_columns` | `names` (required) | Set column names for DataFrame |
+| `rename_columns` | `mapping` (required) | Rename columns using dict mapping |
+| `select_columns` | `columns` (required) | Select specific columns to keep |
+| `drop_columns` | `columns` (required) | Drop columns from data |
+| `add_column` | `name`, `value`, `from` (with `where` and `key`), `only_if_missing` | Add new column with static or dynamic value |
+| `reorder_columns` | `order` (required), `keep_rest` | Reorder columns in DataFrame |
+
+### Data Transformation Steps
+
+| Step | Parameters | Description |
+|---|---|---|
+| `apply_fields` | `errors` (coerce/raise/ignore), `set_columns` | Apply field type definitions using Fieldset |
+| `apply_fields_multi` | `errors` | Apply field definitions to multiple DataFrames in dict |
+| `parse_numeric` | `columns` (required), `errors` | Parse string columns as numeric using context settings |
+| `parse_date` | `columns` (required), `format`, `errors` | Parse string columns as dates |
+| `parse_datetime` | `columns` (required), `format`, `errors` | Parse string columns as datetime values |
+| `fill_na` | `columns`, `value`, `method` (ffill/bfill) | Fill NA/NaN values |
+| `drop_duplicates` | `subset`, `keep` (first/last/False) | Remove duplicate rows |
+| `drop_na` | `columns`, `how` (any/all) | Drop rows with NA/NaN values |
+| `filter_rows` | `column`, `operator` (eq/ne/gt/lt/etc), `value` | Filter rows based on conditions |
+| `forward_fill_column` | `column` (required), `condition` | Forward fill values in column |
+| `extract_regex` | `column`, `pattern` (required), `output`, `group` | Extract values using regex capture groups |
+| `concat_columns` | `columns`, `output` (required), `separator` | Concatenate multiple columns into one |
+| `melt` | `id_vars`, `value_vars`, `var_name`, `value_name` | Unpivot DataFrame from wide to long format |
+| `sort` | `by` (required), `ascending`, `descending`, `na_position` | Sort data by columns |
+| `make_date` | `year_column`, `month_column`, `day_column` (required), `output`, `errors` | Create date column from components |
+| `str_replace` | `column`, `pattern` (required), `replacement`, `output`, `regex` | Replace pattern in string column |
+| `cast` | `column`, `dtype` (required), `errors` | Cast column(s) to specific type |
+
+### ETL Pipeline Steps
+
+| Step | Parameters | Description |
+|---|---|---|
+| `load` | `template` OR (`input`, `layer`) | Load a dataset as PyArrow Dataset |
+| `concat_datasets` | `inputs` (required), `layer` (required), `columns` | Concatenate multiple datasets vertically |
+| `dataset_filter` | `where` (required) | Filter rows by equality conditions |
+| `dataset_select` | `columns` (required) | Select columns from dataset |
+| `select_fields` | (uses context.fields) | Select columns based on field names |
+| `dataset_sort` | `by` (required), `descending` | Sort PyArrow dataset |
+| `dataset_drop_columns` | `columns` (required) | Drop columns from dataset |
+| `dataset_rename_columns` | `mapping` (required) | Rename columns in dataset |
+| `dataset_drop_duplicates` | `subset`, `keep` | Remove duplicate rows from dataset |
+| `dataset_fill_na` | `value`, `method`, `columns` | Fill missing values in dataset |
+| `to_dataframe` | (none) | Convert PyArrow Dataset/Table to pandas DataFrame |
+| `sql_query` | `datasets` (required), `query` (required) | Execute SQL on datasets in in-memory DuckDB |
+| `future_maturity_to_date` | `code_column`, `date_column` (required), `maturity_day`, `calendar` | Convert future maturity codes to dates |
+| `following_bizday` | `date_column`, `adjusted_column` (required), `calendar` | Adjust dates to following business day |
+| `bizdays` | `from_column`, `to_column`, `output_column` (required), `calendar` | Calculate business days between dates |
+| `implied_rate` | `price_column`, `rate_column`, `days_to_maturity_column` (required), `compounding`, `forward_price` | Calculate implied interest rate from price |
+| `flatten_columns` | `columns` (required), `separator` | Flatten delimited values into separate rows |
+
+### B3-Specific Steps
+
+| Step | Parameters | Description |
+|---|---|---|
+| `b3_read_bvbg028_xml` | (uses datasets config) | Read/parse B3 BVBG028 gzipped XML file (returns Dict[str, DataFrame]) |
+| `b3_read_bvbg086_xml` | (uses field tags) | Read/parse B3 BVBG086 gzipped XML file |
+| `b3_read_bvbg087_xml` | (uses datasets config) | Read/parse B3 BVBG087 gzipped XML file |
+| `b3_read_company_info_json` | (uses datasets config) | Read B3 company info gzipped JSON (returns Dict[str, DataFrame]) |
+| `b3_read_company_details_json` | (none) | Read B3 company details JSON, expands otherCodes array |
+| `b3_add_columns_from_json_fields` | `mapping` (required) | Parse B3 JSON fields and add as columns |
+| `b3_parse_refdate_from_html` | `xpath`, `attribute`, `store_as` | Parse reference date from B3 HTML page |
+| `b3_forward_fill_commodity` | `column` | Forward fill commodity names in B3 settlement prices |
+| `b3_extract_commodity_code` | `column` | Extract commodity code from commodity name |
+| `b3_create_symbol` | `commodity_column`, `maturity_column`, `output_column` | Create futures symbol by concatenating commodity and maturity |
