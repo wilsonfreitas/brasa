@@ -43,3 +43,61 @@ Write new templates from scratch or migrate legacy templates to modern pipeline-
 2. Apply all transformations (see Migration Rules below)
 3. Save the new template to the appropriate `templates/` subdirectory
 4. Add a YAML comment at top noting it was migrated from the legacy version
+
+## Migration Rules
+
+### Field Type Migration
+
+| Legacy (`handler:`) | Modern (`type:`) |
+|---|---|
+| `handler: {type: numeric, dec: 2.0}` | `type: numeric(dec=2.0)` |
+| `handler: {type: numeric, dec: 0.0}` | `type: integer` |
+| `handler: {type: Date, format: '%Y%m%d'}` | `type: date(format='%Y%m%d')` |
+| `handler: {type: POSIXct, format: '%H%M%S'}` | `type: datetime(format='%H%M%S')` |
+| `handler: {type: character}` | `type: character` |
+| `handler: {type: factor, ...}` | `type: character` |
+
+- Remove the `handler:` block entirely from each field
+- Keep `name:`, `description:`, `width:` (if FWF), and any `tag:` attributes
+- If `handler.dec` is a field reference (e.g., `dec: num_casas_decimais_2`), add a comment noting the dynamic decimal and use `type: numeric` without dec parameter
+
+### Sign Field Migration
+
+For numeric fields with `sign: some_column`:
+
+1. Convert the field to `type: numeric(dec=N)` (without sign)
+2. Add a YAML comment: `# sign: originally from <sign_column>`
+3. After the `apply_fields` step in the pipeline, add steps:
+
+```yaml
+# Apply sign columns to their target numeric fields
+- step: custom_simple
+  code: |
+    import numpy as np
+    sign_map = {
+      'cot_primeiro_negocio': 'sinal_cot_primeiro_negocio',
+      # ... list all sign->target pairs
+    }
+    for target, sign_col in sign_map.items():
+        if target in df.columns and sign_col in df.columns:
+            mask = df[sign_col].str.strip() == '-'
+            df.loc[mask, target] = -df.loc[mask, target]
+
+# Drop sign columns (no longer needed)
+- step: drop_columns
+  columns: [sinal_cot_primeiro_negocio, sinal_cot_menor_negocio, ...]
+```
+
+Also remove the sign fields from the `fields:` list.
+
+### Structural Migration
+
+- Replace `reader: { function: ... }` with `reader: { pipeline: [...] }`
+- Choose pipeline steps based on `filetype`:
+  - `FWF` → `read_fwf` (dtype: str) → filter if needed → `apply_fields`
+  - `CSV` → `read_csv` → `apply_fields`
+  - `JSON` → `read_json` → `apply_fields`
+  - `Excel/XLS` → `read_excel` → `apply_fields`
+- Add `writer:` block with `layer: input` and `partitioning: [refdate]`
+- Add `downloader:` block if the legacy template has URL info or if user provides it
+- Remove `filename:` and `filetype:` top-level keys (these are inferred by the pipeline)
