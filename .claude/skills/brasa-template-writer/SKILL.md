@@ -203,3 +203,296 @@ Comprehensive reference of all registered pipeline steps organized by category.
 | `b3_forward_fill_commodity` | `column` | Forward fill commodity names in B3 settlement prices |
 | `b3_extract_commodity_code` | `column` | Extract commodity code from commodity name |
 | `b3_create_symbol` | `commodity_column`, `maturity_column`, `output_column` | Create futures symbol by concatenating commodity and maturity |
+
+## Canonical Examples
+
+These templates serve as models for creating new templates of each type.
+
+### Example 1: Single-Dataset FWF Reader
+
+Fixed-width format (FWF) file with type filtering and field conversion.
+
+```yaml
+id: b3-cotahist-daily
+description: Cotações Históricas do Pregão de Ações - Arquivo Diário
+
+downloader:
+  verify_ssl: false
+  function: brasa.downloaders.datetime_download
+  url: https://bvmf.bmfbovespa.com.br/InstDados/SerHist/COTAHIST_D%d%m%Y.ZIP
+  format: zip
+  args:
+    refdate: ~
+
+reader:
+  encoding: latin1
+  locale: en
+  pipeline:
+    - step: read_fwf
+      dtype: str
+    - step: filter_rows
+      column: regtype
+      operator: eq
+      value: '01'
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: input
+  partitioning: [refdate]
+
+fields:
+  - name: regtype
+    description: Tipo de registro
+    type: character
+    width: 2
+  - name: refdate
+    description: Data do pregão
+    type: date(format='%Y%m%d')
+    width: 8
+  - name: symbol
+    description: Código de negociação
+    type: character
+    width: 12
+  - name: open
+    description: Preço de abertura
+    type: numeric(dec=2.0)
+    width: 13
+  - name: high
+    description: Preço máximo
+    type: numeric(dec=2.0)
+    width: 13
+  - name: low
+    description: Preço mínimo
+    type: numeric(dec=2.0)
+    width: 13
+  - name: close
+    description: Preço último negócio
+    type: numeric(dec=2.0)
+    width: 13
+  - name: volume
+    description: Volume total negociado
+    type: numeric(dec=2.0)
+    width: 18
+  - name: traded_contracts
+    description: Quantidade negociada
+    type: integer
+    width: 18
+```
+
+**Key features:**
+- `read_fwf` reads fixed-width format (widths derived from field definitions)
+- `filter_rows` keeps only type "01" records
+- `apply_fields` with `errors: coerce` converts to proper types
+- `datetime_download` with `refdate` parameter
+
+---
+
+### Example 2: Single-Dataset CSV Reader
+
+CSV with custom separator, encoding, column renaming, and context variable injection.
+
+```yaml
+id: cvm-companies-registration
+description: Cadastro de companhias abertas da CVM
+
+downloader:
+  function: brasa.downloaders.simple_download
+  verify_ssl: false
+  extra-key: date
+  url: https://dados.cvm.gov.br/dados/CIA_ABERTA/CAD/DADOS/cad_cia_aberta.csv
+  format: csv
+
+reader:
+  locale: pt
+  encoding: latin1
+  pipeline:
+    - step: read_csv
+      separator: ";"
+    - step: add_column
+      from:
+        where: extra_key
+      name: refdate
+    - step: rename_columns
+      mapping:
+        CNPJ_CIA: cnpj_cia
+        DENOM_SOCIAL: denom_social
+        DT_REG: dt_reg
+        SETOR: setor
+        SUBSETOR: subsetor
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: input
+  partitioning: [refdate]
+
+fields:
+  - name: cnpj_cia
+    description: CNPJ da companhia
+    type: character
+  - name: denom_social
+    description: Denominação social
+    type: character
+  - name: dt_reg
+    description: Data de registro
+    type: date(format='%Y-%m-%d')
+  - name: setor
+    description: Setor econômico
+    type: character
+  - name: subsetor
+    description: Subsetor econômico
+    type: character
+  - name: refdate
+    description: Data de referência
+    type: date
+```
+
+**Key features:**
+- `read_csv` with custom separator (semicolon)
+- `add_column` from `extra_key` (download metadata)
+- `rename_columns` mapping for CSV headers
+- `encoding: latin1` for non-UTF8 files
+- `locale: pt` for Portuguese number formatting
+
+---
+
+### Example 3: Multi-Dataset XML Reader
+
+XML file with multiple datasets (equities and options) extracted from different tags.
+
+```yaml
+id: b3-bvbg028
+description: Arquivo de Preços de Mercado
+
+downloader:
+  function: brasa.downloaders.datetime_download
+  url: https://www.b3.com.br/pesquisapregao/download?filelist=IN%y%m%d.zip
+  format: zip
+  args:
+    refdate: ~
+
+reader:
+  locale: en
+  pipeline:
+    - step: b3_read_bvbg028_xml
+    - step: apply_fields_multi
+
+writer:
+  partitioning: [refdate]
+
+datasets:
+  equities:
+    tag: EqtyInf
+    fields:
+      - name: refdate
+        description: Data de referência
+        tag: RptParams/RptDtAndTm/Dt
+        type: date
+      - name: symbol
+        description: Código de negociação
+        tag: InstrmInf/EqtyInf/TckrSymb
+        type: character
+      - name: isin
+        description: Código ISIN
+        tag: InstrmInf/EqtyInf/ISIN
+        type: character
+      - name: corporation_name
+        description: Razão social
+        tag: InstrmInf/EqtyInf/CrpnNm
+        type: character
+      - name: open
+        description: Preço de abertura
+        tag: InstrmInf/EqtyInf/FrstPric
+        type: numeric
+      - name: close
+        description: Preço de fechamento
+        tag: InstrmInf/EqtyInf/LastPric
+        type: numeric
+
+  options_on_equities:
+    tag: OptnOnEqtsInf
+    fields:
+      - name: refdate
+        description: Data de referência
+        tag: RptParams/RptDtAndTm/Dt
+        type: date
+      - name: symbol
+        description: Código de negociação
+        tag: InstrmInf/OptnOnEqtsInf/TckrSymb
+        type: character
+      - name: exercise_price
+        description: Preço de exercício
+        tag: InstrmInf/OptnOnEqtsInf/ExrcPric
+        type: numeric
+      - name: maturity_date
+        description: Data de vencimento
+        tag: InstrmInf/OptnOnEqtsInf/XprtnDt
+        type: date
+```
+
+**Key features:**
+- `b3_read_bvbg028_xml` is a B3-specific step that parses XML into multiple DataFrames
+- `datasets:` block defines multiple output datasets with different XML tags
+- Each dataset has its own `fields:` with `tag:` attributes for XPath extraction
+- `apply_fields_multi` applies field conversions to all datasets
+
+---
+
+### Example 4: ETL with SQL
+
+ETL template that loads upstream datasets and transforms via SQL query.
+
+```yaml
+id: b3-equities-returns
+description: Dataset de retornos de ações
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - staging.b3-cotahist
+        - staging.b3-equities-spot-market
+      query: |
+        WITH equity_symbols AS (
+          SELECT DISTINCT symbol
+          FROM 'staging.b3-equities-spot-market'
+          WHERE security_category IN (1, 11, 13)
+        )
+        SELECT
+            t.refdate,
+            t.symbol,
+            (t.close / LAG(t.close) OVER (PARTITION BY t.symbol ORDER BY t.refdate)) - 1 AS pct_return,
+            LN(t.close / LAG(t.close) OVER (PARTITION BY t.symbol ORDER BY t.refdate)) AS log_return
+        FROM 'staging.b3-cotahist' t
+        INNER JOIN equity_symbols s ON t.symbol = s.symbol
+        WHERE ROW_NUMBER() OVER (PARTITION BY t.symbol ORDER BY t.refdate) > 1
+        ORDER BY t.refdate, t.symbol
+
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+
+fields:
+  - name: refdate
+    description: Data de referência
+    type: date
+  - name: symbol
+    description: Símbolo do ativo
+    type: character
+  - name: pct_return
+    description: Retorno percentual
+    type: numeric
+  - name: log_return
+    description: Retorno logarítmico
+    type: numeric
+```
+
+**Key features:**
+- `etl:` block with pipeline instead of `reader:`
+- `sql_query` loads upstream datasets and executes SQL
+- Uses CTEs, window functions, and JOINs for transformations
+- Writes to `staging` layer instead of `input`
+- No `downloader:` needed (data from upstream templates)
