@@ -101,3 +101,22 @@ Also remove the sign fields from the `fields:` list.
 - Add `writer:` block with `layer: input` and `partitioning: [refdate]`
 - Add `downloader:` block if the legacy template has URL info or if user provides it
 - Remove `filename:` and `filetype:` top-level keys (these are inferred by the pipeline)
+
+## Field Type Reference
+
+| Type | Parameters | Example |
+|---|---|---|
+| `character` / `string` / `char` | none | `type: character` |
+| `integer` / `int` | none | `type: integer` |
+| `numeric` / `number` | `dec`, `sign`, `thousands`, `decimal` | `type: numeric(dec=2.0)` |
+| `date` | `format` (default: `%Y-%m-%d`) | `type: date(format='%Y%m%d')` |
+| `datetime` / `posixct` | `format` (default: `%Y-%m-%d %H:%M:%S`) | `type: datetime(format='%H%M%S')` |
+| `time` | `format` (default: `%H:%M:%S`) | `type: time(format='%H%M')` |
+| `boolean` / `bool` | none | `type: boolean` |
+
+### Syntax Rules
+
+- Parameters in parentheses: `typename(key=value)`
+- String values in single quotes: `date(format='%Y%m%d')`
+- Multiple params comma-separated: `numeric(dec=2, decimal=',')`
+- `numeric(dec=0.0)` for integers stored as fixed-width numbers → prefer `integer` in new templates
