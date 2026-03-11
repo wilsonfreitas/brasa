@@ -1,33 +1,55 @@
+# Migrated from legacy template using read_b3_equity_options function
 id: b3-equity-options
-filename: ~
-filetype: CUSTOM
 description: Arquivo de Prêmio de opções de Ações
-calendar: Brazil/B3
+
 downloader:
   function: brasa.downloaders.datetime_download
   url: https://www.b3.com.br/pesquisapregao/download?filelist=PE%y%m%d.ex_
-  # url: http://www.bmf.com.br/Ftp/IPN/GPS/OpcoesdeEquities/PE%y%m%d.ex_
   format: zip
   args:
     refdate: ~
+
 reader:
-  function: brasa.readers.read_b3_equity_options
   locale: pt
-  separator: ";"
-  skip: 1
-  comment: ""
+  pipeline:
+    - step: read_csv
+      separator: ";"
+      skip: 1
+      names: [symbol, type, option_style, maturity_date, strike, theoretic_price, volatility]
+    - step: add_column
+      from:
+        where: download_args
+        key: refdate
+      name: refdate
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: input
+  partitioning: [refdate]
+
 fields:
   - name: symbol
     description: Símbolo da opção
+    type: character
   - name: type
     description: Tipo da opção (C = Call, V = Put)
+    type: character
   - name: option_style
     description: Estilo da opção (E = European, A = American)
+    type: character
   - name: maturity_date
     description: Data de vencimento da opção
+    type: date(format='%Y%m%d')
   - name: strike
     description: Preço de exercício da opção
+    type: numeric
   - name: theoretic_price
     description: Prêmio teórico da opção
+    type: numeric
   - name: volatility
     description: Volatilidade
+    type: numeric
+  - name: refdate
+    description: Data de referência
+    type: date
