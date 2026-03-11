@@ -40,9 +40,42 @@ Write new templates from scratch or migrate legacy templates to modern pipeline-
 ### Migrate Legacy Template
 
 1. Read the legacy template from `templates/legacy/` or wherever it lives
-2. Apply all transformations (see Migration Rules below)
-3. Save the new template to the appropriate `templates/` subdirectory
-4. Add a YAML comment at top noting it was migrated from the legacy version
+2. **Analyze the reader function** (see "Analyzing the Reader Function" below) to understand how fields are parsed
+3. Apply all transformations (see Migration Rules below)
+4. Save the new template to the appropriate `templates/` subdirectory
+5. Add a YAML comment at top noting it was migrated from the legacy version
+
+### Analyzing the Reader Function
+
+The legacy `reader.function` contains valuable information about field parsing that should inform your field type definitions. Always examine the function implementation in `brasa/readers/` before migrating.
+
+**Common patterns to look for:**
+
+| Code Pattern | Field Type |
+|---|---|
+| `pd.to_numeric(df[col].str.replace(",", "."), ...)` | `type: numeric(decimal=",")` |
+| `pd.to_numeric(df[col].str.replace(".", "").str.replace(",", "."), ...)` | `type: numeric(decimal=",", thousands=".")` |
+| `pd.to_datetime(df[col], format='%d/%m/%Y', ...)` | `type: date(format='%d/%m/%Y')` |
+| `pd.to_datetime(df[col], dayfirst=True, ...)` | `type: date` (with dayfirst in reader context) |
+| `pd.to_numeric(df[col], ...)` | `type: numeric` (plain numeric parsing) |
+| `str.replace(",", ".")` on numeric field | indicates comma as decimal separator → use `decimal=","` |
+| `str.replace(".", "").str.replace(",", ".")` | indicates European format (dot=thousands, comma=decimal) → use `thousands=".", decimal=","` |
+
+**Example:** If the reader function has:
+```python
+df["volume"] = pd.to_numeric(df["volume"].str.replace(",", "."), errors="coerce")
+df["price"] = pd.to_numeric(df["price"].str.replace(",", "."), errors="coerce")
+```
+
+Then in the YAML, these should be:
+```yaml
+- name: volume
+  type: numeric(decimal=",")
+- name: price
+  type: numeric(decimal=",")
+```
+
+Not just `type: numeric` with no parameters.
 
 ## Migration Rules
 
