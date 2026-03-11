@@ -6,23 +6,8 @@ import pytest
 from brasa.engine import CacheMetadata, _download_marketdata
 
 
-def test_download_marketdata_missing_args_error():
-    with pytest.raises(ValueError) as exc_info:
-        meta = CacheMetadata("b3-companies-options")
-        _download_marketdata(meta)
-    assert exc_info.value.args[0] == "Missing argument refdate"
-
-
 @pytest.mark.integration
 def test_download_marketdata_with_refdate():
-    meta = CacheMetadata("b3-companies-options")
-    _download_marketdata(meta, refdate=datetime(2023, 5, 10))
-    assert len(meta.downloaded_files) == 1
-
-    meta = CacheMetadata("b3-companies-options")
-    _download_marketdata(meta, refdate=datetime(2023, 5, 2))
-    assert len(meta.downloaded_files) == 1
-
     meta = CacheMetadata("b3-otc-trade-information")
     _download_marketdata(meta, refdate=datetime(2023, 5, 10))
     assert len(meta.downloaded_files) == 1

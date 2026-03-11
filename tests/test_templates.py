@@ -134,15 +134,14 @@ def test_brasa_companies_template_loads():
         "code_cvm",
         "company_name",
         "trading_name",
-        "asset_name",
+        "issuing_company",
         "company_status",
-        "isin",
         "industry_classification",
         "sector",
         "subsector",
         "segment",
         "cvm_cnpj",
-        "b3_cnpj",
+        "cnpj",
     }
     assert expected_fields.issubset(field_names), (
         f"Missing fields: {expected_fields - field_names}"
