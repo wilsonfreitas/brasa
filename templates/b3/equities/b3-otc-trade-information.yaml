@@ -1,7 +1,7 @@
+# Migrated from legacy template using datetime_download + read_b3_otc_trade_information
 id: b3-otc-trade-information
-filename: ~
-filetype: CSV
 description: Negócios Balcão
+
 downloader:
   function: brasa.downloaders.datetime_download
   url: https://bvmf.bmfbovespa.com.br/NegociosRealizados/Registro/DownloadArquivoDiretorio?data=%d-%m-%Y
@@ -9,71 +9,119 @@ downloader:
   decoded_format: csv
   args:
     refdate: ~
+
 reader:
-  function: brasa.readers.read_b3_otc_trade_information
   encoding: latin1
   locale: pt
-  separator: ";"
-  skip: 2
-  comment: ""
+  pipeline:
+    - step: read_csv
+      separator: ";"
+      skip_if_startswith: "Data"
+      skip: 1
+    - step: rename_columns
+      mapping:
+        # Modern files (post-2020): no accents in column names
+        "Instrumento Financeiro": instrument_type
+        "Emissor": issuer
+        "Codigo IF": symbol
+        "Quantidade Negociada": traded_quantity
+        "Preco Negocio": traded_price
+        "Volume Financeiro R$": volume
+        "Taxa Negocio": traded_interest_rate
+        "Origem Negocio": trade_source
+        "Horario Negocio": trade_time
+        "Data Negocio": trade_date
+        "Cod. Identificador do Negocio": trade_id
+        "Cod. Identificar do Negocio": trade_id
+        "Cod. Isin": isin
+        "Data Liquidacao": settlement_date
+        "Situacao Negocio": trade_status
+        # Old files (pre-2020): header is UTF-8 but file is read as latin1, producing mojibake
+        "Código IF": symbol
+        "CÃ³digo IF": symbol
+        "PreÃ§o NegÃ³cio": traded_price
+        "Preço Negócio": traded_price
+        "Taxa NegÃ³cio": traded_interest_rate
+        "Taxa Negócio": traded_interest_rate
+        "Origem NegÃ³cio": trade_source
+        "Origem Negócio": trade_source
+        "HorÃ¡rio NegÃ³cio": trade_time
+        "Horário Negócio": trade_time
+        "Data NegÃ³cio": trade_date
+        "Data Negócio": trade_date
+        "CÃ³d. Identificar do NegÃ³cio": trade_id
+        "Cód. Identificar do Negócio": trade_id
+    - step: add_column
+      name: trade_status
+      value: null
+      only_if_missing: true
+    - step: add_column
+      name: trade_id
+      value: null
+      only_if_missing: true
+    - step: add_column
+      name: isin
+      value: null
+      only_if_missing: true
+    - step: add_column
+      name: settlement_date
+      value: null
+      only_if_missing: true
+    - step: add_column
+      from:
+        where: download_args
+        key: refdate
+      name: refdate
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: input
+  partitioning: [refdate]
+
 fields:
   - name: instrument_type
     description: Tipo Instrumento Financeiro
-    handler:
-      type: character
+    type: character
   - name: issuer
     description: Instrumento Financeiro
-    handler:
-      type: character
+    type: character
   - name: symbol
     description: Código IF
-    handler:
-      type: character
+    type: character
   - name: traded_quantity
     description: Quantidade Negociada
-    handler:
-      type: numeric
-      format: pt-br
+    type: numeric
   - name: traded_price
     description: Preco Negócio
-    handler:
-      type: numeric
-      format: pt-br
+    type: numeric(decimal=",")
   - name: volume
     description: Volume Financeiro R$
-    handler:
-      type: numeric
-      format: pt-br
+    type: numeric(decimal=",")
   - name: traded_interest_rate
     description: Taxa Negócio
-    handler:
-      type: numeric
-      format: pt-br
+    type: numeric(decimal=",")
   - name: trade_source
     description: Origem Negócio
+    type: character
   - name: trade_time
     description: Horario Negócio
-    handler:
-      type: POSIXct
-      format: "%H:%M:%S"
+    type: time(format='%H:%M:%S')
   - name: trade_date
     description: Data do negócio
-    handler:
-      type: Date
-      format: "%d/%m/%Y"
+    type: date(format='%d/%m/%Y')
   - name: trade_id
     description: Código Identificador do Negócio
-    handler:
-      type: character
+    type: character
   - name: isin
     description: ISIN
-    handler:
-      type: character
+    type: character
   - name: settlement_date
-    description: ISIN
-    handler:
-      type: character
+    description: Settlement date
+    type: character
   - name: trade_status
-    description: ISIN
-    handler:
-      type: character
+    description: Trade status
+    type: character
+  - name: refdate
+    description: Data de referência
+    type: date

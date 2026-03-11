@@ -21,19 +21,35 @@ class ReadCsvStep(PipelineStep):
     Parameters:
         separator: Field separator (default: from context or ',')
         skip: Number of rows to skip (default: 0)
+        skip_if_startswith: If set, skip the first row only when it starts with
+            this string. Overrides `skip` when provided. (optional)
         header: Row number to use as header, or None for no header (default: 0)
         names: Column names to use (optional)
         converters: Dict of column converters (optional)
     """
 
     def execute(self, _data: Any, context: PipelineContext) -> pd.DataFrame:
+        from pathlib import Path
+
         filepath = context.downloaded_file
 
         separator = self.get_param("separator", context.get_config("separator", ","))
         skip = self.get_param("skip", 0)
+        skip_if_startswith = self.get_param("skip_if_startswith")
         header = self.get_param("header", 0)
         names = self.get_param("names")
         converters = self.get_param("converters")
+
+        if skip_if_startswith is not None:
+            import gzip
+
+            if str(filepath).endswith(".gz"):
+                with gzip.open(filepath, "rt", encoding=context.encoding) as f:
+                    first_line = f.readline()
+            else:
+                with Path(filepath).open(encoding=context.encoding) as f:
+                    first_line = f.readline()
+            skip = skip if first_line.startswith(skip_if_startswith) else 0
 
         kwargs: dict[str, Any] = {
             "encoding": context.encoding,
