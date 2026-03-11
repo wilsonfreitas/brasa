@@ -373,6 +373,7 @@ def process_marketdata(
     verbosity: Verbosity = Verbosity.NORMAL,
     report_file: str | Path | None = None,
     max_workers: int = 4,
+    meta_id: str | None = None,
 ) -> TaskReport:
     """Process all downloaded data for a template.
 
@@ -386,6 +387,7 @@ def process_marketdata(
         verbosity: Output verbosity level (QUIET, NORMAL, VERBOSE).
         report_file: Optional path to save the report (JSON or TXT).
         max_workers: Maximum number of parallel workers for processing.
+        meta_id: If provided, process only the cache entry with this ID.
 
     Returns:
         TaskReport with results of all processing operations.
@@ -397,7 +399,15 @@ def process_marketdata(
 
     with closing(cache.meta_db_connection) as conn, conn:
         c = conn.cursor()
-        c.execute("select id from cache_metadata where template = ?", (template_name,))
+        if meta_id is not None:
+            c.execute(
+                "select id from cache_metadata where template = ? and id = ?",
+                (template_name, meta_id),
+            )
+        else:
+            c.execute(
+                "select id from cache_metadata where template = ?", (template_name,)
+            )
         rows = c.fetchall()
 
     report = TaskReport(
