@@ -90,7 +90,7 @@ def test_metadata_fulfilment():
     assert meta2.timestamp == meta.timestamp
     assert meta2.template == meta.template
     assert meta2.downloaded_files == meta.downloaded_files
-    assert meta2.processed_files == meta.processed_files
+    assert meta2.is_processed == meta.is_processed
 
     man.remove_meta(meta)
 
