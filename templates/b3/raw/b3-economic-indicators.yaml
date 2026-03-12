@@ -1,0 +1,68 @@
+id: b3-economic-indicators
+description: Indicadores Econômicos com valor ajustado pelas casas decimais
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - input.b3-economic-indicators-fwf
+      query: |
+        select
+          data_geracao_arquivo as refdate,
+          grupo_indicador as indicator_group,
+          cod_indicador as symbol,
+          CASE indicator_group
+              WHEN 'BT' THEN 'Bitcoin'
+              WHEN 'BV' THEN 'Bovespa Index'
+              WHEN 'DA' THEN 'US Dollar / Exchange Rate'
+              WHEN 'DE' THEN 'Electric Energy Derivatives'
+              WHEN 'DF' THEN 'Financial Derivatives'
+              WHEN 'EI' THEN 'Ethanol Indicators'
+              WHEN 'ES' THEN 'Euro Stoxx Index'
+              WHEN 'ET' THEN 'Ethanol'
+              WHEN 'EU' THEN 'Euro'
+              WHEN 'FF' THEN 'Fed Funds / International Rates'
+              WHEN 'IA' THEN 'Agricultural Indicators'
+              WHEN 'ID' THEN 'DI / CDI Index'
+              WHEN 'IF' THEN 'Inflation (IPCA / IGP)'
+              WHEN 'IM' THEN 'Merval Index (Argentina)'
+              WHEN 'IN' THEN 'Nikkei Index (Japan)'
+              WHEN 'IS' THEN 'S&P 500 Index'
+              WHEN 'IT' THEN 'Interest Rate Index'
+              WHEN 'ME' THEN 'Emerging Market Currencies'
+              WHEN 'RA' THEN 'Agricultural Commodities'
+              WHEN 'RT' THEN 'Real-Time Indicators'
+              WHEN 'SE' THEN 'Selic Rate'
+              WHEN 'SO' THEN 'Soybean'
+              WHEN 'TI' THEN 'International Securities'
+              WHEN 'TO' THEN 'Overnight Rate'
+              WHEN 'TX' THEN 'Exchange Rates'
+              WHEN 'XF' THEN 'Foreign Indices'
+              ELSE 'Unknown'
+          END AS indicator_group_description,
+          valor_indicador / (10 ^ num_casas_decimais) as value
+        from 'input.b3-economic-indicators-fwf'
+
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+  dataset: b3-economic-indicators
+
+fields:
+  - name: refdate
+    description: Data de referência
+    type: date
+  - name: indicator_group
+    description: Grupo do indicador econômico
+    type: character
+  - name: indicator_group_description
+    description: Descrição do grupo do indicador econômico
+    type: character
+  - name: symbol
+    description: Código do indicador
+    type: character
+  - name: value
+    description: Valor do indicador ajustado pelas casas decimais
+    type: numeric

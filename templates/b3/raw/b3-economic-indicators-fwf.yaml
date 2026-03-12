@@ -1,86 +1,68 @@
+# Migrated from legacy template (reader.function: brasa.readers.read_b3_economic_indicators_fwf)
 id: b3-economic-indicators-fwf
-filename: ~
-filetype: CUSTOM
 description: Arquivo de Indicadores Econômicos
-calendar: Brazil/B3
+
 downloader:
   function: brasa.downloaders.datetime_download
   url: https://www.b3.com.br/pesquisapregao/download?filelist=ID%y%m%d.ex_
-  # url: http://www.bmf.com.br/Ftp/IndicadoresEconomicos/ID%y%m%d.ex_
   format: zip
   args:
     refdate: ~
+
 reader:
-  function: brasa.readers.read_b3_economic_indicators_fwf
   locale: pt
+  pipeline:
+    - step: read_fwf
+      dtype: str
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: input
+  partitioning: [data_geracao_arquivo]
+
 fields:
   - name: id_transacao
     description: Identificação da transação
-    handler:
-      type: numeric
-      dec: 0.0
-      sign: ''
+    type: integer
     width: 6
   - name: compl_transacao
     description: Complemento da transação
-    handler:
-      type: numeric
-      dec: 0.0
-      sign: ''
+    type: integer
     width: 3
   - name: tipo_registro
     description: Tipo de registro
-    handler:
-      type: numeric
-      dec: 0.0
-      sign: ''
+    type: integer
     width: 2
   - name: data_geracao_arquivo
     description: Data de geração do arquivo
-    handler:
-      type: Date
-      format: '%Y%m%d'
+    type: date(format='%Y%m%d')
     width: 8
   - name: grupo_indicador
-    description: Grupo do indicador
-    handler:
-      type: character
-      # levels:
-      # - IA
-      # - DE
-      # - RT
-      # - BV
-      # - ME
-      # - ID
-      # labels:
-      # - indicadores-agro
-      # - titulos-divida-externa
-      # - indicadores-gerais
-      # - ibovespa
-      # - moeda-estrangeira
-      # - indice-idi
+    description: |+
+      Grupo do indicador econômico, com os seguintes níveis:
+       - IA: Indicadores Agropecuários
+       - DE: Títulos da Dívida Externa
+       - RT: Indicadores Gerais
+       - BV: Ibovespa
+       - ME: Moeda Estrangeira
+       - ID: Índice IDI
+    type: character
     width: 2
   - name: cod_indicador
     description: Código do indicador
-    handler:
-      type: character
+    type: character
     width: 25
   - name: valor_indicador
     description: Valor do indicador na data
-    handler:
-      type: numeric
-      dec: num_casas_decimais
-      sign: ''
+    # dec: num_casas_decimais — dynamic decimal applied in custom_simple step above
+    type: integer
     width: 25
   - name: num_casas_decimais
     description: Número de decimais do valor
-    handler:
-      type: numeric
-      dec: 0.0
-      sign: ''
+    type: integer
     width: 2
   - name: reserva
     description: Filler
-    handler:
-      type: character
+    type: character
     width: 36
