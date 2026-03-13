@@ -1,73 +1,80 @@
+# Migrated from legacy template (reader.function: brasa.readers.read_b3_lending_trades)
 id: b3-lending-trades
-filename: ~
-filetype: CSV
 description: Negócios BTB Aluguel de Ações
+
 downloader:
   function: brasa.downloaders.datetime_download
   url: https://arquivos.b3.com.br/rapinegocios/tickercsvbtb/%Y-%m-%d
   format: zip
   args:
     refdate: ~
+
 reader:
-  function: brasa.readers.read_b3_lending_trades
   locale: pt
-  separator: ";"
-  skip: 1
-  comment: ""
+  pipeline:
+    - step: read_csv
+      separator: ";"
+
+    - step: rename_columns
+      mapping:
+        DataDoRelatorio: refdate
+        Simbolo: symbol
+        AcaoDeAtualizacao: update_action
+        TaxaDeJurosDoTermoDoNegocio: interest_rate_term_trade
+        QuantidadeNegociada: trade_quantity
+        HoraEntrada: entry_time
+        NumeroDoNegocio: trade_id
+        # NOTE: these two fields are swapped in the source file, so we need to rename them accordingly
+        DataDoPregao: trading_session_id
+        TipoSessaoPregao: trade_date
+        Mercado: market
+        CodigoParticipanteDoador: lending_code
+        CodigoParticipanteTomador: borrow_code
+
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: input
+  partitioning: [refdate]
+
 fields:
   - name: refdate
     description: Data de referência
-    handler:
-      type: Date
-      format: "%Y-%m-%d"
+    type: date(format='%Y-%m-%d')
   - name: symbol
     description: Símbolo
+    type: character
   - name: update_action
     description: Informa a ação de atualização que está ocorrendo
+    type: character
   - name: interest_rate_term_trade
     description: Taxa de aluguel
-    handler:
-      type: numeric
-      format: pt-br
+    type: numeric(decimal=',')
   - name: trade_quantity
     description: Quantidade negociada
-    handler:
-      type: numeric
-      format: pt-br
+    type: integer
   - name: entry_time
     description: Horário de negociação
-    handler:
-      type: POSIXct
-      format: "%H%M%S%f"
+    type: integer
   - name: trade_id
     description: Número do negócio
+    type: character
   - name: trading_session_id
     description: |
       Este campo informa se o negócio foi feito no horário regular do pregão
       ou after market
       (Período de negociação que funciona fora do horário regular do pregão).
+    type: character
   - name: trade_date
     description: Data do pregão
-    handler:
-      type: Date
-      format: "%Y-%m-%d"
+    type: date(format='%Y-%m-%d')
   - name: market
     description: Mercado
-    handler:
-      type: integer
-      # levels:
-      #   - 91
-      #   - 92
-      #   - 93
-      # labels:
-      #   - balcão
-      #   - eletrônico d0
-      #   - eletrônico d+1
+    type: integer
   - name: lending_code
     description: Código do Participante Doador
-    handler:
-      type: numeric
+    type: numeric
   - name: borrow_code
     description: Código do Participante Tomador
-    handler:
-      type: numeric
+    type: numeric
