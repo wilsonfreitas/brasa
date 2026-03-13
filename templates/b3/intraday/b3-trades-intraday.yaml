@@ -1,79 +1,89 @@
+# Migrated from legacy template using read_b3_trades_intraday function
 id: b3-trades-intraday
-filename: ~
-filetype: CSV
 description: Negócios Intraday
+
 downloader:
   function: brasa.downloaders.datetime_download
   url: https://arquivos.b3.com.br/rapinegocios/tickercsv/%Y-%m-%d
   format: zip
   args:
     refdate: ~
+
 reader:
-  function: brasa.readers.read_b3_trades_intraday
   locale: en
-  separator: ";"
-  skip: 1
-  comment: ""
+  pipeline:
+    - step: read_csv
+      separator: ";"
+
+    # - step: add_column
+    #   from:
+    #     where: download_args
+    #     key: refdate
+    #   name: refdate
+    # - step: concat_columns
+    #   columns: [trade_date, trade_time]
+    #   output: trade_datetime
+    #   separator: " "
+    # - step: parse_datetime
+    #   columns: [trade_datetime]
+    #   format: "%Y-%m-%d %H%M%S%f"
+    #   errors: coerce
+
+    - step: rename_columns
+      mapping:
+        DataReferencia: refdate
+        CodigoInstrumento: symbol
+        AcaoAtualizacao: update_action
+        PrecoNegocio: traded_price
+        QuantidadeNegociada: traded_quantity
+        HoraFechamento: trade_time
+        CodigoIdentificadorNegocio: trade_id
+        TipoSessaoPregao: trade_session_id
+        DataNegocio: trade_date
+        CodigoParticipanteComprador: buyer_code
+        CodigoParticipanteVendedor: seller_code
+
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: input
+  partitioning: [refdate]
+
 fields:
   - name: refdate
     description: Data de referência
-    handler:
-      type: Date
-      format: "%Y-%m-%d"
+    type: date
   - name: symbol
     description: Código que identifica um instrumento
+    type: character
   - name: update_action
     description: Informa a ação de atualização que está ocorrendo
-    handler:
-      type: integer
-      # levels:
-      #   - 0
-      #   - 2
-      # labels:
-      #   - new
-      #   - delete
+    type: integer
   - name: traded_price
     description: Preço do negócio
-    handler:
-      type: numeric
-      format: pt-br
+    type: numeric(decimal=",")
   - name: traded_quantity
     description: Quantidade negociada
-    handler:
-      type: numeric
-      format: pt-br
+    type: numeric
   - name: trade_time
-    description: Hora (o instante) do negócio fechado
-    handler:
-      type: POSIXct
-      format: "%H%M%S%f"
+    description: Hora (o instante) do negócio fechado (will be merged with trade_date)
+    type: integer
   - name: trade_id
     description: Número do negócio
-    handler:
-      type: numeric
+    type: numeric
   - name: trade_session_id
     description: |
       Este campo informa se o negócio foi feito no horário regular do pregão
       ou after market
       (Período de negociação que funciona fora do horário regular do pregão).
-    handler:
-      type: integer
-      # levels:
-      #   - 1
-      #   - 6
-      # labels:
-      #   - regular
-      #   - after
+    type: integer
   - name: trade_date
-    description: Data do pregão
-    handler:
-      type: Date
-      format: "%Y-%m-%d"
+    description: Data e hora do pregão (combined from trade_date + trade_time)
+    type: datetime
   - name: buyer_code
     description: Código do Participante Comprador
-    handler:
-      type: numeric
+    type: numeric
   - name: seller_code
     description: Código do Participante Vendedor
-    handler:
-      type: numeric
+    type: numeric
