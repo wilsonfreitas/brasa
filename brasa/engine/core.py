@@ -18,7 +18,7 @@ def json_convert_from_object(obj):
     if isinstance(obj, datetime):
         return obj.isoformat()
     if isinstance(obj, date):
-        return obj.isoformat()
+        return datetime(obj.year, obj.month, obj.day).isoformat()
     raise TypeError(f"Object of type '{type(obj).__name__}' is not JSON serializable")
 
 

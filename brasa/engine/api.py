@@ -4,6 +4,7 @@ This module handles the downloading of market data from remote sources,
 including file format handling (zip, base64), validation, and compression.
 """
 
+import contextlib
 import logging
 import threading
 import time
@@ -478,7 +479,7 @@ def process_marketdata(
 
                 # Save error to metadata (serialized)
                 meta.processing_errors = str(ex)
-                with db_lock:
+                with db_lock, contextlib.suppress(Exception):
                     cache.save_meta(meta)
 
                 result = create_task_result_from_exception(

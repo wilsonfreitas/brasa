@@ -4,7 +4,7 @@ import logging
 import pickle
 import warnings
 import zipfile
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from tempfile import gettempdir
 from typing import IO, Any
@@ -30,7 +30,13 @@ def generate_checksum_for_template(
 
     The hash is used to identify a template and its arguments.
     """
-    t = tuple(sorted(args.items(), key=lambda x: x[0]))
+    normalized = {
+        k: datetime(v.year, v.month, v.day)
+        if isinstance(v, date) and not isinstance(v, datetime)
+        else v
+        for k, v in args.items()
+    }
+    t = tuple(sorted(normalized.items(), key=lambda x: x[0]))
     obj: Any = (template, t)
     if extra_key:
         obj = (template, t, extra_key)
