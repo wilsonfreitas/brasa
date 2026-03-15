@@ -108,7 +108,7 @@ Never consider a task finished if any of these fail. Fix all issues before decla
 
 ## Plans
 
-Plans saved in `.claude/plans/` must use descriptive, kebab-case filenames that reflect their content. Example: `download-plan.md`, `refactor-cache-manager.md`.
+Plans must be saved in `docs/plans/`. Filenames must include the creation date and a meaningful title in kebab-case: `YYYY-MM-DD-<title>.md`. Example: `2026-03-14-refactor-cache-manager.md`.
 
 ## Data Sources
 
