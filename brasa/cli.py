@@ -194,6 +194,11 @@ parser_process = subparsers.add_parser(
     "process", help="process market data - transform raw data to parquet files"
 )
 parser_process.add_argument("template", nargs="+", help="template names")
+parser_process.add_argument(
+    "--reprocess",
+    action="store_true",
+    help="reprocess all files, even if already processed",
+)
 add_verbosity_args(parser_process)
 
 parser_create_views = subparsers.add_parser(
@@ -769,6 +774,7 @@ if __name__ == "__main__":
             else:
                 process_marketdata(
                     template,
+                    reprocess=args.reprocess,
                     verbosity=verbosity,
                     report_file=report_file,
                 )
