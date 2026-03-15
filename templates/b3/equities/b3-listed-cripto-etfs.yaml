@@ -4,6 +4,10 @@ downloader:
   function: brasa.downloaders.b3_paged_url_encoded_download
   url: https://sistemaswebb3-listados.b3.com.br/fundsListedProxy/Search/GetListFunds
   format: json
+  download_delay: 1
+  retry_attempts: 15
+  retry_delay: 3.0
+  retry_backoff: 2.0
   args:
     language: pt-br
     typeFund: ETF-CRIPTO

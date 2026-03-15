@@ -15,7 +15,7 @@ downloader:
   url: https://sistemaswebb3-listados.b3.com.br/listedCompaniesProxy/CompanyCall/GetDetail
   format: json
   download_delay: 1
-  retry_attempts: 10
+  retry_attempts: 15
   retry_delay: 3.0
   retry_backoff: 2.0
   args:
