@@ -101,6 +101,30 @@ class TestHeadCommandValidation:
         assert parts[1] == ""
 
 
+class TestProcessCommand:
+    """Tests for the process CLI command parser."""
+
+    def test_process_command_parser_exists(self) -> None:
+        args = cli.parser.parse_args(["process", "b3-cotahist-daily"])
+        assert args.command == "process"
+
+    def test_process_command_template_argument(self) -> None:
+        args = cli.parser.parse_args(["process", "b3-cotahist-daily"])
+        assert args.template == ["b3-cotahist-daily"]
+
+    def test_process_command_multiple_templates(self) -> None:
+        args = cli.parser.parse_args(["process", "tpl-a", "tpl-b"])
+        assert args.template == ["tpl-a", "tpl-b"]
+
+    def test_process_command_reprocess_default_false(self) -> None:
+        args = cli.parser.parse_args(["process", "b3-cotahist-daily"])
+        assert args.reprocess is False
+
+    def test_process_command_reprocess_flag(self) -> None:
+        args = cli.parser.parse_args(["process", "--reprocess", "b3-cotahist-daily"])
+        assert args.reprocess is True
+
+
 class TestListUnprocessedCommand:
     """Tests for the list-unprocessed CLI command parser."""
 
