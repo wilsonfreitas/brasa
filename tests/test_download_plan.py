@@ -272,7 +272,7 @@ class TestExecuteDownloadPlan:
     def _run(self, plan, reports_by_template, refdate_override=None):
         """Run execute_download_plan with mocked download_marketdata."""
 
-        def fake_download(template_name, reprocess=False, verbosity=..., **kwargs):
+        def fake_download(template_name, force=False, verbosity=..., **kwargs):
             return reports_by_template.get(
                 template_name,
                 _make_task_report(template_name, [TaskStatus.PASSED]),
@@ -317,7 +317,7 @@ class TestExecuteDownloadPlan:
         plan = _make_plan()
         call_log = []
 
-        def fake_download(template_name, reprocess=False, verbosity=..., **kwargs):
+        def fake_download(template_name, force=False, verbosity=..., **kwargs):
             call_log.append(template_name)
             if template_name == "tmpl-a":
                 raise RuntimeError("boom")
@@ -344,7 +344,7 @@ class TestExecuteDownloadPlan:
         plan = _make_plan()
         captured = {}
 
-        def fake_download(template_name, reprocess=False, verbosity=..., **kwargs):
+        def fake_download(template_name, force=False, verbosity=..., **kwargs):
             captured[template_name] = kwargs
             return _make_task_report(template_name, [TaskStatus.PASSED])
 
@@ -371,7 +371,7 @@ class TestExecuteDownloadPlan:
         plan = _make_plan()
         captured = {}
 
-        def fake_download(template_name, reprocess=False, verbosity=..., **kwargs):
+        def fake_download(template_name, force=False, verbosity=..., **kwargs):
             captured[template_name] = kwargs
             return _make_task_report(template_name, [TaskStatus.PASSED])
 
@@ -602,6 +602,6 @@ class TestCliDownloadPlanArgs:
         assert ns.plan is None
 
     def test_plan_with_date_override(self):
-        ns = self._parse(["download", "--plan", "p.yaml", "-d", "2026-01"])
+        ns = self._parse(["download", "--plan", "p.yaml", "--arg", "refdate=@2026-01"])
         assert ns.plan == "p.yaml"
-        assert ns.date == ["2026-01"]
+        assert ns.arg == ["refdate=@2026-01"]
