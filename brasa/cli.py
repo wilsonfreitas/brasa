@@ -3,7 +3,6 @@ import json
 import shutil
 import subprocess
 import sys
-from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -11,7 +10,7 @@ import pandas as pd
 from . import download_marketdata, process_etl, process_marketdata, retrieve_template
 from .engine import CacheManager, Verbosity, sync_catalog_from_disk
 from .queries import BrasaDB, describe_dataset, get_dataset, list_datasets
-from .util import DateRangeParser
+from .util import parse_arg_value
 
 # Command groups for organized help display
 _COMMAND_GROUPS = {
@@ -166,17 +165,21 @@ parser_setup = subparsers.add_parser(
 
 parser_download = subparsers.add_parser("download", help="download market data")
 parser_download.add_argument(
-    "-d",
-    "--date",
-    "--date-range",
-    nargs="+",
-    help="specify date or date range to download and process market data",
+    "--arg",
+    action="append",
+    metavar="KEY=VALUE",
+    help=(
+        "download argument as KEY=VALUE. Repeatable. "
+        "Prefixes: @=date (@2026-01, @2026-01-01:2026-01-31, @2026-01~ANBIMA), "
+        "$=symbols ($index, $company). "
+        "Commas create lists (IBOV,BOVA11). Bare integers auto-convert."
+    ),
 )
 parser_download.add_argument(
     "--calendar",
     help="specify calendar to be used for creating date range",
     default="B3",
-    choices=["B3", "ANBIMA", "actual"],
+    choices=["B3", "ANBIMA"],
 )
 parser_download.add_argument(
     "--plan",
@@ -187,6 +190,11 @@ parser_download.add_argument(
     "template",
     nargs="*",
     help="template names (required unless --plan is used)",
+)
+parser_download.add_argument(
+    "--force",
+    action="store_true",
+    help="force re-download even if data already exists in cache",
 )
 add_verbosity_args(parser_download)
 
@@ -693,6 +701,23 @@ def _render_ascii(graph, template_id: str | None = None) -> str:
     return "\n".join(legend + all_lines)
 
 
+def _parse_download_args(raw_args: list[str] | None, calendar: str) -> dict:
+    """Parse --arg KEY=VALUE pairs into a kwargs dict."""
+    if not raw_args:
+        return {}
+    kwargs = {}
+    for item in raw_args:
+        if "=" not in item:
+            print(
+                f"Error: invalid --arg format: {item!r} (expected KEY=VALUE)",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        key, value = item.split("=", 1)
+        kwargs[key] = parse_arg_value(value, default_calendar=calendar)
+    return kwargs
+
+
 if __name__ == "__main__":
     args = parser.parse_args()
     if args.command == "setup":
@@ -725,16 +750,8 @@ if __name__ == "__main__":
                 for err in errors:
                     print(f"Error: {err}", file=sys.stderr)
                 sys.exit(1)
-            refdate_override = None
-            if args.date:
-                if len(args.date) == 1:
-                    refdate_override = DateRangeParser(args.calendar).parse(
-                        args.date[0]
-                    )
-                else:
-                    refdate_override = [
-                        datetime.strptime(d, "%Y-%m-%d") for d in args.date
-                    ]
+            download_kwargs = _parse_download_args(args.arg, args.calendar)
+            refdate_override = download_kwargs.pop("refdate", None)
             execute_download_plan(
                 plan,
                 refdate_override=refdate_override,
@@ -742,12 +759,7 @@ if __name__ == "__main__":
                 report_file=report_file,
             )
         else:
-            date_range = None
-            if args.date:
-                if len(args.date) == 1:
-                    date_range = DateRangeParser(args.calendar).parse(args.date[0])
-                else:
-                    date_range = [datetime.strptime(d, "%Y-%m-%d") for d in args.date]
+            download_kwargs = _parse_download_args(args.arg, args.calendar)
             if verbosity != Verbosity.QUIET:
                 print(
                     "Status legend: .(passed) F(failed) E(error) "
@@ -756,9 +768,10 @@ if __name__ == "__main__":
             for template in templates:
                 download_marketdata(
                     template,
-                    refdate=date_range,
+                    force=args.force,
                     verbosity=verbosity,
                     report_file=report_file,
+                    **download_kwargs,
                 )
     elif args.command == "process":
         verbosity = get_verbosity(args)

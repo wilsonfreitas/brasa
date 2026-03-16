@@ -1,5 +1,7 @@
 """Tests for the brasa CLI module."""
 
+import pytest
+
 from brasa import cli
 
 
@@ -99,6 +101,54 @@ class TestHeadCommandValidation:
         parts = dataset_arg.split(".", 1)
         # Empty name should be considered invalid
         assert parts[1] == ""
+
+
+class TestDownloadCommand:
+    """Tests for the download CLI command parser."""
+
+    def test_download_command_parser_exists(self) -> None:
+        args = cli.parser.parse_args(["download", "b3-cotahist-daily"])
+        assert args.command == "download"
+
+    def test_download_command_force_default_false(self) -> None:
+        args = cli.parser.parse_args(["download", "b3-cotahist-daily"])
+        assert args.force is False
+
+    def test_download_command_force_flag(self) -> None:
+        args = cli.parser.parse_args(["download", "--force", "b3-cotahist-daily"])
+        assert args.force is True
+
+    def test_download_single_arg(self) -> None:
+        args = cli.parser.parse_args(
+            ["download", "b3-bvbg087", "--arg", "refdate=@2026-01-01"]
+        )
+        assert args.arg == ["refdate=@2026-01-01"]
+
+    def test_download_multiple_args(self) -> None:
+        args = cli.parser.parse_args(
+            [
+                "download",
+                "tpl",
+                "--arg",
+                "index=IBOV",
+                "--arg",
+                "year=2026",
+            ]
+        )
+        assert args.arg == ["index=IBOV", "year=2026"]
+
+    def test_download_no_args_defaults_empty(self) -> None:
+        args = cli.parser.parse_args(["download", "tpl"])
+        assert args.arg is None
+
+    def test_download_calendar_default(self) -> None:
+        args = cli.parser.parse_args(["download", "tpl"])
+        assert args.calendar == "B3"
+
+    def test_download_no_date_flag(self) -> None:
+        """The old -d/--date flag should no longer exist."""
+        with pytest.raises(SystemExit):
+            cli.parser.parse_args(["download", "tpl", "-d", "2026-01"])
 
 
 class TestProcessCommand:
