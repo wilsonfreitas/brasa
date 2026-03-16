@@ -36,18 +36,18 @@ from .template import retrieve_template
 logger = logging.getLogger(__name__)
 
 
-def _should_download(cache: CacheManager, meta: CacheMetadata, reprocess: bool) -> bool:  # noqa: PLR0911
+def _should_download(cache: CacheManager, meta: CacheMetadata, force: bool) -> bool:  # noqa: PLR0911
     """Determine if data should be downloaded.
 
     Args:
         cache: Cache manager instance.
         meta: Cache metadata for the template.
-        reprocess: If True, force re-download.
+        force: If True, force re-download.
 
     Returns:
         True if data should be downloaded, False otherwise.
     """
-    if reprocess:
+    if force:
         if cache.has_meta(meta):
             cache.load_meta(meta)
             cache.remove_meta(meta)
@@ -55,7 +55,7 @@ def _should_download(cache: CacheManager, meta: CacheMetadata, reprocess: bool) 
 
     if cache.has_meta(meta):
         cache.load_meta(meta)
-        # If metadata is marked as invalid, skip unless forced with reprocess
+        # If metadata is marked as invalid, skip unless forced
         if meta.is_invalid_download:
             return False
 
@@ -90,7 +90,7 @@ def _should_download(cache: CacheManager, meta: CacheMetadata, reprocess: bool) 
 
 
 def get_marketdata(
-    template_name: str, reprocess: bool = False, **kwargs
+    template_name: str, force: bool = False, **kwargs
 ) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
     """Get market data for a template with caching support.
 
@@ -101,7 +101,7 @@ def get_marketdata(
 
     Args:
         template_name: Name of the template to use.
-        reprocess: If True, force re-download and reprocessing.
+        force: If True, force re-download and reprocessing.
         **kwargs: Template-specific download arguments (e.g., refdate).
 
     Returns:
@@ -113,7 +113,7 @@ def get_marketdata(
     meta.download_args = kwargs
     meta.extra_key = template.downloader.extra_key
     cache = CacheManager()
-    if reprocess:
+    if force:
         try:
             return cache.process_without_checks(meta)
         except DownloadException:
@@ -122,9 +122,9 @@ def get_marketdata(
             cache.remove_meta(meta)
             return None
     elif cache.has_meta(meta):
-        return cache.load_marketdata(meta, reprocess)
+        return cache.load_marketdata(meta, force)
     else:
-        return get_marketdata(template_name, reprocess=True, **kwargs)
+        return get_marketdata(template_name, force=True, **kwargs)
 
 
 def _build_result_from_download(
@@ -241,7 +241,7 @@ def _build_result_skipped(
 
 def download_marketdata(
     template_name: str,
-    reprocess: bool = False,
+    force: bool = False,
     verbosity: Verbosity = Verbosity.NORMAL,
     report_file: str | Path | None = None,
     **kwargs,
@@ -257,7 +257,7 @@ def download_marketdata(
 
     Args:
         template_name: Name of the template to use.
-        reprocess: If True, force re-download even if data exists.
+        force: If True, force re-download even if data exists.
         verbosity: Output verbosity level (QUIET, NORMAL, VERBOSE).
         report_file: Optional path to save the report (JSON or TXT).
         **kwargs: Template-specific download arguments. Lists are expanded
@@ -304,7 +304,13 @@ def download_marketdata(
         meta.is_processed = False
 
         with capture_warnings() as captured_warnings:
-            should_download = _should_download(cache, meta, reprocess)
+            should_download = _should_download(cache, meta, force)
+
+            # _should_download may call load_meta which overwrites
+            # is_processed with the old stored value.  Reset it so
+            # a forced re-download is always marked unprocessed.
+            if force:
+                meta.is_processed = False
 
             if should_download:
                 # Apply delay between downloads (not before the first one)

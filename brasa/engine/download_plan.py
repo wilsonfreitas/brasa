@@ -456,7 +456,7 @@ def _execute_task(
     try:
         return download_marketdata(
             task.template,
-            reprocess=task.reprocess,
+            force=task.reprocess,
             verbosity=verbosity,
             **resolved_args,
         )

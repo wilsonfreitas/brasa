@@ -135,7 +135,7 @@ class TestSkippedStatus:
 
         meta2 = CacheMetadata("test-template")
         meta2.download_args = {"a": 1}
-        assert _should_download(temp_cache, meta2, reprocess=False) is False
+        assert _should_download(temp_cache, meta2, force=False) is False
 
 
 class TestDuplicatedStatus:
@@ -193,7 +193,7 @@ class TestDuplicatedStatus:
 
         meta2 = CacheMetadata("test-template")
         meta2.download_args = {"a": 1}
-        result = _should_download(temp_cache, meta2, reprocess=False)
+        result = _should_download(temp_cache, meta2, force=False)
         assert result is False
 
     def test_duplicated_redownloads_when_files_missing(self, temp_cache):
@@ -213,7 +213,7 @@ class TestDuplicatedStatus:
 
         meta2 = CacheMetadata("test-template")
         meta2.download_args = {"a": 1}
-        result = _should_download(temp_cache, meta2, reprocess=False)
+        result = _should_download(temp_cache, meta2, force=False)
         assert result is True
 
 
@@ -303,7 +303,7 @@ class TestNoMetaForFailures:
         )
         # No meta saved — skip decision comes from trial
         assert not temp_cache.has_meta(meta)
-        result = _should_download(temp_cache, meta, reprocess=False)
+        result = _should_download(temp_cache, meta, force=False)
         assert result is False
 
     def test_corrupted_retries_via_trial(self, temp_cache):
@@ -318,7 +318,7 @@ class TestNoMetaForFailures:
             reason="truncated",
         )
         assert not temp_cache.has_meta(meta)
-        result = _should_download(temp_cache, meta, reprocess=False)
+        result = _should_download(temp_cache, meta, force=False)
         assert result is True
 
 
@@ -399,7 +399,7 @@ class TestCorruptedStatus:
 
         meta2 = CacheMetadata("test-template")
         meta2.download_args = {"a": 1}
-        result = _should_download(temp_cache, meta2, reprocess=False)
+        result = _should_download(temp_cache, meta2, force=False)
         assert result is True
 
 
@@ -549,5 +549,5 @@ class TestRetryStatusIntegration:
         meta2 = CacheMetadata("test-template")
         meta2.download_args = {"retry_sched": "1"}
         # Last status is PASSED and files exist -> should NOT download
-        result = _should_download(temp_cache, meta2, reprocess=False)
+        result = _should_download(temp_cache, meta2, force=False)
         assert result is False
