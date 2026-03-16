@@ -217,3 +217,52 @@ class DateRangeParser(TextParser):
         start = datetime.strptime(match.group(1), "%Y-%m-%d")
         end = datetime.strptime(match.group(2), "%Y-%m-%d")
         return DateRange(start=start, end=end, calendar=self.calendar_name)
+
+
+def parse_arg_value(value: str, default_calendar: str = "B3"):
+    """Parse a CLI --arg value using the prefix DSL.
+
+    Prefixes:
+        @  — date or date range, parsed by DateRangeParser.
+             Optional ~CALENDAR suffix overrides the default calendar.
+        $  — symbol lookup via get_symbols().
+        (none, numeric) — integer.
+        (none) — plain string.
+
+    Commas split the value into a list; each element is parsed individually.
+    A single element (no commas) returns a scalar, not a one-element list.
+
+    Args:
+        value: The raw string value from the CLI.
+        default_calendar: Default calendar for @ date values.
+
+    Returns:
+        Parsed value: str, int, datetime, list, or DateRange.
+    """
+    # Date prefix — handled before comma splitting (dates contain no commas)
+    if value.startswith("@"):
+        date_str = value[1:]
+        calendar = default_calendar
+        if "~" in date_str:
+            date_str, calendar = date_str.rsplit("~", 1)
+        return DateRangeParser(calendar).parse(date_str)
+
+    # Symbol prefix — handled before comma splitting (symbol names contain no commas)
+    if value.startswith("$"):
+        from brasa.queries import get_symbols
+
+        return get_symbols(value[1:])
+
+    # Comma-separated list
+    if "," in value:
+        return [_parse_scalar(v) for v in value.split(",")]
+
+    return _parse_scalar(value)
+
+
+def _parse_scalar(value: str):
+    """Parse a single scalar value: integer if numeric, else string."""
+    try:
+        return int(value)
+    except ValueError:
+        return value
