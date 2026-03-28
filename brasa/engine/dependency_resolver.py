@@ -321,7 +321,7 @@ def _run_upstream_templates(
 
         try:
             if template_type == "etl":
-                report = process_etl(producer)
+                report = process_etl(producer, resolve_dependencies=True)
             else:
                 report = process_marketdata(producer)
 

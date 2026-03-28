@@ -194,4 +194,6 @@ class TestRunUpstreamSkipsFresh:
                 graph,
                 required=True,
             )
-            mock_etl.assert_called_once_with("b3-indexes-consolidated")
+            mock_etl.assert_called_once_with(
+                "b3-indexes-consolidated", resolve_dependencies=True
+            )

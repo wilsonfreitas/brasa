@@ -343,7 +343,7 @@ def test_run_upstream_etl_template():
             required=True,
         )
 
-    mock_etl.assert_called_once_with("upstream-etl")
+    mock_etl.assert_called_once_with("upstream-etl", resolve_dependencies=True)
 
 
 def test_run_upstream_download_template():
@@ -365,6 +365,34 @@ def test_run_upstream_download_template():
         )
 
     mock_dl.assert_called_once_with("upstream-dl")
+
+
+def test_run_upstream_etl_uses_resolve_dependencies():
+    """process_etl is called with resolve_dependencies=True so the full
+    ancestor chain (downloads, intermediate ETLs) is processed before
+    the target ETL runs.
+
+    Regression test for: b3-company-info downloads not processed before
+    b3-companies-names ETL when running companies-b3.yaml download plan.
+    """
+    from brasa.engine.dependency_resolver import _run_upstream_templates
+
+    graph = _make_graph(producer="b3-companies-names", template_type="etl")
+    mock_report = _make_report(success=True)
+
+    with patch("brasa.engine.api.process_etl", return_value=mock_report) as mock_etl:
+        _run_upstream_templates(
+            "b3-company-details",
+            "codeCVM",
+            ["staging.b3-companies-names"],
+            graph,
+            required=True,
+        )
+
+    # The critical assertion: resolve_dependencies=True ensures the orchestrator
+    # processes the full chain (e.g., process_marketdata for b3-company-info
+    # before running b3-companies-names ETL)
+    mock_etl.assert_called_once_with("b3-companies-names", resolve_dependencies=True)
 
 
 def test_run_upstream_required_raises_on_report_failure():
