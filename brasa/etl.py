@@ -139,7 +139,8 @@ def create_bcb_data(handler: MarketDataETL):
     df = ds.to_table().to_pandas()
     df = df[df["code"].isin(code_to_symbol.keys())].copy()
     df["symbol"] = df["code"].map(code_to_symbol)
-    df = df[["refdate", "value", "symbol"]]
+    df = df[["refdate", "value", "symbol"]].copy()
+    df["refdate"] = pd.to_datetime(df["refdate"])
 
     fields = [
         pyarrow.field("refdate", pyarrow.timestamp("us")),
