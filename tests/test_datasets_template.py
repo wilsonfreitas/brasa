@@ -199,9 +199,9 @@ class TestBackwardCompatibility:
 
     def test_cdi_template_loads(self):
         """Test that simple template loads correctly."""
-        tpl = retrieve_template("bcb-sgs-data")
+        tpl = retrieve_template("bcb-sgs")
 
-        assert tpl.id == "bcb-sgs-data"
+        assert tpl.id == "bcb-sgs"
         assert tpl.has_downloader
 
     def test_futures_settlement_template_loads(self):

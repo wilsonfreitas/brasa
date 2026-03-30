@@ -1,0 +1,42 @@
+id: bcb-sgs
+description: Séries temporais do SGS (Sistema Gerenciador de Séries) do BCB
+
+downloader:
+  function: brasa.downloaders.bcb_sgs_download
+  validator: brasa.downloaders.validate_json_empty_file
+  format: json
+  args:
+    code: ~
+    start: ~
+    end: ~
+
+reader:
+  locale: pt
+  pipeline:
+    - step: read_json
+    - step: rename_columns
+      mapping:
+        data: refdate
+        valor: value
+    - step: add_column
+      name: code
+      from:
+        where: download_args
+        key: code
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: input
+  partitioning: [refdate, code]
+
+fields:
+  - name: refdate
+    description: Data de referência
+    type: date(format='%d/%m/%Y')
+  - name: value
+    description: Valor da série
+    type: numeric(decimal=',')
+  - name: code
+    description: Código da série SGS
+    type: integer
