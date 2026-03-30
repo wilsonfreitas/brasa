@@ -10,8 +10,11 @@ import bizdays
 import pytz
 import requests
 from bcb import sgs
+from bcb.http import _CLIENT
 
 from brasa.engine.exceptions import DownloadException, InvalidContentException
+
+_CLIENT.timeout = 60.0
 
 
 @contextmanager
