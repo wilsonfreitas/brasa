@@ -23,6 +23,10 @@ reader:
       from:
         where: download_args
         key: code
+    - step: add_column
+      name: downloaded_at
+      from:
+        where: now
     - step: apply_fields
       errors: coerce
 
@@ -40,3 +44,6 @@ fields:
   - name: code
     description: Código da série SGS
     type: integer
+  - name: downloaded_at
+    description: Data e hora de download dos dados
+    type: datetime

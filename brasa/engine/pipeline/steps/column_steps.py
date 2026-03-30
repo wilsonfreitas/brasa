@@ -6,6 +6,7 @@ These steps work with both DataFrames and PyArrow Datasets where possible.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 import pandas as pd
@@ -118,8 +119,6 @@ class AddColumnStep(PipelineStep):
             elif where == "extra_key":
                 return context.meta.extra_key
             elif where == "now":
-                from datetime import datetime
-
                 return datetime.now()
             else:
                 raise ValueError(f"Unknown 'from.where' value: {where}")

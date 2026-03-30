@@ -73,10 +73,11 @@ def test_bcb_sgs_template_fields():
     tpl = MarketDataTemplate("templates/bcb/bcb-sgs.yaml")
 
     assert isinstance(tpl.fields, Fieldset)
-    assert len(tpl.fields) == 3
+    assert len(tpl.fields) == 4
     assert tpl.fields["refdate"].type_name == "date"
     assert tpl.fields["value"].type_name == "numeric"
     assert tpl.fields["code"].type_name == "integer"
+    assert tpl.fields["downloaded_at"].type_name == "datetime"
 
 
 def test_retrieve_bcb_sgs_template():
