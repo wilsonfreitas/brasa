@@ -162,7 +162,9 @@ class BCBSGSDownloader:
     def download(self) -> IO | None:
         try:
             text = sgs.get_json(
-                self.args["code"], start=self.args["refdate"], end=self.args["refdate"]
+                self.args["code"],
+                start=self.args["start"],
+                end=self.args["end"],
             )
         except Exception:
             return None
