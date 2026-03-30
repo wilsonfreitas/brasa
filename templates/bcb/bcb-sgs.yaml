@@ -15,7 +15,7 @@ reader:
   pipeline:
     - step: read_json
     - step: rename_columns
-      columns:
+      mapping:
         data: refdate
         valor: value
     - step: add_column
