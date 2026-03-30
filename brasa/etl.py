@@ -6,7 +6,7 @@ import pandas as pd
 import pyarrow
 import pyarrow.acero as ac
 import pyarrow.compute as pc
-from bcb import PTAX, sgs
+from bcb import PTAX
 from bizdays import Calendar, get_option, set_option
 
 from .engine import MarketDataETL
@@ -127,42 +127,28 @@ def create_b3_futures_first_generic(handler: MarketDataETL):
 
 
 def create_bcb_data(handler: MarketDataETL):
-    dd = sgs.get({"CDI": 4389}, start=datetime(2000, 1, 1))
-    dd_cdi = dd.reset_index()
-    dd_cdi["symbol"] = "CDI"
-    dd_cdi.columns = ["refdate", "value", "symbol"]
+    code_to_symbol = {
+        4389: "CDI",
+        1178: "SELIC",
+        432: "SETA",
+        433: "IPCA",
+        189: "IGPM",
+    }
 
-    dd = sgs.get({"SELIC": 1178}, start=datetime(2000, 1, 1))
-    dd_selic = dd.reset_index()
-    dd_selic["symbol"] = "SELIC"
-    dd_selic.columns = ["refdate", "value", "symbol"]
-
-    dd = sgs.get({"SETA": 432}, start=datetime(2000, 1, 1))
-    dd_seta = dd.reset_index()
-    dd_seta["symbol"] = "SETA"
-    dd_seta.columns = ["refdate", "value", "symbol"]
-
-    dd = sgs.get({"IPCA": 433}, start=datetime(1980, 1, 1))
-    dd_ipca = dd.reset_index()
-    dd_ipca["symbol"] = "IPCA"
-    dd_ipca.columns = ["refdate", "value", "symbol"]
-
-    dd = sgs.get({"IGPM": 189}, start=datetime(1980, 1, 1))
-    dd_igpm = dd.reset_index()
-    dd_igpm["symbol"] = "IGPM"
-    dd_igpm.columns = ["refdate", "value", "symbol"]
-
-    df_bcb = pd.concat([dd_cdi, dd_selic, dd_seta, dd_ipca, dd_igpm])
+    ds = get_dataset("bcb-sgs", layer="input")
+    df = ds.to_table().to_pandas()
+    df = df[df["code"].isin(code_to_symbol.keys())].copy()
+    df["symbol"] = df["code"].map(code_to_symbol)
+    df = df[["refdate", "value", "symbol"]]
 
     fields = [
         pyarrow.field("refdate", pyarrow.timestamp("us")),
         pyarrow.field("value", pyarrow.float64()),
         pyarrow.field("symbol", pyarrow.string()),
     ]
-
     my_schema = pyarrow.schema(fields)
 
-    write_dataset(df_bcb, handler.template_id, schema=my_schema)
+    write_dataset(df, handler.template_id, schema=my_schema)
 
 
 def _create_currency_candle(df: pd.DataFrame) -> pd.DataFrame:
