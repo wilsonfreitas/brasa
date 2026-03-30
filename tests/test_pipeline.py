@@ -157,3 +157,35 @@ def test_shared_transforms():
     renamed = shared_transforms.rename_columns(df, {"a": "alpha"})
     assert "alpha" in renamed.columns
     assert "a" not in renamed.columns
+
+
+def test_add_column_where_now():
+    """Test that add_column with from.where: now adds a datetime column."""
+    from datetime import datetime
+    from unittest.mock import MagicMock
+
+    import pandas as pd
+
+    from brasa.engine.pipeline.context import PipelineContext
+    from brasa.engine.pipeline.steps.column_steps import AddColumnStep
+
+    # Build minimal context (download_args not needed for where: now)
+    meta = MagicMock()
+    meta.download_args = {}
+    meta.extra_key = None
+    context = PipelineContext(meta=meta, reader_config={})
+
+    df = pd.DataFrame({"value": [1, 2, 3]})
+
+    step = AddColumnStep(
+        params={"name": "downloaded_at", "from": {"where": "now"}},
+    )
+
+    before = datetime.now()
+    result = step.execute(df, context)
+    after = datetime.now()
+
+    assert "downloaded_at" in result.columns
+    ts = result["downloaded_at"].iloc[0]
+    assert isinstance(ts, datetime)
+    assert before <= ts <= after

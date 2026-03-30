@@ -90,8 +90,8 @@ class AddColumnStep(PipelineStep):
         name: Name of the new column
         value: Static value to assign (optional)
         from: Dictionary with 'where' and 'key' to get value dynamically (optional)
-            - where: 'context', 'download_args', or 'extra_key'
-            - key: The key to look up (not needed for 'extra_key')
+            - where: 'context', 'download_args', 'extra_key', or 'now'
+            - key: The key to look up (not needed for 'extra_key' or 'now')
         only_if_missing: Whether to only set the column if it doesn't already exist (default: False)
     """
 
@@ -117,6 +117,10 @@ class AddColumnStep(PipelineStep):
                 return context.meta.download_args.get(key)
             elif where == "extra_key":
                 return context.meta.extra_key
+            elif where == "now":
+                from datetime import datetime
+
+                return datetime.now()
             else:
                 raise ValueError(f"Unknown 'from.where' value: {where}")
         else:
@@ -144,8 +148,8 @@ class AddColumnMultiStep(AddColumnStep):
         name: Name of the new column
         value: Static value to assign (optional)
         from: Dictionary with 'where' and 'key' to get value dynamically (optional)
-            - where: 'context', 'download_args', or 'extra_key'
-            - key: The key to look up (not needed for 'extra_key')
+            - where: 'context', 'download_args', 'extra_key', or 'now'
+            - key: The key to look up (not needed for 'extra_key' or 'now')
         only_if_missing: Whether to only set the column if it doesn't already exist (default: False)
     """
 
