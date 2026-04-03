@@ -9,7 +9,7 @@ import gzip
 import shutil
 from pathlib import Path
 
-from brasa.util import generate_checksum_from_file, unzip_recursive
+from brasa.util import DownloadArgs, generate_checksum_from_file, unzip_recursive
 
 from .cache import CacheManager, CacheMetadata
 from .exceptions import (
@@ -134,10 +134,10 @@ def _download_marketdata(meta: CacheMetadata, on_attempt_failure=None, **kwargs)
         DuplicatedFolderException: If download folder already exists.
     """
     template = retrieve_template(meta.template)
-    meta.download_args = kwargs
+    meta.download_args = DownloadArgs(kwargs)
     meta.extra_key = template.downloader.extra_key
     fp, response, retry_info = template.downloader.download(
-        on_attempt_failure=on_attempt_failure, **kwargs
+        on_attempt_failure=on_attempt_failure, **meta.download_args.to_dict()
     )
     if fp is None:
         raise DownloadException("Market data download failed: null file pointer")

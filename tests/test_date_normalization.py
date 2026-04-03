@@ -4,7 +4,7 @@ import json
 from datetime import date, datetime
 
 from brasa.engine.core import json_convert_from_object, json_convert_to_object
-from brasa.util import generate_checksum_for_template
+from brasa.util import DownloadArgs, generate_checksum_for_template
 
 
 class TestJsonConvertFromObject:
@@ -43,14 +43,18 @@ class TestJsonRoundTrip:
 class TestChecksumNormalization:
     def test_date_and_datetime_produce_same_checksum(self):
         hash_date = generate_checksum_for_template(
-            "tpl", {"refdate": date(2025, 3, 12)}
+            "tpl", DownloadArgs({"refdate": date(2025, 3, 12)})
         )
         hash_datetime = generate_checksum_for_template(
-            "tpl", {"refdate": datetime(2025, 3, 12)}
+            "tpl", DownloadArgs({"refdate": datetime(2025, 3, 12)})
         )
         assert hash_date == hash_datetime
 
     def test_different_dates_produce_different_checksums(self):
-        h1 = generate_checksum_for_template("tpl", {"refdate": date(2025, 3, 12)})
-        h2 = generate_checksum_for_template("tpl", {"refdate": date(2025, 3, 13)})
+        h1 = generate_checksum_for_template(
+            "tpl", DownloadArgs({"refdate": date(2025, 3, 12)})
+        )
+        h2 = generate_checksum_for_template(
+            "tpl", DownloadArgs({"refdate": date(2025, 3, 13)})
+        )
         assert h1 != h2

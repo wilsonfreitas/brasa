@@ -29,7 +29,7 @@ def get_fname_part(meta: CacheMetadata, df: pd.DataFrame) -> str:
     template = retrieve_template(meta.template)
     fmt = template.reader.output_filename_format
     if "refdate" in meta.download_args:
-        fname_part = meta.download_args["refdate"].strftime(fmt)
+        fname_part = meta.download_args.get_object("refdate").strftime(fmt)
     elif template.id == "b3-company-info":
         fname_part = f"{df['refdate'].iloc[0].strftime(fmt)}-{meta.download_args['issuingCompany']}"
     elif template.id == "b3-company-details":

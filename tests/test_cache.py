@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from brasa.engine.cache import CacheManager, CacheMetadata, _extract_http_status
+from brasa.util import DownloadArgs
 
 
 @pytest.fixture
@@ -349,3 +350,66 @@ class TestGetTemplatesWithUnprocessedDownloads:
         result = temp_cache.get_templates_with_unprocessed_downloads()
         assert len(result) == 1
         assert result[0]["count"] == 1
+
+
+class TestDownloadArgsSerialization:
+    """Verify save_meta/load_meta roundtrip preserves canonical form."""
+
+    def test_save_and_load_meta_preserves_download_args(self, temp_cache):
+        meta = CacheMetadata("test-template")
+        meta.download_args = DownloadArgs({"refdate": "2000-01-01"})
+        meta.download_checksum = "abc123"
+        temp_cache.save_meta(meta)
+
+        meta2 = CacheMetadata("test-template")
+        meta2.download_args = DownloadArgs({"refdate": "2000-01-01"})
+        temp_cache.load_meta(meta2)
+
+        assert isinstance(meta2.download_args, DownloadArgs)
+        assert meta2.download_args["refdate"] == "2000-01-01T00:00:00"
+
+    def test_same_id_before_and_after_roundtrip(self, temp_cache):
+        meta = CacheMetadata("test-template")
+        meta.download_args = DownloadArgs({"refdate": "2000-01-01"})
+        meta.download_checksum = "abc123"
+        original_id = meta.id
+
+        temp_cache.save_meta(meta)
+
+        meta2 = CacheMetadata("test-template")
+        meta2.download_args = DownloadArgs({"refdate": "2000-01-01"})
+        temp_cache.load_meta(meta2)
+
+        assert meta2.id == original_id
+
+    def test_bare_date_and_datetime_string_produce_same_id(self, temp_cache):
+        meta1 = CacheMetadata("test-template")
+        meta1.download_args = DownloadArgs({"refdate": "2000-01-01"})
+
+        meta2 = CacheMetadata("test-template")
+        meta2.download_args = DownloadArgs({"refdate": "2000-01-01T00:00:00"})
+
+        assert meta1.id == meta2.id
+
+    def test_no_integrity_error_on_process_after_download(self, temp_cache):
+        """Reproduce WIL-34: save with bare date, reload, save again — no UNIQUE error."""
+        meta = CacheMetadata("bcb-sgs")
+        meta.download_args = DownloadArgs({"refdate": "2000-01-01"})
+        meta.download_checksum = "deadbeef"
+        temp_cache.save_meta(meta)
+
+        # Simulate process time: reload from DB
+        meta2 = CacheMetadata("bcb-sgs")
+        meta2.download_args = DownloadArgs({"refdate": "2000-01-01"})
+        temp_cache.load_meta(meta2)
+
+        # Mark as processed and save again — must NOT raise IntegrityError
+        meta2.mark_as_processed()
+        temp_cache.save_meta(meta2)  # should not raise
+
+        # Verify it updated (not inserted a duplicate)
+        with temp_cache.meta_db_connection as conn:
+            c = conn.cursor()
+            c.execute("SELECT COUNT(*) FROM cache_metadata WHERE template = 'bcb-sgs'")
+            count = c.fetchone()[0]
+        assert count == 1

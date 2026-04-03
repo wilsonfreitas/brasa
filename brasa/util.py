@@ -1,7 +1,9 @@
 import hashlib
 import itertools
+import json
 import logging
 import pickle
+import re
 import warnings
 import zipfile
 from datetime import date, datetime
@@ -23,20 +25,99 @@ class SuppressUserWarnings:
         warnings.filterwarnings("default", category=UserWarning)
 
 
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_DATETIME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
+
+
+def _normalize_download_arg(value: Any) -> Any:
+    """Normalize a download arg value to its canonical form.
+
+    Canonical form for date-like values is YYYY-MM-DDTHH:MM:SS.
+    Other values are returned unchanged.
+    """
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%dT%H:%M:%S")
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day).strftime(
+            "%Y-%m-%dT%H:%M:%S"
+        )
+    if isinstance(value, str) and _DATE_RE.match(value):
+        return f"{value}T00:00:00"
+    return value
+
+
+def _to_download_arg_object(value: Any) -> Any:
+    """Reconstruct a rich Python object from a canonical download arg value."""
+    if isinstance(value, str) and _DATETIME_RE.match(value):
+        return datetime.fromisoformat(value)
+    return value
+
+
+class DownloadArgs:
+    """Canonical, serialization-stable container for download arguments.
+
+    Values are stored in canonical form: date/datetime always as
+    "YYYY-MM-DDTHH:MM:SS" strings; other primitives unchanged.
+    Rich objects are reconstructed on demand via get_object().
+    """
+
+    def __init__(self, data: dict[str, Any]) -> None:
+        self._data: dict[str, Any] = {
+            k: _normalize_download_arg(v) for k, v in data.items()
+        }
+
+    def __getitem__(self, key: str) -> Any:
+        return self._data[key]
+
+    def __contains__(self, key: object) -> bool:
+        return key in self._data
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._data.get(key, default)
+
+    def items(self):
+        return self._data.items()
+
+    def keys(self):
+        return self._data.keys()
+
+    def __iter__(self):
+        return iter(self._data)
+
+    def get_object(self, key: str) -> Any:
+        """Return the value as a rich Python type (datetime for date strings, etc.)."""
+        return _to_download_arg_object(self._data[key])
+
+    def to_json(self) -> str:
+        """Serialize to JSON — always stable, no custom encoder needed."""
+        return json.dumps(self._data)
+
+    @classmethod
+    def from_json(cls, s: str) -> "DownloadArgs":
+        """Deserialize from JSON — normalizes values to canonical form.
+
+        Normalizes on load so existing DB rows with bare 'YYYY-MM-DD'
+        strings are upgraded to 'YYYY-MM-DDTHH:MM:SS' on first read.
+        """
+        obj = cls.__new__(cls)
+        raw = json.loads(s)
+        obj._data = {k: _normalize_download_arg(v) for k, v in raw.items()}
+        return obj
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a plain dict copy (for **unpacking into downloaders)."""
+        return dict(self._data)
+
+
 def generate_checksum_for_template(
-    template: str, args: dict, extra_key: str = ""
+    template: str, args: "DownloadArgs", extra_key: str = ""
 ) -> str:
     """Generates a hash for a template and its arguments.
 
     The hash is used to identify a template and its arguments.
+    Values in args are already canonical — no normalization needed.
     """
-    normalized = {
-        k: datetime(v.year, v.month, v.day)
-        if isinstance(v, date) and not isinstance(v, datetime)
-        else v
-        for k, v in args.items()
-    }
-    t = tuple(sorted(normalized.items(), key=lambda x: x[0]))
+    t = tuple(sorted(args.items(), key=lambda x: x[0]))
     obj: Any = (template, t)
     if extra_key:
         obj = (template, t, extra_key)

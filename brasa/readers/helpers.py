@@ -444,7 +444,7 @@ def _read_b3_equity_options_files(meta: CacheMetadata) -> pd.DataFrame:
     df["maturity_date"] = pd.to_datetime(
         df["maturity_date"], format="%Y%m%d", errors="coerce"
     )
-    df["refdate"] = pd.to_datetime(meta.download_args["refdate"])
+    df["refdate"] = pd.to_datetime(meta.download_args.get_object("refdate"))
     return df
 
 
