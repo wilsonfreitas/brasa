@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from brasa.util import KwargsIterator
+from brasa.util import DownloadArgs, KwargsIterator
 
 from .cache import CacheManager, CacheMetadata, DownloadResult
 from .exceptions import DownloadException
@@ -110,7 +110,7 @@ def get_marketdata(
     """
     template = retrieve_template(template_name)
     meta = CacheMetadata(template.id)
-    meta.download_args = kwargs
+    meta.download_args = DownloadArgs(kwargs)
     meta.extra_key = template.downloader.extra_key
     cache = CacheManager()
     if force:
@@ -299,7 +299,7 @@ def download_marketdata(
 
         meta = CacheMetadata(template.id)
         meta.extra_key = template.downloader.extra_key
-        meta.download_args = args
+        meta.download_args = DownloadArgs(args)
         meta.downloaded_files = []
         meta.is_processed = False
 
