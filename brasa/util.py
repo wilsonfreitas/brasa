@@ -106,7 +106,7 @@ class DownloadArgs:
 
     def to_dict(self) -> dict[str, Any]:
         """Return a plain dict copy (for **unpacking into downloaders)."""
-        return dict(self._data)
+        return {k: _to_download_arg_object(v) for k, v in self._data.items()}
 
 
 def generate_checksum_for_template(

@@ -32,7 +32,7 @@ reader:
 
 writer:
   layer: input
-  partitioning: [refdate, code]
+  partitioning: [downloaded_at, code]
 
 fields:
   - name: refdate
