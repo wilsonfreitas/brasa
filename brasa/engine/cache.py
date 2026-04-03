@@ -21,7 +21,7 @@ from warnings import warn
 
 import pandas as pd
 
-from brasa.util import generate_checksum_for_template
+from brasa.util import DownloadArgs, generate_checksum_for_template
 
 from .core import Singleton, json_convert_from_object, json_convert_to_object
 
@@ -94,7 +94,7 @@ class CacheMetadata:
         self.timestamp: datetime = datetime.now()
         self.response: Any = None
         self.download_checksum: str = ""
-        self.download_args: dict[str, Any] = {}
+        self.download_args: DownloadArgs = DownloadArgs({})
         self._downloaded_files: list[str] = []
         self._is_processed: bool = False
         self.extra_key: str = ""
@@ -129,6 +129,13 @@ class CacheMetadata:
                     self._is_processed = v
                 else:
                     self._is_processed = bool(v)  # handles int 0/1
+            elif k == "download_args":
+                if isinstance(v, DownloadArgs):
+                    self.download_args = v
+                elif isinstance(v, dict):
+                    self.download_args = DownloadArgs(v)
+                else:
+                    self.download_args = DownloadArgs({})
             else:
                 setattr(self, k, v)
 
@@ -443,9 +450,7 @@ class CacheManager(Singleton):
                     "response": json.loads(
                         meta_row[3], object_hook=json_convert_to_object
                     ),
-                    "download_args": json.loads(
-                        meta_row[4], object_hook=json_convert_to_object
-                    ),
+                    "download_args": DownloadArgs.from_json(meta_row[4]),
                     "template": meta_row[5],
                     "downloaded_files": json.loads(
                         meta_row[6], object_hook=json_convert_to_object
@@ -467,6 +472,10 @@ class CacheManager(Singleton):
 
     def save_meta(self, meta: CacheMetadata) -> None:
         """Save metadata to the database."""
+        # Normalize download_args in case a plain dict was assigned directly
+        download_args = meta.download_args
+        if not isinstance(download_args, DownloadArgs):
+            download_args = DownloadArgs(download_args)
         with closing(self.meta_db_connection) as conn, conn:
             c = conn.cursor()
             c.execute("select * from cache_metadata where id = ?", (meta.id,))
@@ -475,7 +484,7 @@ class CacheManager(Singleton):
                     meta.download_checksum,
                     meta.timestamp.isoformat(),
                     json.dumps(meta.response, default=json_convert_from_object),
-                    json.dumps(meta.download_args, default=json_convert_from_object),
+                    download_args.to_json(),
                     meta.template,
                     json.dumps(meta.downloaded_files, default=json_convert_from_object),
                     json.dumps(meta.is_processed),
@@ -495,7 +504,7 @@ class CacheManager(Singleton):
                     meta.download_checksum,
                     meta.timestamp.isoformat(),
                     json.dumps(meta.response, default=json_convert_from_object),
-                    json.dumps(meta.download_args, default=json_convert_from_object),
+                    download_args.to_json(),
                     meta.template,
                     json.dumps(meta.downloaded_files, default=json_convert_from_object),
                     json.dumps(meta.is_processed),
@@ -735,7 +744,7 @@ class CacheManager(Singleton):
             retry_info = _download_marketdata(
                 meta,
                 on_attempt_failure=_on_attempt_failure,
-                **meta.download_args,
+                **meta.download_args.to_dict(),
             )
             self.save_trial(
                 meta,
@@ -874,7 +883,7 @@ class CacheManager(Singleton):
         """Download and process market data without cache checks."""
         from .download import _download_marketdata
 
-        _download_marketdata(meta, **meta.download_args)
+        _download_marketdata(meta, **meta.download_args.to_dict())
         self.save_meta(meta)
         if len(meta.downloaded_files) > 0:
             return self.load_marketdata(meta, reprocess=True)
