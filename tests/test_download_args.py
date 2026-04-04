@@ -76,7 +76,7 @@ class TestSerialization:
     def test_to_dict(self):
         args = DownloadArgs({"refdate": datetime(2024, 1, 8), "x": 1})
         d = args.to_dict()
-        assert d == {"refdate": "2024-01-08T00:00:00", "x": 1}
+        assert d == {"refdate": datetime(2024, 1, 8), "x": 1}
         assert isinstance(d, dict)
 
 
