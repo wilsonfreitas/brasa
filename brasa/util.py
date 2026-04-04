@@ -6,7 +6,7 @@ import pickle
 import re
 import warnings
 import zipfile
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from tempfile import gettempdir
 from typing import IO, Any
@@ -250,6 +250,14 @@ class DateRangeParser(TextParser):
         self.calendar_name = calendar
         self.calendar = Calendar() if calendar == "actual" else Calendar.load(calendar)
 
+    def parse_datetime_ms(self, _text, match):
+        r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+)$"
+        return datetime.fromisoformat(match.group(1))
+
+    def parse_datetime(self, _text, match):
+        r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})$"
+        return datetime.fromisoformat(match.group(1))
+
     def parse_year(self, _text, match):
         r"^\d{4}$"
         year = int(match.group())
@@ -300,18 +308,42 @@ class DateRangeParser(TextParser):
         return DateRange(start=start, end=end, calendar=self.calendar_name)
 
 
+_ISO_DATE_PATTERN = re.compile(
+    r"^\d{4}-\d{2}(?:-\d{2})?(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?)?(?::(?:\d{4}-\d{2}(?:-\d{2})?)?)?(?:~\w+)?$"
+)
+
+_NAMED_DATE_VARS = {
+    "today": lambda: datetime.today().replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ),
+    "yesterday": lambda: (
+        datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+        - timedelta(days=1)
+    ),
+}
+
+
+def _looks_like_date(value: str) -> bool:
+    """Quick check if value could be an ISO date or date range.
+
+    Matches: YYYY-MM, YYYY-MM-DD, YYYY-MM-DDTHH:MM:SS, date ranges, etc.
+    Also allows a trailing ~CALENDAR suffix.
+    """
+    return bool(_ISO_DATE_PATTERN.match(value))
+
+
 def parse_arg_value(value: str, default_calendar: str = "B3"):
     """Parse a CLI --arg value using the prefix DSL.
 
-    Prefixes:
-        @  — date or date range, parsed by DateRangeParser.
-             Optional ~CALENDAR suffix overrides the default calendar.
-        $  — symbol lookup via get_symbols().
-        (none, numeric) — integer.
-        (none) — plain string.
-
-    Commas split the value into a list; each element is parsed individually.
-    A single element (no commas) returns a scalar, not a one-element list.
+    Resolution order:
+        1. @ prefix — date/range via DateRangeParser, named vars (@today,
+           @yesterday), @YYYY year ranges. Optional ~CALENDAR suffix.
+        2. ISO date auto-detect — bare YYYY-MM-DD, YYYY-MM-DDTHH:MM:SS,
+           YYYY-MM → parsed as date/range. No @ needed.
+        3. $ prefix — symbol lookup via get_symbols().
+        4. Comma rule — splits into list, each element parsed individually.
+        5. Integer — bare numeric string → int.
+        6. String — fallback.
 
     Args:
         value: The raw string value from the CLI.
@@ -320,19 +352,35 @@ def parse_arg_value(value: str, default_calendar: str = "B3"):
     Returns:
         Parsed value: str, int, datetime, list, or DateRange.
     """
-    # Date prefix — handled before comma splitting (dates contain no commas)
+    # @ prefix — dates, named vars, year ranges
     if value.startswith("@"):
         date_str = value[1:]
         calendar = default_calendar
         if "~" in date_str:
             date_str, calendar = date_str.rsplit("~", 1)
+
+        # Named date variables
+        if date_str in _NAMED_DATE_VARS:
+            return _NAMED_DATE_VARS[date_str]()
+
         return DateRangeParser(calendar).parse(date_str)
 
-    # Symbol prefix — handled before comma splitting (symbol names contain no commas)
+    # Symbol prefix
     if value.startswith("$"):
         from brasa.queries import get_symbols
 
         return get_symbols(value[1:])
+
+    # Auto-detect ISO dates (YYYY-MM-DD, YYYY-MM-DDTHH:MM:SS, YYYY-MM, ranges)
+    if _looks_like_date(value):
+        date_str = value
+        calendar = default_calendar
+        if "~" in date_str:
+            date_str, calendar = date_str.rsplit("~", 1)
+        try:
+            return DateRangeParser(calendar).parse(date_str)
+        except Exception:
+            pass
 
     # Comma-separated list
     if "," in value:

@@ -320,30 +320,36 @@ class DownloadPlanReport:
 # ---------------------------------------------------------------------------
 
 
-def resolve_plan_args(args: dict) -> dict:
+def resolve_plan_args(args: dict, calendar: str = "B3") -> dict:
     """Resolve dynamic argument values in a task's args dict.
 
-    Resolves:
+    Uses ``parse_arg_value()`` for string values so that plan YAML args
+    support the same DSL as the CLI ``--arg`` flag (``@`` dates, ``$``
+    symbols, comma lists, integers, ISO date auto-detection).
+
+    Legacy plan-specific patterns are also supported:
     - ``"symbols:<type>"`` strings via ``get_symbols(type)``
     - ``"<int>:<int>"`` strings (e.g. ``"2020:2026"``) to integer lists
-    - All other values are passed through unchanged
 
     Note: ``refdate`` keys are handled separately in ``execute_download_plan``
     and should not be included in *args* when calling this function.
 
     Args:
         args: Raw argument dict (without refdate).
+        calendar: Business calendar name for date parsing.
 
     Returns:
         Resolved argument dict.
     """
+    from brasa.util import parse_arg_value
+
     resolved = {}
     for key, value in args.items():
         if not isinstance(value, str):
             resolved[key] = value
             continue
 
-        # symbols:<type>
+        # Legacy: symbols:<type>
         if value.startswith("symbols:"):
             from brasa.queries import get_symbols
 
@@ -351,14 +357,15 @@ def resolve_plan_args(args: dict) -> dict:
             resolved[key] = get_symbols(symbol_type)
             continue
 
-        # <int>:<int> — integer range
+        # Legacy: <int>:<int> — integer range
         if _INT_RANGE_RE.match(value):
             parts = value.split(":")
             start_int, end_int = int(parts[0]), int(parts[1])
             resolved[key] = list(range(start_int, end_int + 1))
             continue
 
-        resolved[key] = value
+        # DSL resolution (same as CLI --arg)
+        resolved[key] = parse_arg_value(value, default_calendar=calendar)
 
     return resolved
 
@@ -543,7 +550,7 @@ def execute_download_plan(
 
         # 3. Resolve remaining args (symbols, integer ranges), excluding refdate
         non_refdate = {k: v for k, v in merged_args.items() if k != "refdate"}
-        resolved_args = resolve_plan_args(non_refdate)
+        resolved_args = resolve_plan_args(non_refdate, calendar=plan.defaults.calendar)
 
         # 4. Smart injection: only pass refdate if the template actually wants it
         if refdate is not None and _template_requires_refdate(task.template):
