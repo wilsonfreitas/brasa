@@ -1,0 +1,10 @@
+name: bvbg086
+description: B3 market data
+
+defaults:
+  refdate: "2026-03-18"
+  calendar: B3
+  force: false
+
+tasks:
+  - template: b3-bvbg086

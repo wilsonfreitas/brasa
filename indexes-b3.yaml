@@ -1,0 +1,20 @@
+name: indexes-b3
+description: |+
+  Daily B3 indexes data download, including composition, theoretical and current portfolios, and historical prices.
+  The data is collected for a specified reference date and calendar, with an option to reprocess existing data if needed.
+
+defaults: # merged into every task
+  force: false
+
+tasks:
+  - template: b3-indexes-composition
+
+  # dynamic symbol resolution
+  - template: b3-indexes-theoretical-portfolio
+  - template: b3-indexes-current-portfolio
+
+  # per-task args with integer range and reprocess override
+  - template: b3-indexes-historical-prices
+    args:
+      year: "2026"
+    force: false

@@ -1,0 +1,12 @@
+name: equity-options-b3
+description: |+
+  Daily B3 equity options data download, including composition, theoretical and current portfolios, and historical prices.
+  The data is collected for a specified reference date and calendar, with an option to reprocess existing data if needed.
+
+defaults:
+  refdate: "2024-01-01:"
+  calendar: B3
+  force: false
+
+tasks:
+  - template: b3-equity-options

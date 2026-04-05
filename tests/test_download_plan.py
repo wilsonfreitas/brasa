@@ -49,10 +49,10 @@ def _make_task_report(
 VALID_PLAN_DICT = {
     "name": "test-plan",
     "description": "A test plan",
-    "defaults": {"refdate": "2026-01", "calendar": "B3", "reprocess": False},
+    "defaults": {"refdate": "2026-01", "calendar": "B3", "force": False},
     "tasks": [
         {"template": "tmpl-a"},
-        {"template": "tmpl-b", "args": {"extra": "val"}, "reprocess": True},
+        {"template": "tmpl-b", "args": {"extra": "val"}, "force": True},
     ],
 }
 
@@ -69,17 +69,17 @@ class TestDownloadPlanFromDict:
         assert plan.description == "A test plan"
         assert plan.defaults.refdate == "2026-01"
         assert plan.defaults.calendar == "B3"
-        assert plan.defaults.reprocess is False
+        assert plan.defaults.force is False
         assert len(plan.tasks) == 2
 
     def test_task_fields(self):
         plan = DownloadPlan.from_dict(VALID_PLAN_DICT)
         assert plan.tasks[0].template == "tmpl-a"
         assert plan.tasks[0].args == {}
-        assert plan.tasks[0].reprocess is False
+        assert plan.tasks[0].force is False
         assert plan.tasks[1].template == "tmpl-b"
         assert plan.tasks[1].args == {"extra": "val"}
-        assert plan.tasks[1].reprocess is True
+        assert plan.tasks[1].force is True
 
     def test_missing_name_raises(self):
         data = {**VALID_PLAN_DICT}
@@ -102,25 +102,25 @@ class TestDownloadPlanFromDict:
         plan = DownloadPlan.from_dict(data)
         assert plan.defaults.refdate is None
         assert plan.defaults.calendar == "B3"
-        assert plan.defaults.reprocess is False
+        assert plan.defaults.force is False
 
-    def test_task_inherits_default_reprocess(self):
+    def test_task_inherits_default_force(self):
         data = {
             "name": "p",
-            "defaults": {"reprocess": True},
+            "defaults": {"force": True},
             "tasks": [{"template": "tmpl-a"}],
         }
         plan = DownloadPlan.from_dict(data)
-        assert plan.tasks[0].reprocess is True
+        assert plan.tasks[0].force is True
 
-    def test_task_overrides_default_reprocess(self):
+    def test_task_overrides_default_force(self):
         data = {
             "name": "p",
-            "defaults": {"reprocess": True},
-            "tasks": [{"template": "tmpl-a", "reprocess": False}],
+            "defaults": {"force": True},
+            "tasks": [{"template": "tmpl-a", "force": False}],
         }
         plan = DownloadPlan.from_dict(data)
-        assert plan.tasks[0].reprocess is False
+        assert plan.tasks[0].force is False
 
 
 class TestDownloadPlanFromFile:

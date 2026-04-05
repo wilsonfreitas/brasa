@@ -46,12 +46,12 @@ class DownloadPlanDefaults:
     Attributes:
         refdate: DateRangeParser string (e.g. "2026-01-01:", "2026").
         calendar: Business calendar name for date parsing (default: "B3").
-        reprocess: Default reprocess flag (default: False).
+        force: Force redownload flag (default: False).
     """
 
     refdate: str | None = None
     calendar: str = "B3"
-    reprocess: bool = False
+    force: bool = False
 
 
 @dataclass
@@ -61,12 +61,12 @@ class DownloadPlanTask:
     Attributes:
         template: Template name to download.
         args: Per-task arguments that override defaults.
-        reprocess: Reprocess flag for this task.
+        force: Force redownload flag for this task.
     """
 
     template: str
     args: dict[str, Any] = field(default_factory=dict)
-    reprocess: bool = False
+    force: bool = False
 
 
 @dataclass
@@ -107,7 +107,9 @@ class DownloadPlan:
         defaults = DownloadPlanDefaults(
             refdate=defaults_data.get("refdate"),
             calendar=str(defaults_data.get("calendar", "B3")),
-            reprocess=bool(defaults_data.get("reprocess", False)),
+            force=bool(
+                defaults_data.get("force", defaults_data.get("reprocess", False))
+            ),
         )
 
         tasks = []
@@ -117,7 +119,9 @@ class DownloadPlan:
             task = DownloadPlanTask(
                 template=str(task_data["template"]),
                 args=dict(task_data.get("args", {}) or {}),
-                reprocess=bool(task_data.get("reprocess", defaults.reprocess)),
+                force=bool(
+                    task_data.get("force", task_data.get("reprocess", defaults.force))
+                ),
             )
             tasks.append(task)
 
@@ -463,7 +467,7 @@ def _execute_task(
     try:
         return download_marketdata(
             task.template,
-            force=task.reprocess,
+            force=task.force,
             verbosity=verbosity,
             **resolved_args,
         )
