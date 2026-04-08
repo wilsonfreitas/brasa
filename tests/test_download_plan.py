@@ -491,7 +491,9 @@ class TestImplicitDependencyReports:
 
         dep_report = _make_task_report("dep-etl", [TaskStatus.PASSED])
 
-        def fake_execute_task(task, resolved_args, verbosity):
+        def fake_execute_task(
+            task, resolved_args, verbosity, plan_calendar="B3", plan_smart_update=False
+        ):
             task_report = _make_task_report(task.template, [TaskStatus.PASSED])
             task_report.dependency_reports = [dep_report]
             return task_report
@@ -513,7 +515,9 @@ class TestImplicitDependencyReports:
 
         dep_report = _make_task_report("dep-etl", [TaskStatus.PASSED])
 
-        def fake_execute_task(task, resolved_args, verbosity):
+        def fake_execute_task(
+            task, resolved_args, verbosity, plan_calendar="B3", plan_smart_update=False
+        ):
             task_report = _make_task_report(task.template, [TaskStatus.PASSED])
             task_report.dependency_reports = [dep_report]
             return task_report

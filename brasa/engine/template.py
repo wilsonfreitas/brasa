@@ -589,6 +589,33 @@ class MarketDataTemplate:
         elif section_name == "etl":
             self.etl = MarketDataETL(section_data, template["id"])
             self.is_etl = True
+        elif section_name == "update":
+            self._process_update(section_data)
+
+    def _process_update(self, update_data: dict) -> None:
+        """Process the update section of the template.
+
+        Validates the strategy field if present.
+
+        Args:
+            update_data: The update configuration dict.
+
+        Raises:
+            ValueError: If strategy is not a valid UpdateStrategy.
+        """
+        from .update_strategy import UpdateStrategy
+
+        self.update = update_data
+
+        if "strategy" in update_data:
+            strategy_str = update_data["strategy"]
+            # Validate that it's a known strategy
+            valid_strategies = {s.value for s in UpdateStrategy}
+            if strategy_str not in valid_strategies:
+                raise ValueError(
+                    f"Unknown update strategy '{strategy_str}' in template {self.id}. "
+                    f"Valid strategies: {', '.join(sorted(valid_strategies))}"
+                )
 
     def _process_fields(self, fields_data: list) -> None:
         """Process the fields section of the template."""

@@ -239,9 +239,11 @@ def _build_result_skipped(
     return result
 
 
-def download_marketdata(
+def download_marketdata(  # noqa: PLR0915
     template_name: str,
     force: bool = False,
+    smart_update: bool = False,
+    calendar: str = "B3",
     verbosity: Verbosity = Verbosity.NORMAL,
     report_file: str | Path | None = None,
     **kwargs,
@@ -258,6 +260,9 @@ def download_marketdata(
     Args:
         template_name: Name of the template to use.
         force: If True, force re-download even if data exists.
+        smart_update: If True, resolve incremental download kwargs from
+            cache (auto-detect strategy and generate date ranges).
+        calendar: Calendar for smart update date operations (default: "B3").
         verbosity: Output verbosity level (QUIET, NORMAL, VERBOSE).
         report_file: Optional path to save the report (JSON or TXT).
         **kwargs: Template-specific download arguments. Lists are expanded
@@ -271,8 +276,29 @@ def download_marketdata(
             resolved. No downloads are started in this case.
     """
     from .dependency_resolver import resolve_dependencies
+    from .update_strategy import UpdateStrategy, resolve_update
 
     template = retrieve_template(template_name)
+
+    # Smart update: resolve kwargs from cache
+    if smart_update:
+        # Extract since if provided (comes from CLI --since)
+        since = kwargs.pop("since", None)
+        if not kwargs:  # Smart update only if no other kwargs provided
+            resolved = resolve_update(template_name, calendar=calendar, since=since)
+            if resolved.strategy == UpdateStrategy.NO_AUTO_UPDATE:
+                # Return empty report
+                report = TaskReport(
+                    operation="download",
+                    template_name=template_name,
+                    verbosity=verbosity,
+                )
+                report.start(total=0)
+                report.finish()
+                return report
+            kwargs = resolved.kwargs
+            if not force:
+                force = resolved.force
 
     # Resolve declared dependencies and inject missing args
     implicit_reports: list[TaskReport] = []

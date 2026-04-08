@@ -196,6 +196,16 @@ parser_download.add_argument(
     action="store_true",
     help="force re-download even if data already exists in cache",
 )
+parser_download.add_argument(
+    "--update",
+    action="store_true",
+    help="smart update mode: auto-detect strategy and resolve incremental download kwargs",
+)
+parser_download.add_argument(
+    "--since",
+    metavar="YYYY-MM-DD",
+    help="explicit start date for incremental strategies (overrides cache query)",
+)
 add_verbosity_args(parser_download)
 
 parser_process = subparsers.add_parser(
@@ -727,6 +737,8 @@ if __name__ == "__main__":
         templates = list(args.template or [])
         verbosity = get_verbosity(args)
         report_file = getattr(args, "report", None)
+        smart_update = getattr(args, "update", False)
+        since = getattr(args, "since", None)
 
         if plan_file and templates:
             print(
@@ -760,6 +772,15 @@ if __name__ == "__main__":
             )
         else:
             download_kwargs = _parse_download_args(args.arg, args.calendar)
+
+            # Mutual exclusivity: --update vs --arg refdate=...
+            if smart_update and "refdate" in download_kwargs:
+                print(
+                    "Error: --update and --arg refdate=... are mutually exclusive",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+
             if verbosity != Verbosity.QUIET:
                 print(
                     "Status legend: .(passed) F(failed) E(error) "
@@ -769,8 +790,11 @@ if __name__ == "__main__":
                 download_marketdata(
                     template,
                     force=args.force,
+                    smart_update=smart_update,
+                    calendar=args.calendar,
                     verbosity=verbosity,
                     report_file=report_file,
+                    **({"since": since} if since else {}),
                     **download_kwargs,
                 )
     elif args.command == "process":

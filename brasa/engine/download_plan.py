@@ -47,11 +47,13 @@ class DownloadPlanDefaults:
         refdate: DateRangeParser string (e.g. "2026-01-01:", "2026").
         calendar: Business calendar name for date parsing (default: "B3").
         force: Force redownload flag (default: False).
+        smart_update: Enable smart update mode (default: False).
     """
 
     refdate: str | None = None
     calendar: str = "B3"
     force: bool = False
+    smart_update: bool = False
 
 
 @dataclass
@@ -62,11 +64,13 @@ class DownloadPlanTask:
         template: Template name to download.
         args: Per-task arguments that override defaults.
         force: Force redownload flag for this task.
+        smart_update: Enable smart update mode for this task (overrides defaults).
     """
 
     template: str
     args: dict[str, Any] = field(default_factory=dict)
     force: bool = False
+    smart_update: bool | None = None
 
 
 @dataclass
@@ -110,18 +114,23 @@ class DownloadPlan:
             force=bool(
                 defaults_data.get("force", defaults_data.get("reprocess", False))
             ),
+            smart_update=bool(defaults_data.get("smart_update", False)),
         )
 
         tasks = []
         for i, task_data in enumerate(data["tasks"]):
             if not isinstance(task_data, dict) or "template" not in task_data:
                 raise ValueError(f"Task {i} must be a mapping with a 'template' key")
+            task_smart_update = task_data.get("smart_update")
             task = DownloadPlanTask(
                 template=str(task_data["template"]),
                 args=dict(task_data.get("args", {}) or {}),
                 force=bool(
                     task_data.get("force", task_data.get("reprocess", defaults.force))
                 ),
+                smart_update=bool(task_smart_update)
+                if task_smart_update is not None
+                else None,
             )
             tasks.append(task)
 
@@ -448,6 +457,8 @@ def _execute_task(
     task: DownloadPlanTask,
     resolved_args: dict,
     verbosity: Verbosity,
+    plan_calendar: str = "B3",
+    plan_smart_update: bool = False,
 ) -> TaskReport:
     """Run a single plan task and return its TaskReport.
 
@@ -457,6 +468,8 @@ def _execute_task(
         task: The plan task to execute.
         resolved_args: Fully resolved keyword arguments (may include refdate).
         verbosity: Output verbosity level.
+        plan_calendar: Default calendar from plan defaults.
+        plan_smart_update: Default smart_update from plan defaults.
 
     Returns:
         A TaskReport (may contain an ERROR result on unexpected exceptions).
@@ -464,10 +477,17 @@ def _execute_task(
     from .api import download_marketdata
     from .reporting import create_task_result_from_exception
 
+    # Determine smart_update: task override wins, then plan default
+    smart_update = (
+        task.smart_update if task.smart_update is not None else plan_smart_update
+    )
+
     try:
         return download_marketdata(
             task.template,
             force=task.force,
+            smart_update=smart_update,
+            calendar=plan_calendar,
             verbosity=verbosity,
             **resolved_args,
         )
@@ -562,7 +582,11 @@ def execute_download_plan(
 
         # 5. Execute — continue on any error
         plan_report.task_reports[task.template] = _execute_task(
-            task, resolved_args, verbosity
+            task,
+            resolved_args,
+            verbosity,
+            plan_calendar=plan.defaults.calendar,
+            plan_smart_update=plan.defaults.smart_update,
         )
         # Collect dependency reports from the task
         task_report = plan_report.task_reports[task.template]
