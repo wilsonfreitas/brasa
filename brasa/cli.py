@@ -217,6 +217,11 @@ parser_process.add_argument(
     action="store_true",
     help="reprocess all files, even if already processed",
 )
+parser_process.add_argument(
+    "--show-skipped",
+    action="store_true",
+    help="show skipped (cached) entries in progress display; default: hidden",
+)
 add_verbosity_args(parser_process)
 
 parser_create_views = subparsers.add_parser(
@@ -814,6 +819,7 @@ if __name__ == "__main__":
                     reprocess=args.reprocess,
                     verbosity=verbosity,
                     report_file=report_file,
+                    show_skipped=args.show_skipped,
                 )
     elif args.command == "create-views":
         layers = [args.layer] if hasattr(args, "layer") and args.layer else None

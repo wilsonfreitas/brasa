@@ -174,6 +174,33 @@ class TestProcessCommand:
         args = cli.parser.parse_args(["process", "--reprocess", "b3-cotahist-daily"])
         assert args.reprocess is True
 
+    def test_process_command_show_skipped_default_false(self) -> None:
+        """Test that --show-skipped defaults to False."""
+        args = cli.parser.parse_args(["process", "b3-cotahist-daily"])
+        assert args.show_skipped is False
+
+    def test_process_command_show_skipped_flag(self) -> None:
+        """Test that --show-skipped flag is parsed correctly."""
+        args = cli.parser.parse_args(["process", "--show-skipped", "b3-cotahist-daily"])
+        assert args.show_skipped is True
+
+    def test_process_command_show_skipped_with_reprocess(self) -> None:
+        """Test that --show-skipped and --reprocess work together."""
+        args = cli.parser.parse_args(
+            ["process", "--reprocess", "--show-skipped", "b3-cotahist-daily"]
+        )
+        assert args.reprocess is True
+        assert args.show_skipped is True
+
+
+class TestDownloadCommandShowSkipped:
+    """Tests to verify --show-skipped is NOT on download command."""
+
+    def test_download_command_no_show_skipped_flag(self) -> None:
+        """Test that --show-skipped flag does NOT exist on download command."""
+        with pytest.raises(SystemExit):
+            cli.parser.parse_args(["download", "--show-skipped", "b3-cotahist-daily"])
+
 
 class TestListUnprocessedCommand:
     """Tests for the list-unprocessed CLI command parser."""

@@ -288,6 +288,7 @@ class ProgressDisplay:
         template_name: str,
         verbosity: Verbosity = Verbosity.NORMAL,
         console: Console | None = None,
+        show_skipped: bool = True,
     ) -> None:
         """Initialize progress display.
 
@@ -297,6 +298,7 @@ class ProgressDisplay:
             template_name: Name of the template being processed.
             verbosity: Output verbosity level.
             console: Rich console for output (uses stderr by default).
+            show_skipped: If False, suppress S symbols in NORMAL verbosity.
         """
         self.total = total
         self.current = 0
@@ -306,6 +308,8 @@ class ProgressDisplay:
         self.console = console or Console(stderr=True)
         self._line_length = 0
         self._start_time = datetime.now()
+        self.show_skipped = show_skipped
+        self._symbols_printed = 0
 
     def start(self) -> None:
         """Start the progress display."""
@@ -331,18 +335,28 @@ class ProgressDisplay:
             return
 
         if self.verbosity == Verbosity.NORMAL:
-            symbol = Text(result.status.symbol, style=result.status.color)
-            self.console.print(symbol, end="")
-            self._line_length += 1
+            # Show symbol only if not suppressed (S when not show_skipped)
+            should_show_symbol = not (
+                result.status == TaskStatus.SKIPPED and not self.show_skipped
+            )
 
-            # Show counter every 50 symbols or at the end
-            if self.current % 50 == 0 or self.current == self.total:
+            if should_show_symbol:
+                symbol = Text(result.status.symbol, style=result.status.color)
+                self.console.print(symbol, end="")
+                self._line_length += 1
+                self._symbols_printed += 1
+
+            # Show counter every 50 printed symbols or at the end
+            at_50_boundary = (
+                self._symbols_printed > 0 and self._symbols_printed % 50 == 0
+            )
+            if at_50_boundary or self.current == self.total:
                 counter = f" [{self.current}/{self.total}]"
                 self.console.print(counter, end="")
                 self._line_length += len(counter)
 
                 # Newline every 50 symbols
-                if self.current % 50 == 0 and self.current < self.total:
+                if at_50_boundary and self.current < self.total:
                     self.console.print()
                     # Indent continuation lines
                     indent = " " * len(
@@ -409,6 +423,7 @@ class TaskReport:
         self._progress: ProgressDisplay | None = None
         self._captured_warnings: list[tuple[str, TaskResult | None]] = []
         self.dependency_reports: list[TaskReport] = []
+        self.prefiltered_skip_count: int = 0
 
     @property
     def success(self) -> bool:
@@ -417,19 +432,29 @@ class TaskReport:
             r.status in (TaskStatus.ERROR, TaskStatus.FAILED) for r in self.results
         )
 
-    def start(self, total: int) -> None:
+    def start(
+        self, total: int, prefiltered_skip_count: int = 0, show_skipped: bool = True
+    ) -> None:
         """Start collecting results.
 
         Args:
             total: Total number of tasks to execute.
+            prefiltered_skip_count: Number of items pre-filtered (cached) before processing.
+            show_skipped: If False, suppress S symbols in progress display.
         """
         self._start_time = datetime.now()
+        self.prefiltered_skip_count = prefiltered_skip_count
+
+        # In VERBOSE mode, always show skipped items
+        effective_show_skipped = show_skipped or (self.verbosity == Verbosity.VERBOSE)
+
         self._progress = ProgressDisplay(
             total=total,
             operation=self.operation,
             template_name=self.template_name,
             verbosity=self.verbosity,
             console=self.console,
+            show_skipped=effective_show_skipped,
         )
         self._progress.start()
 
@@ -643,6 +668,10 @@ class TaskReport:
             time_str = f"{minutes}m {seconds:.1f}s"
         else:
             time_str = f"{elapsed:.1f}s"
+
+        # Add cached count if present
+        if self.prefiltered_skip_count:
+            parts.append(f"[dim]{self.prefiltered_skip_count} cached[/dim]")
 
         summary = (
             f"{self.template_name} {self.operation}: {', '.join(parts)} in {time_str}"

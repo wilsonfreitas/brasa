@@ -400,6 +400,34 @@ def _touch_output_marker(cache: CacheManager, template, report: "TaskReport") ->
             logger.debug("Failed to touch output marker: %s", exc)
 
 
+def _count_processed_items(
+    template_name: str, meta_id: str | None, cache: CacheManager
+) -> int:
+    """Count already-processed items in cache.
+
+    Args:
+        template_name: Name of the template.
+        meta_id: If provided, count only this specific cache entry.
+        cache: CacheManager instance.
+
+    Returns:
+        Number of processed items.
+    """
+    with closing(cache.meta_db_connection) as conn, conn:
+        c = conn.cursor()
+        if meta_id is not None:
+            c.execute(
+                "select count(*) from cache_metadata where template = ? and id = ? and processed_files = 'true'",
+                (template_name, meta_id),
+            )
+        else:
+            c.execute(
+                "select count(*) from cache_metadata where template = ? and processed_files = 'true'",
+                (template_name,),
+            )
+        return c.fetchone()[0]
+
+
 def process_marketdata(
     template_name: str,
     reprocess: bool = False,
@@ -407,6 +435,7 @@ def process_marketdata(
     report_file: str | Path | None = None,
     max_workers: int = 4,
     meta_id: str | None = None,
+    show_skipped: bool = False,
 ) -> TaskReport:
     """Process all downloaded data for a template.
 
@@ -421,6 +450,7 @@ def process_marketdata(
         report_file: Optional path to save the report (JSON or TXT).
         max_workers: Maximum number of parallel workers for processing.
         meta_id: If provided, process only the cache entry with this ID.
+        show_skipped: If False, suppress S symbols in progress display.
 
     Returns:
         TaskReport with results of all processing operations.
@@ -443,12 +473,21 @@ def process_marketdata(
             )
         rows = c.fetchall()
 
+    # Count already-processed items (to be skipped unless reprocess=True)
+    prefiltered_skip_count = (
+        0 if reprocess else _count_processed_items(template_name, meta_id, cache)
+    )
+
     report = TaskReport(
         operation="process",
         template_name=template_name,
         verbosity=verbosity,
     )
-    report.start(total=len(rows))
+    report.start(
+        total=len(rows),
+        prefiltered_skip_count=prefiltered_skip_count,
+        show_skipped=show_skipped,
+    )
 
     # Lock for serializing SQLite writes
     db_lock = threading.Lock()
