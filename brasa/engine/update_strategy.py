@@ -189,7 +189,7 @@ def _resolve_incremental_date(
 
 def _resolve_incremental_date_range(
     template_name: str,
-    calendar: str = "B3",
+    calendar: str = "B3",  # noqa: ARG001
     since: str | None = None,
     overlap_days: int = DEFAULT_OVERLAP_DAYS,
 ) -> ResolvedStrategy:
@@ -224,8 +224,8 @@ def _resolve_incremental_date_range(
         )
 
     kwargs = {
-        "start": DateRange(start=start_obj, end=end_obj, calendar=calendar),
-        "end": DateRange(start=start_obj, end=end_obj, calendar=calendar),
+        "start": start_obj.date() if isinstance(start_obj, datetime) else start_obj,
+        "end": end_obj.date() if isinstance(end_obj, datetime) else end_obj,
     }
     return ResolvedStrategy(
         strategy=UpdateStrategy.INCREMENTAL_DATE_RANGE, kwargs=kwargs, force=False
@@ -367,9 +367,10 @@ def _get_last_downloaded_date(template_name: str) -> date | None:
 
 
 def _get_last_downloaded_end_date(template_name: str) -> date | None:
-    """Get the min 'end' date from cache_metadata for a template.
+    """Get the max 'end' date from cache_metadata for a template.
 
-    Uses min() across all arg combos (simple and safe).
+    Uses max() to find the furthest point downloaded so far, so the next
+    incremental update continues from there (minus overlap buffer).
     Deserializes download_args in Python, not SQL.
     Returns None if no entries found.
     """
@@ -378,28 +379,27 @@ def _get_last_downloaded_end_date(template_name: str) -> date | None:
     cache = CacheManager()
     with closing(cache.meta_db_connection) as conn:
         c = conn.cursor()
+        # Use SQL MAX on the JSON field to avoid scanning all rows in Python.
+        # json_extract returns the value as a string; MAX() gives lexicographic
+        # max which works correctly for ISO-8601 datetime strings.
         c.execute(
-            "SELECT download_args FROM cache_metadata WHERE template = ? "
-            "ORDER BY ROWID DESC LIMIT 100",
+            "SELECT MAX(json_extract(download_args, '$.end')) "
+            "FROM cache_metadata WHERE template = ?",
             (template_name,),
         )
-        rows = c.fetchall()
+        row = c.fetchone()
 
-    min_end = None
-    for (download_args_json,) in rows:
-        try:
-            args = DownloadArgs.from_json(download_args_json)
-            if "end" in args:
-                # Extract date from canonical form
-                end_val = args.get_object("end")
-                if isinstance(end_val, datetime):
-                    end_date = end_val.date()
-                    if min_end is None or end_date < min_end:
-                        min_end = end_date
-        except (json.JSONDecodeError, ValueError):
-            continue
+    if not row or row[0] is None:
+        return None
 
-    return min_end
+    try:
+        end_val = DownloadArgs.from_json(f'{{"end": "{row[0]}"}}').get_object("end")
+        if isinstance(end_val, datetime):
+            return end_val.date()
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    return None
 
 
 def _batch_check_cached(template_name: str, combos: list[dict]) -> set[str]:

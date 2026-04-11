@@ -239,7 +239,7 @@ def _build_result_skipped(
     return result
 
 
-def download_marketdata(  # noqa: PLR0915
+def download_marketdata(
     template_name: str,
     force: bool = False,
     smart_update: bool = False,
@@ -284,21 +284,21 @@ def download_marketdata(  # noqa: PLR0915
     if smart_update:
         # Extract since if provided (comes from CLI --since)
         since = kwargs.pop("since", None)
-        if not kwargs:  # Smart update only if no other kwargs provided
-            resolved = resolve_update(template_name, calendar=calendar, since=since)
-            if resolved.strategy == UpdateStrategy.NO_AUTO_UPDATE:
-                # Return empty report
-                report = TaskReport(
-                    operation="download",
-                    template_name=template_name,
-                    verbosity=verbosity,
-                )
-                report.start(total=0)
-                report.finish()
-                return report
-            kwargs = resolved.kwargs
-            if not force:
-                force = resolved.force
+        resolved = resolve_update(template_name, calendar=calendar, since=since)
+        if resolved.strategy == UpdateStrategy.NO_AUTO_UPDATE:
+            # Return empty report
+            report = TaskReport(
+                operation="download",
+                template_name=template_name,
+                verbosity=verbosity,
+            )
+            report.start(total=0)
+            report.finish()
+            return report
+        # Merge: resolved date kwargs + user-provided kwargs (user wins on conflict)
+        kwargs = {**resolved.kwargs, **kwargs}
+        if not force:
+            force = resolved.force
 
     # Resolve declared dependencies and inject missing args
     implicit_reports: list[TaskReport] = []
