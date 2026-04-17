@@ -38,39 +38,77 @@ issue's description under a `## Design` section.
 
 ## Phase 2 — Brainstorm (delegated)
 
-Invoke the `superpowers:brainstorming` skill and follow its entire flow:
+Invoke the `superpowers:brainstorming` skill. Follow its entire flow:
 - Explore project context (files, docs, recent commits).
 - Clarifying questions, one at a time.
 - 2–3 candidate approaches with trade-offs and a recommendation.
 - Incremental design sections with per-section user approval.
 
-**Override the "Write design doc" step.** Do NOT write to `docs/superpowers/specs/*.md`. Instead:
+**CRITICAL: Override the "Write design doc" step — this is MANDATORY.**
 
-1. Fetch the current issue description with `mcp__plugin_linear_linear__get_issue`.
-2. Using the Section Update Rules below, replace or insert the `## Design` section with the
-   approved design content.
-3. Save via `mcp__plugin_linear_linear__save_issue(id=WIL-X, description=<new>)`.
+When `superpowers:brainstorming` reaches its "Write design doc" step (the step where it tries to save the approved design to `docs/superpowers/specs/*.md`), **DO NOT LET IT WRITE TO DISK**. Instead:
 
-Then run the superpowers spec self-review loop — read the saved Design from the issue, check for
-placeholders, internal consistency, scope, ambiguity. Fix inline by calling `save_issue` again.
+### Mandatory Save-to-Linear Flow
+
+**When superpowers:brainstorming says "Writing design doc" or similar:**
+
+1. **Get the approved design content** from superpowers:brainstorming (the full text that was just approved by the user).
+2. **Fetch current issue description:**
+   ```
+   mcp__plugin_linear_linear__get_issue(id=WIL-X)
+   ```
+3. **Parse description by level-2 headers** — identify `## Design` block (if exists) and `## Implementation Plan` block (if exists).
+4. **Construct new description** using Section Update Rules (see below):
+   - Keep intro text (above first `##`)
+   - Replace or insert `## Design` with approved content
+   - Preserve `## Implementation Plan` if it exists
+5. **Save to Linear issue:**
+   ```
+   mcp__plugin_linear_linear__save_issue(
+     id=WIL-X,
+     description=<new-description-with-design>
+   )
+   ```
+
+### Spec Self-Review (after save to Linear)
+
+Read the saved `## Design` from the issue and check for:
+- Placeholder scan: Any "TBD", "TODO", incomplete sections?
+- Internal consistency: Do sections contradict?
+- Scope: Focused enough for single plan, or needs decomposition?
+- Ambiguity: Any requirement interpretable two ways?
+
+If issues found, fix inline by calling `save_issue` again.
+
+**SUCCESS CONDITION:** `## Design` section exists in Linear issue WIL-X with approved, reviewed content. No files written to `docs/superpowers/specs/`.
 
 ---
 
 ## Phase 3 — User Review Gate
 
-Tell the user: "Design saved to WIL-X. Review it in Linear and let me know if you want changes."
+**After Design is saved to Linear issue WIL-X:**
 
-Wait for their response. If they request changes, apply them and re-run the self-review. Only
-continue once they approve.
+Tell the user:
+> "Design saved to WIL-X. Review it in Linear and let me know if you want changes."
+
+Wait for their response:
+- If they request changes: fetch the issue, edit the `## Design` section inline using `save_issue`, re-run spec self-review, ask for approval again.
+- If they approve: proceed to Phase 4.
 
 ---
 
 ## Phase 4 — Label Conversion
 
-If the issue's current label is `Idea`, ask: "What label should this become now — Feature,
-Improvement, or Bug?" Update the label via `mcp__plugin_linear_linear__save_issue`.
+After Design is approved:
 
-If the label is already `Feature` / `Improvement` / `Bug`, leave it alone.
+1. Check the issue's current label from the last `get_issue` call.
+2. If label is `Idea`:
+   - Ask: "What label should this become now — Feature, Improvement, or Bug?"
+   - Call `save_issue(id=WIL-X, labels=[chosen_label])` to update it.
+3. If label is already `Feature`, `Improvement`, or `Bug`:
+   - Leave it unchanged.
+
+Confirm to the user: "Label updated to [label]."
 
 ---
 
