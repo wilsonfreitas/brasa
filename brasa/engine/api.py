@@ -474,7 +474,7 @@ def _get_stale_extra_key_ids(template_name: str, cache: CacheManager) -> set[str
     return stale
 
 
-def process_marketdata(
+def process_marketdata(  # noqa: PLR0915
     template_name: str,
     reprocess: bool = False,
     verbosity: Verbosity = Verbosity.NORMAL,
@@ -518,6 +518,14 @@ def process_marketdata(
                 "select id from cache_metadata where template = ?", (template_name,)
             )
         rows = c.fetchall()
+
+    # Skip entries superseded by a newer processed snapshot for the same
+    # (template, download_args). Only applies when processing the full
+    # template — a user-supplied meta_id is always honoured.
+    if meta_id is None:
+        stale_ids = _get_stale_extra_key_ids(template_name, cache)
+        if stale_ids:
+            rows = [r for r in rows if r[0] not in stale_ids]
 
     # Count already-processed items (to be skipped unless reprocess=True)
     prefiltered_skip_count = (
