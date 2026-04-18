@@ -24,10 +24,9 @@ tasks:
       code: [4389, 1178, 432, 433, 189] # CDI, SELIC, SETA, IPCA, IGPM
 
   # no refdate needed — template doesn't declare it
-  - template: b3-listed-stock-etfs
-  - template: b3-listed-fixed-income-etfs
-  - template: b3-listed-reits
-  - template: b3-listed-cripto-etfs
+  - template: b3-listed-funds
+    args:
+      typeFund: [ETF, ETF-CRIPTO, ETF-RF, ETF-FII]
   - template: b3-indexes-composition
 
   # dynamic symbol resolution

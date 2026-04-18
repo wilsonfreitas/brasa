@@ -94,12 +94,10 @@ brasa.process_marketdata("b3-indexes-theoretical-portfolio")
 # brasa.process_etl("b3-companies-stock-dividends")
 # brasa.process_etl("b3-companies-subscriptions")
 
-brasa.download_marketdata("b3-listed-fixed-income-etfs")
-brasa.process_marketdata("b3-listed-fixed-income-etfs")
-brasa.download_marketdata("b3-listed-stock-etfs")
-brasa.process_marketdata("b3-listed-stock-etfs")
-brasa.download_marketdata("b3-listed-reits")
-brasa.process_marketdata("b3-listed-reits")
+brasa.download_marketdata(
+    "b3-listed-funds", typeFund=["ETF", "ETF-CRIPTO", "ETF-RF", "ETF-FII"]
+)
+brasa.process_marketdata("b3-listed-funds")
 brasa.process_etl("b3-listed-funds-consolidated")
 
 brasa.process_etl("bcb-currency-data")

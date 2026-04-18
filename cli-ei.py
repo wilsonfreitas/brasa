@@ -65,15 +65,11 @@ period = DateRange(
 #     "b3-indexes-current-portfolio", index=brasa.get_symbols("index")
 # )
 
-# brasa.download_marketdata("b3-listed-fixed-income-etfs")
-# brasa.download_marketdata("b3-listed-reits")
-# brasa.download_marketdata("b3-listed-stock-etfs")
-# brasa.download_marketdata("b3-listed-cripto-etfs")
+# brasa.download_marketdata(
+#     "b3-listed-funds", typeFund=["ETF", "ETF-CRIPTO", "ETF-RF", "ETF-FII"]
+# )
 
-# brasa.process_marketdata("b3-listed-stock-etfs", reprocess=True)
-# brasa.process_marketdata("b3-listed-reits", reprocess=True)
-# brasa.process_marketdata("b3-listed-fixed-income-etfs", reprocess=True)
-# brasa.process_marketdata("b3-listed-cripto-etfs", reprocess=True)
+# brasa.process_marketdata("b3-listed-funds", reprocess=True)
 
 # cvm-companies-registration
 # brasa.download_marketdata("cvm-companies-registration")
