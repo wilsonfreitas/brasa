@@ -135,7 +135,7 @@ These are the most commonly used datasets. Run the discovery queries above to se
 | `input.b3-company-details` | Detailed company info | issuing_company |
 | `input.b3-company-info-info` | Company general info | code_cvm |
 | `input.b3-company-info-cash_dividends` | Cash dividends | code_cvm |
-| `staging.b3-listed-funds` | Listed funds (ETF, FII) | refdate, symbol, fund_type |
+| `staging.b3-listed-funds` | Listed funds (ETF, FII) | symbol, fund_type |
 | `input.b3-listed-stock-etfs` | Stock ETFs registry | symbol |
 | `input.b3-listed-fixed-income-etfs` | Fixed income ETFs | symbol |
 | `input.b3-listed-reits` | REITs (FIIs) | symbol |

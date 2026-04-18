@@ -884,7 +884,7 @@ def create_b3_listed_funds(handler: MarketDataETL):
     """Create consolidated B3 listed funds dataset.
 
     .. deprecated::
-        This function is deprecated. The b3-listed-funds template now uses
+        This function is deprecated. The b3-listed-funds-consolidated template now uses
         pipeline-based ETL with the concat_datasets step. This function is
         kept for backward compatibility only.
 
@@ -897,7 +897,7 @@ def create_b3_listed_funds(handler: MarketDataETL):
 
     warnings.warn(
         "create_b3_listed_funds is deprecated. "
-        "The b3-listed-funds template now uses pipeline-based ETL.",
+        "The b3-listed-funds-consolidated template now uses pipeline-based ETL.",
         DeprecationWarning,
         stacklevel=2,
     )

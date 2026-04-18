@@ -99,7 +99,7 @@ brasa.download_marketdata("b3-listed-stock-etfs")
 brasa.process_marketdata("b3-listed-stock-etfs")
 brasa.download_marketdata("b3-listed-reits")
 brasa.process_marketdata("b3-listed-reits")
-brasa.process_etl("b3-listed-funds")
+brasa.process_etl("b3-listed-funds-consolidated")
 
 brasa.process_etl("bcb-currency-data")
 brasa.process_etl("bcb-currencies-returns")

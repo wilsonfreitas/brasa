@@ -949,10 +949,14 @@ def _get_symbols_by_index(index, end_month=None) -> list[str]:
 
 
 def _get_funds_symbols(type: str) -> list[str]:
-    tb = get_dataset("b3-listed-funds").scanner(columns=["refdate"]).to_table()
+    tb = (
+        get_dataset("b3-listed-funds-consolidated")
+        .scanner(columns=["refdate"])
+        .to_table()
+    )
     max_date = pyarrow.compute.max(tb.column("refdate"))
     symbols = (
-        get_dataset("b3-listed-funds")
+        get_dataset("b3-listed-funds-consolidated")
         .filter(pc.field("refdate") == max_date)
         .filter(pc.field("fund_type") == type)
         .scanner(columns=["symbol"])

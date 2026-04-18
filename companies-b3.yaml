@@ -1,0 +1,15 @@
+# companies-b3.yaml
+name: companies-b3
+description: Extracts company information from B3 (Brazilian Stock Exchange) and CVM (Brazilian Securities Commission) databases, including registration details, company information, and cash dividends. The data is collected for a specified reference date and calendar, with an option to reprocess existing data if needed.
+
+tasks:
+  # dynamic symbol resolution
+  - template: cvm-companies-registration
+
+  - template: b3-companies-capital
+
+  - template: b3-company-info
+
+  - template: b3-company-details
+
+  - template: b3-cash-dividends
