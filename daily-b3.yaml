@@ -1,0 +1,40 @@
+# daily-b3.yaml
+name: daily-b3
+description: Daily B3 market data download
+
+defaults: # merged into every task
+  calendar: B3
+  force: false
+  smart_update: true
+
+tasks:
+  # refdate comes from defaults
+  - template: b3-bvbg087
+  - template: b3-bvbg086
+  - template: b3-bvbg028
+  - template: b3-cotahist-daily
+  - template: b3-otc-trade-information
+  - template: b3-economic-indicators-fwf
+  - template: b3-trades-intraday
+  - template: b3-equity-options
+
+  # bcb SGS data
+  - template: bcb-sgs
+    args:
+      code: [4389, 1178, 432, 433, 189] # CDI, SELIC, SETA, IPCA, IGPM
+
+  # no refdate needed — template doesn't declare it
+  - template: b3-listed-stock-etfs
+  - template: b3-listed-fixed-income-etfs
+  - template: b3-listed-reits
+  - template: b3-listed-cripto-etfs
+  - template: b3-indexes-composition
+
+  # dynamic symbol resolution
+  - template: b3-indexes-theoretical-portfolio
+  - template: b3-indexes-current-portfolio
+
+  # per-task args with integer range and force override
+  - template: b3-indexes-historical-prices
+    args:
+      year: "2026"
