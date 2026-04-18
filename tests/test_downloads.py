@@ -58,6 +58,29 @@ def test_download_marketdata_b3_url_encoded_with_null_argument():
     _download_marketdata(meta, codeCVM="24910")
     assert len(meta.downloaded_files) == 1
 
+
+@pytest.mark.integration
+def test_zip_download_checksum_is_stable_across_requests():
+    """Two downloads of the same B3 zip must produce the same checksum,
+    even though B3 regenerates the outer container between requests.
+
+    The first call populates the raw folder. The second call is expected
+    to raise DuplicatedFolderException because the content-based checksum
+    matches — which is exactly what proves stability.
+    """
+    from brasa.engine.exceptions import DuplicatedFolderException
+
+    meta1 = CacheMetadata("b3-bvbg086")
+    _download_marketdata(meta1, refdate=datetime(2024, 3, 28))
+    first_checksum = meta1.download_checksum
+    assert first_checksum != ""
+
+    time.sleep(5)
+    meta2 = CacheMetadata("b3-bvbg086")
+    with pytest.raises(DuplicatedFolderException):
+        _download_marketdata(meta2, refdate=datetime(2024, 3, 28))
+    assert meta2.download_checksum == first_checksum
+
     # b3-cash-dividends with no matching records now raises InvalidContentException (not null fp)
     # time.sleep(5)
     # meta = CacheMetadata("b3-cash-dividends")
