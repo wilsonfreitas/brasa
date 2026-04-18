@@ -1,0 +1,69 @@
+id: b3-listed-funds
+description: Listagem de fundos negociados na B3 por tipo (ETF, ETF-CRIPTO, ETF-RF, ETF-FII)
+
+downloader:
+  function: brasa.downloaders.b3_paged_url_encoded_download
+  url: https://sistemaswebb3-listados.b3.com.br/fundsListedProxy/Search/GetListFunds
+  format: json
+  download_delay: 1
+  retry_attempts: 15
+  retry_delay: 3.0
+  retry_backoff: 2.0
+  args:
+    language: pt-br
+    typeFund: ~
+    pageNumber: 1
+    pageSize: 999
+  extra-key: date
+
+reader:
+  locale: pt
+  pipeline:
+    - step: read_json
+      path: results
+    - step: add_column
+      from:
+        where: download_args
+        key: typeFund
+      name: type
+    - step: set_column
+      value: -1
+      name: id
+      only_if_missing: true
+    - step: add_column
+      from:
+        where: extra_key
+      name: refdate
+    - step: rename_columns
+      mapping:
+        id: fund_id
+        fundName: fund_name
+        tradingName: trading_name
+        companyName: trading_name
+    - step: select_fields
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: input
+  partitioning: [refdate, type]
+
+fields:
+  - name: fund_id
+    description: ID
+    type: string
+  - name: type
+    description: Tipo de Fundo
+    type: string
+  - name: acronym
+    description: Acrônimo — símbolo de negociação sem os números finais
+    type: string
+  - name: fund_name
+    description: Nome do Fundo
+    type: string
+  - name: trading_name
+    description: Nome de Negociação
+    type: string
+  - name: refdate
+    description: Data de Referência
+    type: date
