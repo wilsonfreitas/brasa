@@ -159,10 +159,14 @@ def test_migration_happy_path(fake_cache):
 
 
 def test_migration_is_idempotent(fake_cache):
+    import time
+
     cache = fake_cache["cache"]
 
     first = _run_script(cache)
     assert first.returncode == 0, first.stderr
+
+    time.sleep(1.1)  # Ensure different second for backup timestamp
 
     second = _run_script(cache)
     assert second.returncode == 0, second.stderr
