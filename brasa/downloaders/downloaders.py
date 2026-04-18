@@ -9,7 +9,7 @@ from typing import IO
 import bizdays
 import pytz
 import requests
-from bcb import sgs
+from bcb import PTAX, sgs
 from bcb.http import _CLIENT
 
 from brasa.engine.exceptions import DownloadException, InvalidContentException
@@ -173,6 +173,29 @@ class BCBSGSDownloader:
             return None
         temp = io.BytesIO(bytes(text, "utf8"))
         return temp
+
+
+class BCBCurrencyDownloader:
+    def __init__(self, **kwargs):
+        self.args = kwargs
+
+    def download(self) -> IO | None:
+        try:
+            ptax = PTAX()
+            endpoint = ptax.get_endpoint("CotacaoMoedaPeriodo")
+            df = (
+                endpoint.query()
+                .parameters(
+                    moeda=self.args["currency"],
+                    dataInicial=self.args["start"].strftime("%m/%d/%Y"),
+                    dataFinalCotacao=self.args["end"].strftime("%m/%d/%Y"),
+                )
+                .collect()
+            )
+        except Exception:
+            return None
+        text = df.to_json(orient="records", date_format="iso")
+        return io.BytesIO(text.encode("utf8"))
 
 
 class VnaAnbimaURLDownloader(SimpleDownloader):
