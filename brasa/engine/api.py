@@ -428,6 +428,52 @@ def _count_processed_items(
         return c.fetchone()[0]
 
 
+def _get_stale_extra_key_ids(template_name: str, cache: CacheManager) -> set[str]:
+    """Find cache entry IDs that are stale within their (template, args) group.
+
+    An entry is stale when, for its ``(template, download_args)`` group, a
+    *newer* entry (by ``extra_key`` ordering, restricted to non-empty
+    ``extra_key`` values) exists **and** is already processed. Entries with
+    an empty ``extra_key`` (pre-``extra-key: date`` migration) are never
+    flagged and never used as newer-references.
+
+    Args:
+        template_name: Template whose cache rows are under consideration.
+        cache: CacheManager instance.
+
+    Returns:
+        Set of cache entry IDs that should be skipped by ``process_marketdata``
+        because a newer processed snapshot already owns the output partition.
+    """
+    from collections import defaultdict
+
+    stale: set[str] = set()
+    with closing(cache.meta_db_connection) as conn, conn:
+        c = conn.cursor()
+        c.execute(
+            "select id, download_args, extra_key, processed_files "
+            "from cache_metadata where template = ? and extra_key != ''",
+            (template_name,),
+        )
+        rows = c.fetchall()
+
+    groups: dict[str, list[tuple[str, str, bool]]] = defaultdict(list)
+    for row_id, dargs, ekey, processed_raw in rows:
+        is_processed = processed_raw == "true" or processed_raw is True
+        groups[dargs].append((row_id, ekey, is_processed))
+
+    for _dargs, items in groups.items():
+        processed_keys = [ekey for _id, ekey, proc in items if proc]
+        if not processed_keys:
+            continue
+        newest_processed_key = max(processed_keys)
+        for row_id, ekey, _proc in items:
+            if ekey < newest_processed_key:
+                stale.add(row_id)
+
+    return stale
+
+
 def process_marketdata(
     template_name: str,
     reprocess: bool = False,
