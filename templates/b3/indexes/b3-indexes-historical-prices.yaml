@@ -23,6 +23,7 @@ downloader:
     language: pt-br
     year: ~
     index: ~
+  extra-key: date
 reader:
   locale: pt
   encoding: UTF-8
