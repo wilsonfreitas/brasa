@@ -109,9 +109,9 @@ class ConcatDatasetsStep(PipelineStep):
         # Concatenate all columns from multiple datasets
         - step: concat_datasets
           inputs:
-            - b3-listed-fixed-income-etfs
-            - b3-listed-stock-etfs
-            - b3-listed-reits
+            - dataset-a
+            - dataset-b
+            - dataset-c
           layer: input
 
         # Concatenate only specific columns
