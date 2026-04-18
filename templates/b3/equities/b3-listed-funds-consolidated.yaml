@@ -1,4 +1,4 @@
-id: b3-listed-funds
+id: b3-listed-funds-consolidated
 description: Fundos listados na B3, renda variável, renda fixa, imobiliários e criptomoedas
 etl:
   pipeline:
