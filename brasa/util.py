@@ -7,6 +7,7 @@ import re
 import warnings
 import zipfile
 from datetime import date, datetime, timedelta
+from io import BytesIO
 from pathlib import Path
 from tempfile import gettempdir
 from typing import IO, Any
@@ -130,6 +131,58 @@ def generate_checksum_from_file(fp: IO) -> str:
         file_hash.update(chunk)
     fp.seek(0)
     return file_hash.hexdigest()
+
+
+_ZIP_CHECKSUM_MAX_DEPTH = 8
+
+
+def _hash_zip_contents(fp: IO, depth: int) -> str:
+    """Recursive helper for generate_checksum_from_zip."""
+    if depth > _ZIP_CHECKSUM_MAX_DEPTH:
+        raise RecursionError(
+            f"zip nesting exceeds maximum depth ({_ZIP_CHECKSUM_MAX_DEPTH})"
+        )
+    file_hash = hashlib.md5()
+    with zipfile.ZipFile(fp) as zf:
+        for name in sorted(zf.namelist()):
+            file_hash.update(name.encode("utf-8"))
+            file_hash.update(b"\x00")
+            content = zf.read(name)
+            if zipfile.is_zipfile(BytesIO(content)):
+                inner = _hash_zip_contents(BytesIO(content), depth + 1)
+                file_hash.update(inner.encode("ascii"))
+            else:
+                file_hash.update(content)
+            file_hash.update(b"\x00")
+    return file_hash.hexdigest()
+
+
+def generate_checksum_from_zip(fp: IO) -> str:
+    """Content-based MD5 checksum of a zip archive's logical contents.
+
+    Recursively hashes (name + content) pairs in sorted order, so identical
+    logical payloads produce identical checksums regardless of
+    non-deterministic zip metadata (modification timestamps, OS byte, extra
+    fields, central-directory ordering). Inner zips are hashed structurally
+    via recursion (cap: 8 levels) rather than by their container bytes.
+
+    The file pointer is rewound to position 0 before returning (even on
+    error), so callers can still stream the original bytes downstream.
+
+    Args:
+        fp: A seekable file-like object positioned at the start of a zip.
+
+    Returns:
+        Hex-encoded MD5 digest of the logical contents.
+
+    Raises:
+        RecursionError: If zip nesting exceeds _ZIP_CHECKSUM_MAX_DEPTH.
+        zipfile.BadZipFile: If fp does not contain a valid zip.
+    """
+    try:
+        return _hash_zip_contents(fp, 0)
+    finally:
+        fp.seek(0)
 
 
 def unzip_file_to(fname, dest) -> list:
