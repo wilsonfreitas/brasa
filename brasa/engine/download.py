@@ -9,7 +9,12 @@ import gzip
 import shutil
 from pathlib import Path
 
-from brasa.util import DownloadArgs, generate_checksum_from_file, unzip_recursive
+from brasa.util import (
+    DownloadArgs,
+    generate_checksum_from_file,
+    generate_checksum_from_zip,
+    unzip_recursive,
+)
 
 from .cache import CacheManager, CacheMetadata
 from .exceptions import (
@@ -143,7 +148,10 @@ def _download_marketdata(meta: CacheMetadata, on_attempt_failure=None, **kwargs)
         raise DownloadException("Market data download failed: null file pointer")
     meta.response = response
 
-    checksum = generate_checksum_from_file(fp)
+    if template.downloader.format == "zip":
+        checksum = generate_checksum_from_zip(fp)
+    else:
+        checksum = generate_checksum_from_file(fp)
     meta.download_checksum = checksum
     man = CacheManager()
     if Path(man.cache_path(meta.download_folder)).exists():
