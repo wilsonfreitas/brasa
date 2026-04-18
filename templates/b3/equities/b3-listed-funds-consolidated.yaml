@@ -4,10 +4,7 @@ etl:
   pipeline:
     - step: concat_datasets
       inputs:
-        - b3-listed-fixed-income-etfs
-        - b3-listed-stock-etfs
-        - b3-listed-reits
-        - b3-listed-cripto-etfs
+        - b3-listed-funds
       layer: input
 
     - step: apply_lambda
@@ -26,8 +23,8 @@ etl:
       errors: coerce
 
 writer:
+  dataset: b3-listed-funds
   layer: staging
-  partitioning: [refdate]
 
 fields:
   - name: refdate
