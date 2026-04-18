@@ -59,8 +59,10 @@ question rather than guessing — but don't second-guess choices that are alread
 3. Build a `TodoWrite` list mirroring the plan's steps (one todo per top-level step). Sub-steps can
    live inside the same todo — you'll track them in your head and in the Execution log, not as
    separate todos, so the list stays readable.
-4. Move the issue to **In Progress** via `mcp__plugin_linear_linear__save_issue` (status only; don't touch
-   the description yet).
+4. Move the issue to **In Progress** via `mcp__plugin_linear_linear__save_issue` using the
+   `state` parameter (e.g., `state: "In Progress"`) — **not** `status`. The `save_issue` tool has
+   no `status` field; passing one is silently ignored, leaving the issue stuck in its current
+   state. Do not touch the description in this call.
 5. Create the Execution log — see next section.
 
 ---
@@ -170,7 +172,10 @@ Only reachable after all three gates are green.
    closing timestamp.
 2. Update the issue via `mcp__plugin_linear_linear__save_issue`:
    - Ensure all plan checklist items in the description are checked off.
-   - Set `status` to **Done**.
+   - Set the issue state to **Done** using the `state` parameter (e.g., `state: "Done"`).
+     **Not** `status` — that field does not exist on `save_issue` and is silently dropped,
+     leaving the issue unmoved. After the call, verify the returned JSON shows
+     `"status":"Done","statusType":"completed"` before announcing completion.
 3. Announce to the user, verbatim: **"I'm done with this gig!"**
    (This is the English rendering of the user's requested "Terminei essa budega!" — keep the
    playful tone; don't substitute a formal phrasing.)
