@@ -7,6 +7,7 @@ from brasa.downloaders.downloaders import (
     B3FilesURLDownloader,
     B3PagedURLEncodedDownloader,
     B3URLEncodedDownloader,
+    BCBCurrencyDownloader,
     BCBSGSDownloader,
     DatetimeDownloader,
     SettlementPricesDownloader,
@@ -71,6 +72,13 @@ def bcb_sgs_download(
     _md_downloader: MarketDataDownloader, **kwargs
 ) -> tuple[IO | None, dict[str, str]]:
     downloader = BCBSGSDownloader(**kwargs)
+    return downloader.download(), {}
+
+
+def bcb_currency_download(
+    _md_downloader: MarketDataDownloader, **kwargs
+) -> tuple[IO | None, dict[str, str]]:
+    downloader = BCBCurrencyDownloader(**kwargs)
     return downloader.download(), {}
 
 

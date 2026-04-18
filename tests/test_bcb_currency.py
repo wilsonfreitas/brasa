@@ -55,3 +55,9 @@ def test_bcb_currency_downloader_returns_none_on_error():
             currency="USD", start=date(2025, 1, 1), end=date(2025, 1, 1)
         )
         assert downloader.download() is None
+
+
+def test_bcb_currency_download_helper_is_exported():
+    from brasa.downloaders import bcb_currency_download
+
+    assert callable(bcb_currency_download)
