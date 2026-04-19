@@ -1,13 +1,21 @@
 import io
 import json
 from datetime import date
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
+import pytest
 
 from brasa.downloaders import bcb_currency_download
 from brasa.downloaders.downloaders import BCBCurrencyDownloader
-from brasa.engine import MarketDataTemplate, retrieve_template
+from brasa.engine import (
+    CacheManager,
+    MarketDataTemplate,
+    download_marketdata,
+    process_marketdata,
+    retrieve_template,
+)
 from brasa.fieldsets import Fieldset
 
 
@@ -95,3 +103,35 @@ def test_retrieve_bcb_currency_template():
     tpl = retrieve_template("bcb-currency")
     assert tpl is not None
     assert tpl.id == "bcb-currency"
+
+
+@pytest.mark.integration
+def test_bcb_currency_download_and_process_usd():
+    """Integration: download USD intraday PTAX quotes for a small window and process."""
+    download_marketdata(
+        "bcb-currency",
+        currency="USD",
+        start=date(2025, 1, 2),
+        end=date(2025, 1, 10),
+    )
+    process_marketdata("bcb-currency")
+
+    man = CacheManager()
+    ds_path = Path(man.db_path("input/bcb-currency"))
+    assert ds_path.exists(), f"Expected dataset at {ds_path}"
+
+
+@pytest.mark.integration
+def test_bcb_currency_download_multiple_currencies():
+    """Integration: download multiple currencies via KwargsIterator."""
+    download_marketdata(
+        "bcb-currency",
+        currency=["USD", "EUR"],
+        start=date(2025, 1, 2),
+        end=date(2025, 1, 3),
+    )
+    process_marketdata("bcb-currency")
+
+    man = CacheManager()
+    ds_path = Path(man.db_path("input/bcb-currency"))
+    assert ds_path.exists()
