@@ -2,7 +2,8 @@
 name: daily-b3
 description: Daily B3 market data download
 
-defaults: # merged into every task
+defaults:
+  # merged into every task
   calendar: B3
   force: false
   smart_update: true
@@ -21,19 +22,17 @@ tasks:
   # bcb SGS data
   - template: bcb-sgs
     args:
-      code: [4389, 1178, 432, 433, 189] # CDI, SELIC, SETA, IPCA, IGPM
+      code: [ 4389, 1178, 432, 433, 189 ] # CDI, SELIC, SETA, IPCA, IGPM
 
   # bcb PTAX intraday quotes
   - template: bcb-currency
     args:
-      currency: [AUD, CAD, CHF, EUR, GBP, JPY, USD]
-      start: "2000-01-01"
-      end: ~
+      currency: [ AUD, CAD, CHF, EUR, GBP, JPY, USD ]
 
   # no refdate needed — template doesn't declare it
   - template: b3-listed-funds
     args:
-      typeFund: [ETF, ETF-CRIPTO, ETF-RF, ETF-FII]
+      typeFund: [ ETF, ETF-CRIPTO, ETF-RF, ETF-FII ]
   - template: b3-indexes-composition
 
   # dynamic symbol resolution
