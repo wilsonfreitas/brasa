@@ -1,0 +1,188 @@
+"""Capture expected test values for BVBG.028 sub-issues from fixture.
+
+One-off helper: parse `data/IN210423.zip` and emit
+`docs/plans/2026-03-06-bvbg028-expected-values.md` with, for each of the 14
+new datasets plus `strategies_legs`, the record count and one spot-check
+sample row keyed by `security_id`. The output doc is consumed by the
+sub-issue bodies generated in later tasks of WIL-27.
+
+Run: `uv run python scripts/bvbg028_capture_expected_values.py`
+"""
+
+from __future__ import annotations
+
+import gzip
+import zipfile
+from pathlib import Path
+
+from lxml import etree
+
+FIXTURE = Path("data/IN210423.zip")
+OUTPUT = Path("docs/plans/2026-03-06-bvbg028-expected-values.md")
+
+# Non-strategies datasets: (dataset_name, xml_tag)
+NON_STRATEGIES = [
+    ("exercise_of_equities", "ExrcEqtsInf"),
+    ("options_on_spot_and_futures", "OptnOnSpotAndFutrsInf"),
+    ("derivatives_option_exercise", "DrvsOptnExrcInf"),
+    ("equity_forwards", "EqtyFwdInf"),
+    ("international_bonds", "IntlBdInf"),
+    ("fixed_income", "FxdIncmInf"),
+    ("national_bonds", "NtlBdInf"),
+    ("fixed_income_non_tradable", "FxdIncmNonTrdblInf"),
+    ("adrs", "ADRInf"),
+    ("securities_lending", "BTCInf"),
+    ("otc_derivatives", "OTCInf"),
+    ("cash", "CshInf"),
+    ("investment_funds", "FICInf"),
+]
+STRATEGIES_TAG = "StrtgyInf"
+
+
+def strip_ns(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1] if "}" in tag else tag
+
+
+def element_to_dict(el: etree._Element) -> dict[str, str]:
+    """Flatten an element's descendant leaves into {relative_path: text}."""
+    out: dict[str, str] = {}
+
+    def walk(node: etree._Element, path: str) -> None:
+        children = list(node)
+        if not children:
+            text = (node.text or "").strip()
+            if text:
+                out[path] = text
+            return
+        for child in children:
+            child_path = (
+                f"{path}/{strip_ns(child.tag)}" if path else strip_ns(child.tag)
+            )
+            walk(child, child_path)
+
+    walk(el, "")
+    return out
+
+
+def extract_header(instrm: etree._Element) -> dict[str, str]:
+    flat = element_to_dict(instrm)
+    return {
+        "refdate": flat.get("RptParams/RptDtAndTm/Dt", ""),
+        "security_id": flat.get("FinInstrmId/OthrId/Id", ""),
+        "security_proprietary": flat.get("FinInstrmId/OthrId/Tp/Prtry", ""),
+        "security_market": flat.get("FinInstrmId/PlcOfListg/MktIdrCd", ""),
+        "instrument_asset": flat.get("FinInstrmAttrCmon/Asst", ""),
+        "instrument_asset_description": flat.get("FinInstrmAttrCmon/AsstDesc", ""),
+        "instrument_market": flat.get("FinInstrmAttrCmon/Mkt", ""),
+        "instrument_segment": flat.get("FinInstrmAttrCmon/Sgmt", ""),
+        "instrument_description": flat.get("FinInstrmAttrCmon/Desc", ""),
+    }
+
+
+def open_xml(fixture: Path):
+    with zipfile.ZipFile(fixture) as zf:
+        name = next(n for n in zf.namelist() if "BVBG.028" in n)
+        with zf.open(name) as raw:
+            data = raw.read()
+    if name.endswith(".gz"):
+        data = gzip.decompress(data)
+    return etree.fromstring(data)
+
+
+def instrm_body(instrm: etree._Element) -> etree._Element | None:
+    for child in instrm.iter():
+        if strip_ns(child.tag) == "InstrmInf":
+            for candidate in child:
+                return candidate
+    return None
+
+
+def render_spot_check(header: dict, body_flat: dict) -> str:
+    lines = [f"- `security_id`: `{header['security_id']}`"]
+    for k, v in header.items():
+        if k == "security_id":
+            continue
+        lines.append(f"- `{k}`: `{v}`")
+    for k, v in body_flat.items():
+        col = k.replace("/", "_")
+        lines.append(f"- `{col}` (from `{k}`): `{v}`")
+    return "\n".join(lines)
+
+
+def main() -> None:
+    root = open_xml(FIXTURE)
+    counts: dict[str, int] = {}
+    spot: dict[str, tuple[dict, dict]] = {}
+    legs_count = 0
+    legs_spot: tuple[dict, str, dict] | None = None
+
+    refdate = ""
+    for instrm in root.iter():
+        if strip_ns(instrm.tag) != "Instrm":
+            continue
+        if not refdate:
+            refdate = extract_header(instrm).get("refdate", "")
+        body = instrm_body(instrm)
+        if body is None:
+            continue
+        body_tag = strip_ns(body.tag)
+        counts[body_tag] = counts.get(body_tag, 0) + 1
+        if body_tag not in spot:
+            spot[body_tag] = (
+                extract_header(instrm),
+                element_to_dict(body),
+            )
+        if body_tag == STRATEGIES_TAG:
+            for leg in body:
+                if strip_ns(leg.tag) == "StrtgyLegList":
+                    legs_count += 1
+                    if legs_spot is None:
+                        header = extract_header(instrm)
+                        leg_flat = element_to_dict(leg)
+                        legs_spot = (header, leg.get("id", ""), leg_flat)
+
+    lines = [
+        "# BVBG.028 Expected Test Values",
+        "",
+        f"Captured from fixture `{FIXTURE}` (refdate {refdate}).",
+        "Generated by `scripts/bvbg028_capture_expected_values.py` — do not edit by hand.",
+        "",
+    ]
+
+    for dataset, tag in [*NON_STRATEGIES, ("strategies", STRATEGIES_TAG)]:
+        header, body_flat = spot[tag]
+        lines += [
+            f"## {dataset} (`{tag}`)",
+            "",
+            f"- `record_count`: {counts[tag]}",
+            "- `required_non_null`: `refdate`, `security_id`, `security_proprietary`, `security_market`",
+            "",
+            "### spot_check",
+            "",
+            render_spot_check(header, body_flat),
+            "",
+        ]
+
+    if legs_spot is not None:
+        header, leg_id, leg_flat = legs_spot
+        lines += [
+            "## strategies_legs (`StrtgyInf/InstrmInf/StrtgyInf/StrtgyLegList`)",
+            "",
+            f"- `record_count`: {legs_count}",
+            "- `required_non_null`: `refdate`, `security_id`, `leg_id`",
+            "",
+            "### spot_check (first leg of first strategy)",
+            "",
+            f"- `refdate`: `{header['refdate']}`",
+            f"- `security_id` (FK): `{header['security_id']}`",
+            f"- `leg_id`: `{leg_id}`",
+            *(f"- `{k.replace('/', '_')}`: `{v}`" for k, v in leg_flat.items()),
+            "",
+        ]
+
+    OUTPUT.write_text("\n".join(lines))
+    print(f"wrote {OUTPUT} — {len(counts)} datasets, legs={legs_count}")
+
+
+if __name__ == "__main__":
+    main()
