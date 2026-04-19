@@ -23,6 +23,13 @@ tasks:
     args:
       code: [4389, 1178, 432, 433, 189] # CDI, SELIC, SETA, IPCA, IGPM
 
+  # bcb PTAX intraday quotes
+  - template: bcb-currency
+    args:
+      currency: [AUD, CAD, CHF, EUR, GBP, JPY, USD]
+      start: "2000-01-01"
+      end: ~
+
   # no refdate needed — template doesn't declare it
   - template: b3-listed-funds
     args:
