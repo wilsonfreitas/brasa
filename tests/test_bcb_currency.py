@@ -5,7 +5,10 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
+from brasa.downloaders import bcb_currency_download
 from brasa.downloaders.downloaders import BCBCurrencyDownloader
+from brasa.engine import MarketDataTemplate, retrieve_template
+from brasa.fieldsets import Fieldset
 
 
 def test_bcb_currency_downloader_serializes_dataframe_to_json():
@@ -58,6 +61,37 @@ def test_bcb_currency_downloader_returns_none_on_error():
 
 
 def test_bcb_currency_download_helper_is_exported():
-    from brasa.downloaders import bcb_currency_download
-
     assert callable(bcb_currency_download)
+
+
+def test_load_bcb_currency_template():
+    tpl = MarketDataTemplate("templates/bcb/bcb-currency.yaml")
+
+    assert tpl.has_downloader
+    assert tpl.has_reader
+    assert tpl.id == "bcb-currency"
+
+
+def test_bcb_currency_template_fields():
+    tpl = MarketDataTemplate("templates/bcb/bcb-currency.yaml")
+
+    assert isinstance(tpl.fields, Fieldset)
+    expected = {
+        "refdate": "datetime",
+        "currency": "string",
+        "bid": "numeric",
+        "ask": "numeric",
+        "parity_bid": "numeric",
+        "parity_ask": "numeric",
+        "bulletin_type": "string",
+        "downloaded_at": "datetime",
+    }
+    assert len(tpl.fields) == len(expected)
+    for name, type_name in expected.items():
+        assert tpl.fields[name].type_name == type_name, name
+
+
+def test_retrieve_bcb_currency_template():
+    tpl = retrieve_template("bcb-currency")
+    assert tpl is not None
+    assert tpl.id == "bcb-currency"

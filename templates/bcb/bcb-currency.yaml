@@ -1,0 +1,65 @@
+id: bcb-currency
+description: Cotações intradiárias de moedas via endpoint PTAX CotacaoMoedaPeriodo do BCB
+
+downloader:
+  function: brasa.downloaders.bcb_currency_download
+  validator: brasa.downloaders.validate_json_empty_file
+  format: json
+  args:
+    currency: ~
+    start: ~
+    end: ~
+
+reader:
+  locale: pt
+  pipeline:
+    - step: read_json
+    - step: rename_columns
+      mapping:
+        dataHoraCotacao: refdate
+        cotacaoCompra: bid
+        cotacaoVenda: ask
+        paridadeCompra: parity_bid
+        paridadeVenda: parity_ask
+        tipoBoletim: bulletin_type
+    - step: add_column
+      name: currency
+      from:
+        where: download_args
+        key: currency
+    - step: add_column
+      name: downloaded_at
+      from:
+        where: now
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: input
+  partitioning: [downloaded_at, currency]
+
+fields:
+  - name: refdate
+    description: Data e hora da cotação (horário local America/Sao_Paulo)
+    type: datetime
+  - name: currency
+    description: Símbolo da moeda (ex. USD, EUR)
+    type: string
+  - name: bid
+    description: Cotação de compra (moeda cotada em BRL, apenas tipo A)
+    type: numeric
+  - name: ask
+    description: Cotação de venda (moeda cotada em BRL, apenas tipo A)
+    type: numeric
+  - name: parity_bid
+    description: Paridade de compra contra USD (apenas tipo B)
+    type: numeric
+  - name: parity_ask
+    description: Paridade de venda contra USD (apenas tipo B)
+    type: numeric
+  - name: bulletin_type
+    description: Tipo do boletim (Abertura, Intermediário, Fechamento, PTAX)
+    type: string
+  - name: downloaded_at
+    description: Data e hora de download dos dados
+    type: datetime
