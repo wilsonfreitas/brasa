@@ -116,6 +116,34 @@ DATASETS: list[DatasetCase] = [
             "option_exercise_security_market": "BVMF",
         },
     ),
+    DatasetCase(
+        dataset="fixed_income",
+        xml_tag="FxdIncmInf",
+        expected_count=369,
+        required_non_null=[
+            "refdate",
+            "security_id",
+            "security_proprietary",
+            "security_market",
+        ],
+        dtypes={"security_id": "string"},
+        spot_check={
+            "security_id": "200000304649",
+            "security_proprietary": "8",
+            "security_market": "BVMF",
+            "instrument_asset": "VERT",
+            "security_category": "70",
+            "isin": "BRVERTCRA0V7",
+            "symbol": "VERT-CRAV1B0",
+            "trading_currency": "BRL",
+            "payment_type": "1",
+            "days_to_settlement": "0",
+            "allocation_lot_size": "1",
+            "underlying_security_id": "200000304505",
+            "underlying_security_proprietary": "8",
+            "underlying_security_market": "BVMF",
+        },
+    ),
 ]
 
 

@@ -484,3 +484,97 @@ datasets:
         description: Option exercise instrument market code
         tag: InstrmInf/ExrcEqtsInf/OptnExrcInstrmId/PlcOfListg/MktIdrCd
         type: string
+
+  fixed_income:
+    tag: FxdIncmInf
+    fields:
+      # Header fields (common)
+      - name: refdate
+        description: Reference date
+        tag: RptParams/RptDtAndTm/Dt
+        type: date
+      - name: security_id
+        description: Security ID
+        tag: FinInstrmId/OthrId/Id
+        type: string
+      - name: security_proprietary
+        description: Security proprietary code
+        tag: FinInstrmId/OthrId/Tp/Prtry
+        type: string
+      - name: security_market
+        description: Security market code
+        tag: FinInstrmId/PlcOfListg/MktIdrCd
+        type: string
+      - name: instrument_asset
+        description: Instrument asset code
+        tag: FinInstrmAttrCmon/Asst
+        type: string
+      - name: instrument_asset_description
+        description: Instrument asset description
+        tag: FinInstrmAttrCmon/AsstDesc
+        type: string
+      - name: instrument_market
+        description: Instrument market code
+        tag: FinInstrmAttrCmon/Mkt
+        type: string
+      - name: instrument_segment
+        description: Instrument segment code
+        tag: FinInstrmAttrCmon/Sgmt
+        type: string
+      - name: instrument_description
+        description: Instrument description
+        tag: FinInstrmAttrCmon/Desc
+        type: string
+      # FxdIncmInf specific fields
+      - name: security_category
+        description: Security category
+        tag: InstrmInf/FxdIncmInf/SctyCtgy
+        type: string
+      - name: isin
+        description: ISIN code
+        tag: InstrmInf/FxdIncmInf/ISIN
+        type: string
+      - name: symbol
+        description: Ticker symbol
+        tag: InstrmInf/FxdIncmInf/TckrSymb
+        type: string
+      - name: trading_start_date
+        description: Trading start date
+        tag: InstrmInf/FxdIncmInf/TradgStartDt
+        type: date
+      - name: trading_end_date
+        description: Trading end date
+        tag: InstrmInf/FxdIncmInf/TradgEndDt
+        type: date
+      - name: trading_currency
+        description: Trading currency
+        tag: InstrmInf/FxdIncmInf/TradgCcy
+        type: string
+      - name: payment_type
+        description: Payment type
+        tag: InstrmInf/FxdIncmInf/PmtTp
+        type: string
+      - name: days_to_settlement
+        description: Days to settlement
+        tag: InstrmInf/FxdIncmInf/DaysToSttlm
+        type: integer
+      - name: allocation_lot_size
+        description: Allocation round lot size
+        tag: InstrmInf/FxdIncmInf/AllcnRndLot
+        type: integer
+      - name: price_factor
+        description: Price factor
+        tag: InstrmInf/FxdIncmInf/PricFctr
+        type: numeric
+      - name: underlying_security_id
+        description: Underlying security ID
+        tag: InstrmInf/FxdIncmInf/UndrlygInstrmId/OthrId/Id
+        type: string
+      - name: underlying_security_proprietary
+        description: Underlying security proprietary code
+        tag: InstrmInf/FxdIncmInf/UndrlygInstrmId/OthrId/Tp/Prtry
+        type: string
+      - name: underlying_security_market
+        description: Underlying security market code
+        tag: InstrmInf/FxdIncmInf/UndrlygInstrmId/PlcOfListg/MktIdrCd
+        type: string
