@@ -403,3 +403,84 @@ datasets:
         description: Calendar days
         tag: InstrmInf/FutrCtrctsInf/ClnrDays
         type: integer
+  exercise_of_equities:
+    tag: ExrcEqtsInf
+    fields:
+      # Header fields (common)
+      - name: refdate
+        description: Reference date
+        tag: RptParams/RptDtAndTm/Dt
+        type: date
+      - name: security_id
+        description: Security ID
+        tag: FinInstrmId/OthrId/Id
+        type: string
+      - name: security_proprietary
+        description: Security proprietary code
+        tag: FinInstrmId/OthrId/Tp/Prtry
+        type: string
+      - name: security_market
+        description: Security market code
+        tag: FinInstrmId/PlcOfListg/MktIdrCd
+        type: string
+      - name: instrument_asset
+        description: Instrument asset code
+        tag: FinInstrmAttrCmon/Asst
+        type: string
+      - name: instrument_asset_description
+        description: Instrument asset description
+        tag: FinInstrmAttrCmon/AsstDesc
+        type: string
+      - name: instrument_market
+        description: Instrument market code
+        tag: FinInstrmAttrCmon/Mkt
+        type: string
+      - name: instrument_segment
+        description: Instrument segment code
+        tag: FinInstrmAttrCmon/Sgmt
+        type: string
+      - name: instrument_description
+        description: Instrument description
+        tag: FinInstrmAttrCmon/Desc
+        type: string
+      # ExrcEqtsInf specific fields
+      - name: security_category
+        description: Security category
+        tag: InstrmInf/ExrcEqtsInf/SctyCtgy
+        type: string
+      - name: symbol
+        description: Ticker symbol
+        tag: InstrmInf/ExrcEqtsInf/TckrSymb
+        type: string
+      - name: isin
+        description: ISIN code
+        tag: InstrmInf/ExrcEqtsInf/ISIN
+        type: string
+      - name: trading_currency
+        description: Trading currency
+        tag: InstrmInf/ExrcEqtsInf/TradgCcy
+        type: string
+      - name: trading_start_date
+        description: Trading start date
+        tag: InstrmInf/ExrcEqtsInf/TradgStartDt
+        type: date
+      - name: trading_end_date
+        description: Trading end date
+        tag: InstrmInf/ExrcEqtsInf/TradgEndDt
+        type: date
+      - name: delivery_type
+        description: Delivery type
+        tag: InstrmInf/ExrcEqtsInf/DlvryTp
+        type: string
+      - name: option_exercise_security_id
+        description: Option exercise instrument security ID
+        tag: InstrmInf/ExrcEqtsInf/OptnExrcInstrmId/OthrId/Id
+        type: string
+      - name: option_exercise_security_proprietary
+        description: Option exercise instrument proprietary code
+        tag: InstrmInf/ExrcEqtsInf/OptnExrcInstrmId/OthrId/Tp/Prtry
+        type: string
+      - name: option_exercise_security_market
+        description: Option exercise instrument market code
+        tag: InstrmInf/ExrcEqtsInf/OptnExrcInstrmId/PlcOfListg/MktIdrCd
+        type: string
