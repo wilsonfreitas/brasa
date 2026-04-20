@@ -578,3 +578,149 @@ datasets:
         description: Underlying security market code
         tag: InstrmInf/FxdIncmInf/UndrlygInstrmId/PlcOfListg/MktIdrCd
         type: string
+
+  options_on_spot_and_futures:
+    tag: OptnOnSpotAndFutrsInf
+    fields:
+      # Header fields (common)
+      - name: refdate
+        description: Reference date
+        tag: RptParams/RptDtAndTm/Dt
+        type: date
+      - name: security_id
+        description: Security ID
+        tag: FinInstrmId/OthrId/Id
+        type: string
+      - name: security_proprietary
+        description: Security proprietary code
+        tag: FinInstrmId/OthrId/Tp/Prtry
+        type: string
+      - name: security_market
+        description: Security market code
+        tag: FinInstrmId/PlcOfListg/MktIdrCd
+        type: string
+      - name: instrument_asset
+        description: Instrument asset code
+        tag: FinInstrmAttrCmon/Asst
+        type: string
+      - name: instrument_asset_description
+        description: Instrument asset description
+        tag: FinInstrmAttrCmon/AsstDesc
+        type: string
+      - name: instrument_market
+        description: Instrument market code
+        tag: FinInstrmAttrCmon/Mkt
+        type: string
+      - name: instrument_segment
+        description: Instrument segment code
+        tag: FinInstrmAttrCmon/Sgmt
+        type: string
+      - name: instrument_description
+        description: Instrument description
+        tag: FinInstrmAttrCmon/Desc
+        type: string
+      # OptnOnSpotAndFutrsInf specific fields
+      - name: isin
+        description: ISIN code
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/ISIN
+        type: string
+      - name: symbol
+        description: Ticker symbol
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/TckrSymb
+        type: string
+      - name: exercise_price
+        description: Exercise price
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/ExrcPric
+        type: numeric
+      - name: exercise_style
+        description: Exercise style (AMER or EURO)
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/ExrcStyle
+        type: string
+      - name: maturity_date
+        description: Expiration date
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/XprtnDt
+        type: date
+      - name: expiration_code
+        description: Expiration code
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/XprtnCd
+        type: string
+      - name: option_type
+        description: Option type (CALL or PUTT)
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/OptnTp
+        type: string
+      - name: contract_multiplier
+        description: Contract multiplier
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/CtrctMltplr
+        type: numeric
+      - name: asset_quotation_quantity
+        description: Asset quotation quantity
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/AsstQtnQty
+        type: numeric
+      - name: payment_type
+        description: Payment type
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/PmtTp
+        type: string
+      - name: allocation_lot_size
+        description: Allocation round lot size
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/AllcnRndLot
+        type: integer
+      - name: cfi_code
+        description: CFI code
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/CFICd
+        type: string
+      - name: underlying_security_id
+        description: Underlying instrument security ID
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/UndrlygInstrmId/OthrId/Id
+        type: string
+      - name: underlying_security_proprietary
+        description: Underlying instrument proprietary code
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/UndrlygInstrmId/OthrId/Tp/Prtry
+        type: string
+      - name: underlying_security_market
+        description: Underlying instrument market code
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/UndrlygInstrmId/PlcOfListg/MktIdrCd
+        type: string
+      - name: premium_upfront_indicator
+        description: Premium upfront indicator
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/PrmUpfrntInd
+        type: string
+      - name: trading_start_date
+        description: Trading start date
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/TradgStartDt
+        type: date
+      - name: trading_end_date
+        description: Trading end date
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/TradgEndDt
+        type: date
+      - name: opening_position_limit_date
+        description: Opening position limit date
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/OpngPosLmtDt
+        type: date
+      - name: trading_currency
+        description: Trading currency
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/TradgCcy
+        type: string
+      - name: asset_settlement_security_id
+        description: Asset settlement instrument security ID
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/AsstSttlmInd/OthrId/Id
+        type: string
+      - name: asset_settlement_security_proprietary
+        description: Asset settlement instrument proprietary code
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/AsstSttlmInd/OthrId/Tp/Prtry
+        type: string
+      - name: asset_settlement_security_market
+        description: Asset settlement instrument market code
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/AsstSttlmInd/PlcOfListg/MktIdrCd
+        type: string
+      - name: withdrawal_days
+        description: Withdrawal days
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/WdrwlDays
+        type: integer
+      - name: working_days
+        description: Working days
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/WrkgDays
+        type: integer
+      - name: calendar_days
+        description: Calendar days
+        tag: InstrmInf/OptnOnSpotAndFutrsInf/ClnrDays
+        type: integer
