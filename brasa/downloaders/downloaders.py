@@ -65,6 +65,24 @@ class DatetimeDownloader(SimpleDownloader):
         return self.refdate.strftime(self._url)
 
 
+class FormatURLDownloader(SimpleDownloader):
+    """Downloader that expands named placeholders in the URL template.
+
+    The URL uses Python str.format() syntax, e.g.
+    ``https://example.com/FILE_{year}.zip``. All kwargs are passed
+    through to ``.format(**kwargs)``, so any arg name and combination
+    is supported.
+    """
+
+    def __init__(self, url, verify_ssl, **kwargs):
+        super().__init__(url, verify_ssl)
+        self.args = kwargs
+
+    @property
+    def url(self) -> str:
+        return self._url.format(**self.args)
+
+
 class B3URLEncodedDownloader(SimpleDownloader):
     def __init__(self, url, verify_ssl, **kwargs):
         super().__init__(url, verify_ssl)

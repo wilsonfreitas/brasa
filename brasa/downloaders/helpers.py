@@ -10,6 +10,7 @@ from brasa.downloaders.downloaders import (
     BCBCurrencyDownloader,
     BCBSGSDownloader,
     DatetimeDownloader,
+    FormatURLDownloader,
     SettlementPricesDownloader,
     SimpleDownloader,
 )
@@ -27,6 +28,15 @@ def datetime_download(
     md_downloader: MarketDataDownloader, **kwargs
 ) -> tuple[IO | None, dict[str, str]]:
     downloader = DatetimeDownloader(
+        md_downloader.url, md_downloader.verify_ssl, **kwargs
+    )
+    return downloader.download(), dict(downloader.response.headers)
+
+
+def format_download(
+    md_downloader: MarketDataDownloader, **kwargs
+) -> tuple[IO | None, dict[str, str]]:
+    downloader = FormatURLDownloader(
         md_downloader.url, md_downloader.verify_ssl, **kwargs
     )
     return downloader.download(), dict(downloader.response.headers)
