@@ -44,3 +44,9 @@ class DependencyResolutionError(Exception):
     """
 
     pass
+
+
+class CacheError(Exception):
+    """Raised for cache management errors (missing entries, invalid IDs)."""
+
+    pass
