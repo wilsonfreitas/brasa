@@ -708,6 +708,57 @@ class TemplateDependencyGraph:
 
         return False
 
+    def get_download_status(self, template_id: str) -> tuple[str, str]:
+        """Return ``(status, reason)`` for a download template.
+
+        Status values:
+
+        * ``"never-run"`` — no cache_metadata rows for this template.
+        * ``"stale"`` — at least one row has empty processed_files.
+        * ``"ok"`` — all rows have non-empty processed_files.
+
+        Args:
+            template_id: A download template id.
+
+        Returns:
+            Tuple ``(status, reason)``. ``reason`` is empty for ``"ok"``.
+
+        Raises:
+            KeyError: If *template_id* is not in the graph.
+        """
+        if template_id not in self.templates:
+            raise KeyError(f"Template '{template_id}' is not in the dependency graph.")
+
+        cache = CacheManager()
+        with closing(cache.meta_db_connection) as conn, conn:
+            c = conn.cursor()
+            c.execute(
+                "SELECT processed_files FROM cache_metadata WHERE template = ?",
+                (template_id,),
+            )
+            rows = c.fetchall()
+
+        if not rows:
+            return ("never-run", "no downloads found")
+
+        unprocessed = 0
+        for (processed_files_json,) in rows:
+            if not processed_files_json:
+                unprocessed += 1
+                continue
+            try:
+                parsed = json.loads(processed_files_json)
+            except (json.JSONDecodeError, TypeError):
+                unprocessed += 1
+                continue
+            if not parsed:
+                unprocessed += 1
+
+        if unprocessed > 0:
+            suffix = "entry" if unprocessed == 1 else "entries"
+            return ("stale", f"{unprocessed} unprocessed {suffix}")
+        return ("ok", "")
+
     def _check_etl_template_staleness(self, template_id: str) -> bool:
         """Check if an ETL template's output is stale.
 
@@ -761,6 +812,56 @@ class TemplateDependencyGraph:
                     return True
 
         return False
+
+    def get_etl_status(self, template_id: str) -> tuple[str, str]:
+        """Return ``(status, reason)`` for an ETL template.
+
+        Status values:
+
+        * ``"never-run"`` — output dataset directory missing or empty of parquet.
+        * ``"stale"`` — at least one upstream parquet is newer than the output.
+        * ``"ok"`` — output is newer than every upstream.
+
+        Args:
+            template_id: An ETL template id.
+
+        Returns:
+            Tuple ``(status, reason)``. ``reason`` is empty for ``"ok"``.
+
+        Raises:
+            KeyError: If *template_id* is not in the graph.
+        """
+        if template_id not in self.templates:
+            raise KeyError(f"Template '{template_id}' is not in the dependency graph.")
+
+        cache = CacheManager()
+        output_list = self.outputs.get(template_id, [])
+        if not output_list:
+            return ("never-run", "no declared output")
+
+        ds_out = output_list[0]
+        output_dir = Path(cache.db_path(ds_out.dataset_id))
+        if not output_dir.exists():
+            return ("never-run", "output never produced")
+        parquet_files = list(output_dir.rglob("*.parquet"))
+        if not parquet_files:
+            return ("never-run", "output never produced")
+
+        output_mtime = max(f.stat().st_mtime for f in parquet_files)
+
+        for upstream_tid in self.edges.get(template_id, []):
+            for up_ds_out in self.outputs.get(upstream_tid, []):
+                up_dir = Path(cache.db_path(up_ds_out.dataset_id))
+                if not up_dir.exists():
+                    continue
+                up_parquets = list(up_dir.rglob("*.parquet"))
+                if not up_parquets:
+                    continue
+                newest_upstream = max(f.stat().st_mtime for f in up_parquets)
+                if newest_upstream > output_mtime:
+                    return ("stale", f"upstream '{upstream_tid}' newer")
+
+        return ("ok", "")
 
     def get_execution_plan(
         self,
