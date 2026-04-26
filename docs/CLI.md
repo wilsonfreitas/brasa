@@ -307,6 +307,39 @@ brasa graph --template b3-equities-returns --format ascii
 
 ---
 
+### `map`
+
+Print a global, dependency-ordered staleness report covering every download and ETL template.
+
+```bash
+brasa map [--format flat|grouped|tree] [--all] [--reverse] [--no-color]
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--format {flat,grouped,tree}` | Output layout (default: flat) |
+| `--all` | Include up-to-date templates (status `ok`) |
+| `--reverse` | With `--format tree`: root at leaves, branch upward to sources |
+| `--no-color` | Disable ANSI colors (auto-disabled when stdout is not a TTY) |
+
+**Statuses:** `stale` (red), `never-run` (yellow), `ok` (green; only with `--all`).
+
+**Exit code:** `0` if nothing is stale, `1` otherwise. Suitable for CI / pre-merge checks.
+
+**Example:**
+
+```
+$ brasa map
+1. [download]  b3-bvbg028        stale  12 unprocessed entries
+2. [download]  b3-cotahist-daily stale  3 unprocessed entries
+3. [etl]       brasa-companies   stale  upstream 'b3-bvbg028' newer
+4. [etl]       brasa-prices      stale  upstream 'b3-cotahist-daily' newer
+```
+
+---
+
 ## Datasets
 
 ### `head`
