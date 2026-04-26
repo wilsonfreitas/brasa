@@ -6,14 +6,12 @@ import sqlite3
 import sys
 from pathlib import Path
 
-# Make the standalone script importable in tests.
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
 import migrate_meta_db_fk as mig
 
 
-def _create_pre_migration_db(path: Path) -> None:
-    """Create a meta.db that matches the pre-migration schema."""
+def _create_db(path: Path) -> None:
     conn = sqlite3.connect(str(path))
     try:
         conn.executescript(
@@ -53,65 +51,52 @@ def _create_pre_migration_db(path: Path) -> None:
         conn.close()
 
 
-def _has_fk_on_download_trials(db_path: Path) -> bool:
+def _count(db_path: Path, table: str, where: str = "") -> int:
     conn = sqlite3.connect(str(db_path))
     try:
-        rows = conn.execute("PRAGMA foreign_key_list(download_trials)").fetchall()
-        return any(r[2] == "cache_metadata" and r[3] == "cache_id" for r in rows)
+        sql = f"SELECT COUNT(*) FROM {table}"
+        if where:
+            sql += f" WHERE {where}"
+        return conn.execute(sql).fetchone()[0]
     finally:
         conn.close()
 
 
-def _count(db_path: Path, table: str) -> int:
-    conn = sqlite3.connect(str(db_path))
-    try:
-        return conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-    finally:
-        conn.close()
-
-
-def test_migration_wipes_orphans_and_adds_fk(tmp_path):
-    """Migration drops orphan trial rows and adds the FK + cascade."""
+def test_migration_wipes_orphans(tmp_path):
+    """Migration removes trial rows with no matching cache_metadata entry."""
     db = tmp_path / "meta.db"
-    _create_pre_migration_db(db)
+    _create_db(db)
     assert _count(db, "download_trials") == 2
-    assert _has_fk_on_download_trials(db) is False
 
     result = mig.migrate(str(db))
 
     assert result["orphans_removed"] == 1
-    assert result["fk_added"] is True
     assert _count(db, "download_trials") == 1
-    assert _has_fk_on_download_trials(db) is True
+    assert _count(db, "download_trials", "cache_id = 'keep-id'") == 1
 
 
 def test_migration_is_idempotent(tmp_path):
-    """Running the migration twice is a no-op for the FK addition."""
+    """Running the migration twice removes nothing on the second run."""
     db = tmp_path / "meta.db"
-    _create_pre_migration_db(db)
+    _create_db(db)
 
     first = mig.migrate(str(db))
     second = mig.migrate(str(db))
 
-    assert first["fk_added"] is True
-    assert second["fk_added"] is False
+    assert first["orphans_removed"] == 1
     assert second["orphans_removed"] == 0
 
 
-def test_fk_cascade_after_migration(tmp_path):
-    """After migration, deleting cache_metadata cascades to download_trials."""
+def test_migration_no_orphans(tmp_path):
+    """Migration reports zero removals when there are no orphans."""
     db = tmp_path / "meta.db"
-    _create_pre_migration_db(db)
-    mig.migrate(str(db))
-
+    _create_db(db)
+    # Remove the orphan manually first.
     conn = sqlite3.connect(str(db))
-    try:
-        conn.execute("PRAGMA foreign_keys = ON")
-        conn.execute("DELETE FROM cache_metadata WHERE id = 'keep-id'")
-        conn.commit()
-        remaining = conn.execute(
-            "SELECT COUNT(*) FROM download_trials WHERE cache_id = 'keep-id'"
-        ).fetchone()[0]
-    finally:
-        conn.close()
-    assert remaining == 0
+    conn.execute("DELETE FROM download_trials WHERE cache_id = 'orphan-id'")
+    conn.commit()
+    conn.close()
+
+    result = mig.migrate(str(db))
+
+    assert result["orphans_removed"] == 0

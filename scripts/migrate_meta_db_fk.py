@@ -1,14 +1,11 @@
 #!/usr/bin/env python
-"""Migration script: add FK + CASCADE between download_trials and cache_metadata.
+"""Migration script: wipe orphan download_trials rows from meta.db.
 
-Steps:
-1. Wipe pre-existing orphan download_trials rows.
-2. Recreate download_trials with FOREIGN KEY(cache_id)
-   REFERENCES cache_metadata(id) ON DELETE CASCADE.
-3. Validate via PRAGMA foreign_key_check.
+Removes download_trials rows whose cache_id has no matching entry in
+cache_metadata. These accumulate from past remove_meta/clean_meta_db calls
+that predated the atomic-delete fix.
 
-Idempotent: detects an existing FK via PRAGMA foreign_key_list and skips
-the recreate step on subsequent runs.
+Idempotent: safe to run multiple times; subsequent runs find nothing to delete.
 
 Usage:
     uv run python scripts/migrate_meta_db_fk.py [CACHE_PATH]
@@ -23,68 +20,28 @@ import sqlite3
 import sys
 from pathlib import Path
 
-_DOWNLOAD_TRIALS_NEW_SQL = """
-CREATE TABLE download_trials_new (
-    cache_id TEXT,
-    timestamp TEXT,
-    downloaded TEXT,
-    status_code TEXT,
-    status_name TEXT,
-    reason TEXT,
-    http_status INTEGER,
-    FOREIGN KEY(cache_id) REFERENCES cache_metadata(id) ON DELETE CASCADE
-)
-"""
-
-
-def _has_fk(conn: sqlite3.Connection) -> bool:
-    rows = conn.execute("PRAGMA foreign_key_list(download_trials)").fetchall()
-    return any(r[2] == "cache_metadata" and r[3] == "cache_id" for r in rows)
-
 
 def migrate(db_path: str) -> dict:
-    """Run the FK migration on a single meta.db.
+    """Wipe orphan download_trials rows from a single meta.db.
 
     Args:
         db_path: Path to the meta.db file.
 
     Returns:
-        Dict with keys: orphans_removed (int), fk_added (bool).
+        Dict with key: orphans_removed (int).
     """
-    result = {"orphans_removed": 0, "fk_added": False}
-
     conn = sqlite3.connect(db_path)
     try:
-        conn.execute("PRAGMA foreign_keys = OFF")
-
-        # 1. Wipe orphans (always — cheap, safe).
         cur = conn.execute(
             "DELETE FROM download_trials "
             "WHERE cache_id NOT IN (SELECT id FROM cache_metadata)"
         )
-        result["orphans_removed"] = cur.rowcount or 0
-
-        # 2. Recreate with FK if not already present.
-        if not _has_fk(conn):
-            conn.execute(_DOWNLOAD_TRIALS_NEW_SQL)
-            conn.execute(
-                "INSERT INTO download_trials_new SELECT * FROM download_trials"
-            )
-            conn.execute("DROP TABLE download_trials")
-            conn.execute("ALTER TABLE download_trials_new RENAME TO download_trials")
-            result["fk_added"] = True
-
-        # 3. Validate.
-        violations = conn.execute("PRAGMA foreign_key_check").fetchall()
-        if violations:
-            raise RuntimeError(f"foreign_key_check violations: {violations}")
-
+        orphans_removed = cur.rowcount or 0
         conn.commit()
     finally:
-        conn.execute("PRAGMA foreign_keys = ON")
         conn.close()
 
-    return result
+    return {"orphans_removed": orphans_removed}
 
 
 def main() -> None:
@@ -101,12 +58,7 @@ def main() -> None:
 
     print(f"Migrating: {db_path}")
     result = migrate(db_path)
-
     print(f"  Orphan trial rows removed: {result['orphans_removed']}")
-    if result["fk_added"]:
-        print("  Added FK + CASCADE to download_trials.")
-    else:
-        print("  FK already present (idempotent).")
     print("Migration complete.")
 
 
