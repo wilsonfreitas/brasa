@@ -16,7 +16,7 @@ from .util import parse_arg_value
 _COMMAND_GROUPS = {
     "Setup": ["setup"],
     "Execution": ["download", "process", "run"],
-    "Templates": ["deps", "plan", "graph"],
+    "Templates": ["deps", "plan", "graph", "map"],
     "Datasets": [
         "list-unprocessed",
         "list-datasets",
@@ -438,6 +438,33 @@ parser_graph.add_argument(
     "--template",
     metavar="NAME",
     help="show only the subgraph for a specific template",
+)
+
+
+parser_map = subparsers.add_parser(
+    "map",
+    help="show a global staleness report across all templates",
+)
+parser_map.add_argument(
+    "--format",
+    choices=["flat", "grouped", "tree"],
+    default="flat",
+    help="output layout (default: flat)",
+)
+parser_map.add_argument(
+    "--all",
+    action="store_true",
+    help="include up-to-date templates (status 'ok')",
+)
+parser_map.add_argument(
+    "--reverse",
+    action="store_true",
+    help="for --format tree: root at leaves and branch upward to sources",
+)
+parser_map.add_argument(
+    "--no-color",
+    action="store_true",
+    help="disable ANSI colors",
 )
 
 
@@ -1194,6 +1221,38 @@ if __name__ == "__main__":
                 print(f"Error: graphviz dot command failed:\n{result.stderr}")
                 sys.exit(1)
             print(f"Graph written to {output_file}")
+
+    elif args.command == "map":
+        from rich.console import Console
+
+        from .engine.dependency_graph import TemplateDependencyGraph
+        from .engine.pipeline_map import (
+            build_pipeline_map,
+            render_flat,
+            render_grouped,
+            render_tree,
+        )
+
+        graph = TemplateDependencyGraph()
+        items = build_pipeline_map(include_ok=args.all)
+
+        console = Console(no_color=args.no_color)
+
+        if args.format == "flat":
+            render_flat(items, console=console)
+        elif args.format == "grouped":
+            render_grouped(items, console=console, graph=graph)
+        else:
+            render_tree(
+                items,
+                console=console,
+                graph=graph,
+                reverse=args.reverse,
+            )
+
+        any_stale = any(it.status != "ok" for it in items)
+        if any_stale:
+            sys.exit(1)
 
     elif args.command == "doctor":
         from .engine.doctor import run_doctor
