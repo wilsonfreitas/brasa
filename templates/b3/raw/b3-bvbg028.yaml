@@ -29,7 +29,7 @@ datasets:
       - name: refdate
         description: Reference date
         tag: RptParams/RptDtAndTm/Dt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: security_id
         description: Security ID
         tag: FinInstrmId/OthrId/Id
@@ -106,15 +106,15 @@ datasets:
       - name: trading_start_date
         description: Trading start date
         tag: InstrmInf/EqtyInf/TradgStartDt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: trading_end_date
         description: Trading end date
         tag: InstrmInf/EqtyInf/TradgEndDt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: corporate_action_start_date
         description: Corporate action start date
         tag: InstrmInf/EqtyInf/CorpActnStartDt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: ex_distribution_number
         description: Ex-distribution number
         tag: InstrmInf/EqtyInf/EXDstrbtnNb
@@ -159,7 +159,7 @@ datasets:
       - name: refdate
         description: Reference date
         tag: RptParams/RptDtAndTm/Dt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: security_id
         description: Security ID
         tag: FinInstrmId/OthrId/Id
@@ -216,7 +216,7 @@ datasets:
       - name: maturity_date
         description: Maturity/expiration date
         tag: InstrmInf/OptnOnEqtsInf/XprtnDt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: option_type
         description: Option type (Call/Put)
         tag: InstrmInf/OptnOnEqtsInf/OptnTp
@@ -244,11 +244,11 @@ datasets:
       - name: trading_start_date
         description: Trading start date
         tag: InstrmInf/OptnOnEqtsInf/TradgStartDt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: trading_end_date
         description: Trading end date
         tag: InstrmInf/OptnOnEqtsInf/TradgEndDt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: payment_type
         description: Payment type
         tag: InstrmInf/OptnOnEqtsInf/PmtTp
@@ -285,7 +285,7 @@ datasets:
       - name: refdate
         description: Reference date
         tag: RptParams/RptDtAndTm/Dt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: security_id
         description: Security ID
         tag: FinInstrmId/OthrId/Id
@@ -326,7 +326,7 @@ datasets:
       - name: maturity_date
         description: Maturity/expiration date
         tag: InstrmInf/FutrCtrctsInf/XprtnDt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: symbol
         description: Ticker symbol
         tag: InstrmInf/FutrCtrctsInf/TckrSymb
@@ -338,11 +338,11 @@ datasets:
       - name: trading_start_date
         description: Trading start date
         tag: InstrmInf/FutrCtrctsInf/TradgStartDt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: trading_end_date
         description: Trading end date
         tag: InstrmInf/FutrCtrctsInf/TradgEndDt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: value_type_code
         description: Value type code
         tag: InstrmInf/FutrCtrctsInf/ValTpCd
@@ -410,7 +410,7 @@ datasets:
       - name: refdate
         description: Reference date
         tag: RptParams/RptDtAndTm/Dt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: security_id
         description: Security ID
         tag: FinInstrmId/OthrId/Id
@@ -463,11 +463,11 @@ datasets:
       - name: trading_start_date
         description: Trading start date
         tag: InstrmInf/ExrcEqtsInf/TradgStartDt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: trading_end_date
         description: Trading end date
         tag: InstrmInf/ExrcEqtsInf/TradgEndDt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: delivery_type
         description: Delivery type
         tag: InstrmInf/ExrcEqtsInf/DlvryTp
@@ -492,7 +492,7 @@ datasets:
       - name: refdate
         description: Reference date
         tag: RptParams/RptDtAndTm/Dt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: security_id
         description: Security ID
         tag: FinInstrmId/OthrId/Id
@@ -541,11 +541,11 @@ datasets:
       - name: trading_start_date
         description: Trading start date
         tag: InstrmInf/FxdIncmInf/TradgStartDt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: trading_end_date
         description: Trading end date
         tag: InstrmInf/FxdIncmInf/TradgEndDt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: trading_currency
         description: Trading currency
         tag: InstrmInf/FxdIncmInf/TradgCcy
@@ -586,7 +586,7 @@ datasets:
       - name: refdate
         description: Reference date
         tag: RptParams/RptDtAndTm/Dt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: security_id
         description: Security ID
         tag: FinInstrmId/OthrId/Id
@@ -639,7 +639,7 @@ datasets:
       - name: maturity_date
         description: Expiration date
         tag: InstrmInf/OptnOnSpotAndFutrsInf/XprtnDt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: expiration_code
         description: Expiration code
         tag: InstrmInf/OptnOnSpotAndFutrsInf/XprtnCd
@@ -687,15 +687,15 @@ datasets:
       - name: trading_start_date
         description: Trading start date
         tag: InstrmInf/OptnOnSpotAndFutrsInf/TradgStartDt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: trading_end_date
         description: Trading end date
         tag: InstrmInf/OptnOnSpotAndFutrsInf/TradgEndDt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: opening_position_limit_date
         description: Opening position limit date
         tag: InstrmInf/OptnOnSpotAndFutrsInf/OpngPosLmtDt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: trading_currency
         description: Trading currency
         tag: InstrmInf/OptnOnSpotAndFutrsInf/TradgCcy
@@ -732,7 +732,7 @@ datasets:
       - name: refdate
         description: Reference date
         tag: RptParams/RptDtAndTm/Dt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: security_id
         description: Security ID
         tag: FinInstrmId/OthrId/Id
@@ -830,7 +830,7 @@ datasets:
       - name: refdate
         description: Reference date
         tag: RptParams/RptDtAndTm/Dt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: security_id
         description: Security ID
         tag: FinInstrmId/OthrId/Id
@@ -899,11 +899,11 @@ datasets:
       - name: trading_start_date
         description: Trading start date
         tag: InstrmInf/EqtyFwdInf/TradgStartDt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: trading_end_date
         description: Trading end date
         tag: InstrmInf/EqtyFwdInf/TradgEndDt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: custody_treatment_type
         description: Custody treatment type
         tag: InstrmInf/EqtyFwdInf/CtdyTrtmntTp
@@ -932,7 +932,7 @@ datasets:
       - name: refdate
         description: Reference date
         tag: RptParams/RptDtAndTm/Dt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: security_id
         description: Security ID
         tag: FinInstrmId/OthrId/Id
@@ -993,11 +993,11 @@ datasets:
       - name: issue_date
         description: Issue date
         tag: InstrmInf/IntlBdInf/IsseDt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: maturity_date
         description: Maturity date
         tag: InstrmInf/IntlBdInf/MtrtyDt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: currency
         description: Trading currency
         tag: InstrmInf/IntlBdInf/Ccy
@@ -1009,7 +1009,7 @@ datasets:
       - name: refdate
         description: Reference date
         tag: RptParams/RptDtAndTm/Dt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: security_id
         description: Security ID
         tag: FinInstrmId/OthrId/Id
@@ -1097,7 +1097,7 @@ datasets:
       - name: refdate
         description: Reference date
         tag: RptParams/RptDtAndTm/Dt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: security_id
         description: Security ID
         tag: FinInstrmId/OthrId/Id
@@ -1293,7 +1293,7 @@ datasets:
       - name: refdate
         description: Reference date
         tag: RptParams/RptDtAndTm/Dt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: security_id
         description: Security ID
         tag: FinInstrmId/OthrId/Id
@@ -1365,7 +1365,7 @@ datasets:
       - name: refdate
         description: Reference date
         tag: RptParams/RptDtAndTm/Dt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: security_id
         description: Security ID
         tag: FinInstrmId/OthrId/Id
@@ -1421,7 +1421,7 @@ datasets:
       - name: refdate
         description: Reference date
         tag: RptParams/RptDtAndTm/Dt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: security_id
         description: Security ID
         tag: FinInstrmId/OthrId/Id
@@ -1473,7 +1473,7 @@ datasets:
       - name: refdate
         description: Reference date
         tag: RptParams/RptDtAndTm/Dt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: security_id
         description: Security ID
         tag: FinInstrmId/OthrId/Id
@@ -1525,7 +1525,7 @@ datasets:
       - name: refdate
         description: Reference date
         tag: RptParams/RptDtAndTm/Dt
-        type: date
+        type: date(format='%Y-%m-%d')
       - name: security_id
         description: Security ID
         tag: FinInstrmId/OthrId/Id
