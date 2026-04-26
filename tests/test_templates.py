@@ -279,3 +279,42 @@ class TestRetryConfigParsing:
                     "retry_on_status_codes": [200, 999],
                 }
             )
+
+
+@pytest.mark.integration
+def test_b3_cotahist_yearly_downloads_with_year_arg():
+    """b3-cotahist-yearly downloads successfully with integer year arg."""
+    from brasa.engine import download_marketdata
+
+    report = download_marketdata("b3-cotahist-yearly", year=2000)
+    # At least one result was attempted
+    assert len(report.results) == 1
+    # The result should be a success or a duplicate (cached)
+    assert report.results[0].status.name in ("PASSED", "SKIPPED")
+
+
+@pytest.mark.integration
+def test_b3_cotahist_yearly_cache_hit_on_second_call():
+    """Second download with the same year arg hits the cache (no re-download)."""
+    from brasa.engine import download_marketdata
+
+    # First call — populates cache
+    download_marketdata("b3-cotahist-yearly", year=2000)
+    # Second call — must be skipped (cache hit)
+    report = download_marketdata("b3-cotahist-yearly", year=2000)
+    assert len(report.results) == 1
+    assert report.results[0].status.name == "SKIPPED"
+
+
+@pytest.mark.integration
+def test_b3_cotahist_yearly_parsed_output_has_refdate():
+    """Parsed output DataFrame contains refdate column with date values."""
+    from brasa.engine import get_marketdata
+
+    df = get_marketdata("b3-cotahist-yearly", year=2000)
+    assert df is not None
+    assert isinstance(df, __import__("pandas").DataFrame)
+    assert "refdate" in df.columns
+    assert "symbol" in df.columns
+    assert "close" in df.columns
+    assert len(df) > 0
