@@ -537,9 +537,10 @@ class CacheManager(Singleton):
         pass
 
     def clean_meta_db(self, meta: CacheMetadata) -> None:
-        """Remove metadata from the database."""
+        """Remove metadata and related download_trials from the database."""
         with closing(self.meta_db_connection) as conn, conn:
             c = conn.cursor()
+            c.execute("delete from download_trials where cache_id = ?", (meta.id,))
             c.execute("delete from cache_metadata where id = ?", (meta.id,))
 
     def remove_meta(self, meta: CacheMetadata) -> None:
