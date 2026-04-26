@@ -100,6 +100,9 @@ from .parsers import (
     TemplateFields,
 )
 
+# Pipeline map
+from .pipeline_map import TemplateStatus, build_pipeline_map
+
 # Processing functions (including internal for backwards compatibility)
 from .processing import (
     _read_marketdata,
@@ -185,9 +188,11 @@ __all__ = [
     "TemplateField",
     "TemplateFields",
     "TemplatePart",
+    "TemplateStatus",
     "Verbosity",
     "_download_marketdata",
     "_read_marketdata",
+    "build_pipeline_map",
     "capture_warnings",
     "clear_template_cache",
     "create_task_result_from_exception",

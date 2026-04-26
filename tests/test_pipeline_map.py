@@ -5,6 +5,7 @@ from __future__ import annotations
 import itertools
 import json
 from contextlib import closing
+from unittest.mock import patch
 
 import pytest
 
@@ -145,3 +146,183 @@ class TestGetEtlStatus:
         graph = _build_graph_from_templates([upstream, etl])
         with pytest.raises(KeyError):
             graph.get_etl_status("missing")
+
+
+from brasa.engine.pipeline_map import TemplateStatus, build_pipeline_map  # noqa: E402
+
+
+class TestBuildPipelineMap:
+    def test_empty_graph(self):
+        with patch("brasa.engine.pipeline_map.TemplateDependencyGraph") as mocked:
+            inst = mocked.return_value
+            inst.template_ids = []
+            inst.templates = {}
+            inst.edges = {}
+            assert build_pipeline_map() == []
+
+    def test_topological_order_simple_chain(self):
+        up = _make_download_template("up")
+        dn = _make_etl_template("dn", input_datasets=["input.up"])
+        graph = _build_graph_from_templates([up, dn])
+        with patch(
+            "brasa.engine.pipeline_map.TemplateDependencyGraph",
+            return_value=graph,
+        ):
+            items = build_pipeline_map(include_ok=True)
+        ids = [it.template_id for it in items]
+        assert ids == ["up", "dn"]
+
+    def test_filters_ok_by_default(self):
+        up = _make_download_template("up")
+        dn = _make_etl_template("dn", input_datasets=["input.up"])
+        graph = _build_graph_from_templates([up, dn])
+        with (
+            patch.object(graph, "get_download_status", return_value=("ok", "")),
+            patch.object(graph, "get_etl_status", return_value=("ok", "")),
+            patch(
+                "brasa.engine.pipeline_map.TemplateDependencyGraph",
+                return_value=graph,
+            ),
+        ):
+            assert build_pipeline_map() == []
+            full = build_pipeline_map(include_ok=True)
+        assert [s.status for s in full] == ["ok", "ok"]
+
+    def test_template_type_set_correctly(self):
+        up = _make_download_template("up")
+        dn = _make_etl_template("dn", input_datasets=["input.up"])
+        graph = _build_graph_from_templates([up, dn])
+        with (
+            patch.object(graph, "get_download_status", return_value=("stale", "x")),
+            patch.object(graph, "get_etl_status", return_value=("stale", "y")),
+            patch(
+                "brasa.engine.pipeline_map.TemplateDependencyGraph",
+                return_value=graph,
+            ),
+        ):
+            items = build_pipeline_map()
+        types = {it.template_id: it.template_type for it in items}
+        assert types == {"up": "download", "dn": "etl"}
+
+
+from io import StringIO  # noqa: E402
+
+from rich.console import Console  # noqa: E402
+
+from brasa.engine.pipeline_map import (  # noqa: E402
+    render_flat,
+    render_grouped,
+    render_tree,
+)
+
+
+def _capture(renderer, *args, **kwargs):
+    buf = StringIO()
+    console = Console(file=buf, force_terminal=False, width=120, no_color=True)
+    renderer(*args, console=console, **kwargs)
+    return buf.getvalue()
+
+
+class TestRenderFlat:
+    def test_empty_prints_all_clear(self):
+        output = _capture(render_flat, [])
+        assert "All up to date" in output
+
+    def test_single_stale_download(self):
+        items = [
+            TemplateStatus(
+                template_id="b3-bvbg028",
+                template_type="download",
+                status="stale",
+                reason="12 unprocessed entries",
+            )
+        ]
+        output = _capture(render_flat, items)
+        assert "1." in output
+        assert "[download]" in output
+        assert "b3-bvbg028" in output
+        assert "stale" in output
+        assert "12 unprocessed entries" in output
+
+    def test_multiple_items_numbered(self):
+        items = [
+            TemplateStatus("a", "download", "stale", "x"),
+            TemplateStatus("b", "etl", "stale", "y"),
+            TemplateStatus("c", "etl", "never-run", "z"),
+        ]
+        output = _capture(render_flat, items)
+        assert "1." in output and "2." in output and "3." in output
+        assert output.index("1.") < output.index("2.") < output.index("3.")
+
+
+class TestRenderGrouped:
+    def test_empty_prints_all_clear(self):
+        output = _capture(render_grouped, [], graph=None)
+        assert "All up to date" in output
+
+    def test_groups_by_stage(self):
+        up = _make_download_template("dl1")
+        st = _make_etl_template(
+            "st1", input_datasets=["input.dl1"], writer_layer="staging"
+        )
+        cu = _make_etl_template(
+            "cu1", input_datasets=["staging.st1"], writer_layer="curated"
+        )
+        graph = _build_graph_from_templates([up, st, cu])
+        items = [
+            TemplateStatus("dl1", "download", "stale", "1 unprocessed entry"),
+            TemplateStatus("st1", "etl", "stale", "upstream 'dl1' newer"),
+            TemplateStatus("cu1", "etl", "never-run", "output never produced"),
+        ]
+        output = _capture(render_grouped, items, graph=graph)
+        assert "Downloads to process" in output
+        assert "Staging ETLs" in output
+        assert "Curated ETLs" in output
+        assert output.index("Downloads to process") < output.index("Staging ETLs")
+        assert output.index("Staging ETLs") < output.index("Curated ETLs")
+
+
+class TestRenderTree:
+    def test_empty_prints_all_clear(self):
+        output = _capture(render_tree, [], graph=None)
+        assert "All up to date" in output
+
+    def test_forward_roots_at_sources(self):
+        up = _make_download_template("dl1")
+        st = _make_etl_template(
+            "st1", input_datasets=["input.dl1"], writer_layer="staging"
+        )
+        graph = _build_graph_from_templates([up, st])
+        items = [
+            TemplateStatus("dl1", "download", "stale", "1 unprocessed entry"),
+            TemplateStatus("st1", "etl", "stale", "upstream 'dl1' newer"),
+        ]
+        output = _capture(render_tree, items, graph=graph, reverse=False)
+        assert output.index("dl1") < output.index("st1")
+        assert "  st1" in output or "└" in output or "├" in output
+
+    def test_reverse_roots_at_leaves(self):
+        up = _make_download_template("dl1")
+        st = _make_etl_template(
+            "st1", input_datasets=["input.dl1"], writer_layer="staging"
+        )
+        graph = _build_graph_from_templates([up, st])
+        items = [
+            TemplateStatus("dl1", "download", "stale", "1 unprocessed entry"),
+            TemplateStatus("st1", "etl", "stale", "upstream 'dl1' newer"),
+        ]
+        output = _capture(render_tree, items, graph=graph, reverse=True)
+        assert output.index("st1") < output.index("dl1")
+
+    def test_skips_subtrees_with_no_stale(self):
+        up = _make_download_template("dl1")
+        st = _make_etl_template(
+            "st1", input_datasets=["input.dl1"], writer_layer="staging"
+        )
+        graph = _build_graph_from_templates([up, st])
+        items = [
+            TemplateStatus("st1", "etl", "stale", "upstream is newer"),
+        ]
+        output = _capture(render_tree, items, graph=graph, reverse=False)
+        assert "dl1" not in output
+        assert "st1" in output
