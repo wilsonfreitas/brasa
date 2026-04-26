@@ -25,7 +25,7 @@ _COMMAND_GROUPS = {
         "head",
     ],
     "Database": ["create-views", "create-view", "list-tables", "query"],
-    "Maintenance": ["doctor"],
+    "Maintenance": ["doctor", "cache"],
 }
 
 
@@ -474,6 +474,29 @@ parser_doctor.add_argument(
     default=30,
     metavar="DAYS",
     help="for date-gap checks, look back this many days (default: 30)",
+)
+
+parser_cache = subparsers.add_parser(
+    "cache",
+    help="cache maintenance operations",
+)
+cache_subparsers = parser_cache.add_subparsers(
+    dest="cache_command", title="Cache commands"
+)
+
+parser_cache_drop = cache_subparsers.add_parser(
+    "drop",
+    help="drop a cache entry by meta id (raw files + metadata + trials)",
+)
+parser_cache_drop.add_argument(
+    "meta_id",
+    metavar="META_ID",
+    help="cache entry id (see meta.db cache_metadata.id)",
+)
+parser_cache_drop.add_argument(
+    "--yes",
+    action="store_true",
+    help="skip confirmation prompt",
 )
 
 
@@ -1210,4 +1233,37 @@ if __name__ == "__main__":
             print("\nNo fixable issues found.")
 
         if report.errors():
+            sys.exit(1)
+
+    elif args.command == "cache":
+        if args.cache_command == "drop":
+            from .engine import CacheManager
+            from .engine.exceptions import CacheError
+
+            cm = CacheManager()
+            meta_dict = cm._load_meta_dict_by_id(args.meta_id)
+            if meta_dict is None:
+                print(f"No cache entry with id {args.meta_id!r}", file=sys.stderr)
+                sys.exit(1)
+
+            print(
+                f"About to drop cache entry {args.meta_id}:\n"
+                f"  template: {meta_dict['template']}\n"
+                f"  timestamp: {meta_dict['timestamp']}\n"
+                f"  downloaded files: {len(meta_dict['downloaded_files'])}"
+            )
+            if not args.yes:
+                reply = input("Proceed? [y/N]: ").strip().lower()
+                if reply not in ("y", "yes"):
+                    print("Aborted.")
+                    sys.exit(0)
+
+            try:
+                cm.drop(args.meta_id)
+            except CacheError as e:
+                print(str(e), file=sys.stderr)
+                sys.exit(1)
+            print(f"Dropped cache entry {args.meta_id}.")
+        else:
+            parser_cache.print_help()
             sys.exit(1)
