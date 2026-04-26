@@ -344,8 +344,10 @@ class CacheManager(Singleton):
 
     @property
     def meta_db_connection(self) -> sqlite3.Connection:
-        """Get a connection to the metadata database."""
-        return sqlite3.connect(database=self.cache_path(self.meta_db_filename))
+        """Get a connection to the metadata database with FK enforcement on."""
+        conn = sqlite3.connect(database=self.cache_path(self.meta_db_filename))
+        conn.execute("PRAGMA foreign_keys = ON")
+        return conn
 
     def db_folder(self, template: MarketDataTemplate) -> str:
         """Get the database folder for a template, including layer.

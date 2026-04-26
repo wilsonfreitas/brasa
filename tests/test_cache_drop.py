@@ -69,3 +69,16 @@ def test_clean_meta_db_with_no_trials():
     cm.clean_meta_db(meta)  # must not raise
 
     assert cm.has_meta(meta) is False
+
+
+def test_meta_db_connection_has_foreign_keys_on():
+    """Every connection from CacheManager.meta_db_connection has FK enforcement on."""
+    cm = CacheManager()
+
+    conn = cm.meta_db_connection
+    try:
+        c = conn.execute("PRAGMA foreign_keys")
+        (val,) = c.fetchone()
+        assert val == 1
+    finally:
+        conn.close()
