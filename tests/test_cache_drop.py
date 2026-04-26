@@ -82,3 +82,116 @@ def test_meta_db_connection_has_foreign_keys_on():
         assert val == 1
     finally:
         conn.close()
+
+
+def test_drop_removes_entry():
+    """CacheManager.drop removes the entry and its trials by id."""
+    cm = CacheManager()
+
+    meta = _seed_meta(cm)
+    _insert_trials(cm, meta.id, 2)
+
+    cm.drop(meta.id)
+
+    assert cm.has_meta(meta) is False
+    assert _count_trials(cm, meta.id) == 0
+
+
+def test_drop_unknown_id_raises_cache_error():
+    """CacheManager.drop raises CacheError when no entry matches the id."""
+    import pytest
+
+    from brasa.engine.exceptions import CacheError
+
+    cm = CacheManager()
+
+    with pytest.raises(CacheError, match="No cache entry"):
+        cm.drop("not-a-real-id")
+
+
+def test_cli_cache_drop_yes(tmp_path):
+    """`brasa cache drop <id> --yes` removes the entry without prompting."""
+    import os
+    import subprocess
+
+    env = {**os.environ, "BRASA_DATA_PATH": str(tmp_path)}
+    # Initialize a CacheManager to seed data using the tmp_path cache.
+    # We need to connect directly since CacheManager is a singleton in the main process.
+
+    meta_db = tmp_path / "meta" / "meta.db"
+    meta_db.parent.mkdir(parents=True, exist_ok=True)
+
+    # Use subprocess so the singleton is fresh.
+    seed_script = f"""
+import os
+os.environ["BRASA_DATA_PATH"] = {str(tmp_path)!r}
+from brasa.engine import CacheManager
+from brasa.engine.cache import CacheMetadata
+cm = CacheManager()
+meta = CacheMetadata(template="test-template")
+meta.download_checksum = "deadbeef"
+cm.save_meta(meta)
+print(meta.id)
+"""
+    result = subprocess.run(
+        ["uv", "run", "python", "-c", seed_script],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    meta_id = result.stdout.strip()
+
+    drop_result = subprocess.run(
+        ["uv", "run", "python", "-m", "brasa.cli", "cache", "drop", meta_id, "--yes"],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert drop_result.returncode == 0, drop_result.stderr
+
+    check_script = f"""
+import os
+os.environ["BRASA_DATA_PATH"] = {str(tmp_path)!r}
+from brasa.engine import CacheManager
+from brasa.engine.cache import CacheMetadata
+cm = CacheManager()
+d = cm._load_meta_dict_by_id({meta_id!r})
+print("gone" if d is None else "present")
+"""
+    check = subprocess.run(
+        ["uv", "run", "python", "-c", check_script],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert check.stdout.strip() == "gone"
+
+
+def test_cli_cache_drop_unknown_id_exits_nonzero(tmp_path):
+    """`brasa cache drop <unknown-id> --yes` exits with non-zero status."""
+    import os
+    import subprocess
+
+    env = {**os.environ, "BRASA_DATA_PATH": str(tmp_path)}
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            "-m",
+            "brasa.cli",
+            "cache",
+            "drop",
+            "not-a-real-id",
+            "--yes",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert result.returncode != 0

@@ -551,6 +551,24 @@ class CacheManager(Singleton):
         self.clean_meta_db_folder(meta)
         self.clean_meta_db(meta)
 
+    def drop(self, meta_id: str) -> None:
+        """Drop a cache entry by id: removes raw files, metadata row, and trials.
+
+        Args:
+            meta_id: The cache entry id (CacheMetadata.id).
+
+        Raises:
+            CacheError: If no cache entry exists with the given id.
+        """
+        from .exceptions import CacheError
+
+        meta_dict = self._load_meta_dict_by_id(meta_id)
+        if meta_dict is None:
+            raise CacheError(f"No cache entry with id {meta_id!r}")
+        meta = CacheMetadata(template=meta_dict["template"])
+        meta.from_dict(meta_dict)
+        self.remove_meta(meta)
+
     def save_trial(
         self,
         meta: CacheMetadata,
