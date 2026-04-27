@@ -42,4 +42,4 @@ tasks:
   # per-task args with integer range and force override
   - template: b3-indexes-historical-prices
     args:
-      year: "2026"
+      year: 2026
