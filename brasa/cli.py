@@ -783,10 +783,10 @@ def _parse_download_args(raw_args: list[str] | None, calendar: str) -> dict:
     return kwargs
 
 
-if __name__ == "__main__":
+def main() -> None:  # noqa: PLR0912, PLR0915
     args = parser.parse_args()
     if args.command == "setup":
-        man = CacheManager()
+        CacheManager()
     elif args.command == "download":
         plan_file = getattr(args, "plan", None)
         templates = list(args.template or [])
@@ -1296,7 +1296,6 @@ if __name__ == "__main__":
 
     elif args.command == "cache":
         if args.cache_command == "drop":
-            from .engine import CacheManager
             from .engine.exceptions import CacheError
 
             cm = CacheManager()
@@ -1326,3 +1325,7 @@ if __name__ == "__main__":
         else:
             parser_cache.print_help()
             sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
