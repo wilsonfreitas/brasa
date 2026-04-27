@@ -3,8 +3,10 @@ description: Fundos listados na B3, renda variável, renda fixa, imobiliários e
 etl:
   pipeline:
     - step: load
-      inputs: b3-listed-funds
+      input: b3-listed-funds
       layer: input
+
+    - step: to_dataframe
 
     - step: apply_lambda
       column: acronym
