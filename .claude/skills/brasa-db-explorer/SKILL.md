@@ -15,11 +15,15 @@ Views must exist before querying. If queries return empty results or "table not 
 uv run python -c "from brasa import create_all_views; create_all_views()"
 ```
 
-This only needs to be done once per session or after new data is downloaded.
+This only needs to be done once per Python process. If you open a new terminal or restart the kernel, run it again.
+
+If a query returns empty results but no error is raised, first verify your filter values by sampling the table without filters (for example, `SELECT DISTINCT symbol FROM "input.b3-cotahist-daily" LIMIT 20`) before assuming views are missing.
 
 ## Connecting to DuckDB
 
 The database file lives at `$BRASA_DATA_PATH/db/brasa.duckdb`. Always connect with `read_only=False` — DuckDB raises an error if you try to mix read-only and read-write connections in the same session, and brasa itself holds a write connection internally.
+
+If `os.environ["BRASA_DATA_PATH"]` raises `KeyError`, inform the user that the environment variable is not set and ask them to set it to the directory where brasa data is stored before proceeding.
 
 ```bash
 uv run python -c "
@@ -57,7 +61,7 @@ The three queryable layers are:
 
 ## Discovery Workflow
 
-Always start by discovering what's available before writing analytical queries.
+Use the Key Datasets Reference for common tables listed below. Run discovery queries when the user asks about datasets not listed there, or when a query returns unexpected results.
 
 ### 1. List all tables
 
@@ -228,7 +232,7 @@ LEFT JOIN "staging.b3-indexes-composition" ic
 WHERE p.refdate >= '2024-01-01'
 ```
 
-Remember to use `read_only=False` when creating views.
+View names like `"custom.my-analysis"` use a dot as part of the quoted name, not as a schema separator. DuckDB stores this as a quoted object name in the default schema, so no schema creation is needed.
 
 ## DuckDB SQL Features
 
@@ -264,8 +268,9 @@ ORDER BY refdate
 
 - Start with discovery (list tables, describe schemas, sample rows) before writing complex queries
 - Always quote table names with double quotes due to dots and hyphens
-- Use `LIMIT` when exploring to avoid dumping huge result sets
+- Use `LIMIT 100` or fewer when exploring unfamiliar tables. Only omit `LIMIT` when the user explicitly requests full output or when row count is known to be small
 - Prefer CTEs over subqueries for readability
 - When the user's question is ambiguous, explore the data first and show what's available before making assumptions
 - For date filtering, `refdate` is the standard date column across most datasets
 - When creating views for the user, explain what each join and filter does
+- Do not execute `INSERT`, `UPDATE`, or `DELETE` statements against existing brasa-managed tables. Only `CREATE OR REPLACE VIEW` and `SELECT` operations are safe; if the user requests data modification, explain that brasa manages data ingestion separately
