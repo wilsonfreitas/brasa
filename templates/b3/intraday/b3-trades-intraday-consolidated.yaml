@@ -1,0 +1,16 @@
+id: b3-trades-intraday-consolidated
+description: Negócios Intraday consolidados (legado + ações + derivativos)
+
+etl:
+  pipeline:
+    - step: concat_datasets
+      inputs:
+        - b3-trades-intraday
+        - b3-trades-intraday-equities
+        - b3-trades-intraday-derivatives
+      layer: input
+    - step: sort
+      by: [refdate]
+
+writer:
+  layer: staging

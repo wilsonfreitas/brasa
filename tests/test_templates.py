@@ -344,3 +344,24 @@ def test_b3_trades_intraday_derivatives_template_loads():
     assert tpl.downloader.url.endswith("?type=2")
     assert tpl.fields["symbol"].type_name == "string"
     assert tpl.fields["traded_price"].type_name == "numeric"
+
+
+def test_b3_trades_intraday_consolidated_etl_template_loads():
+    tpl = MarketDataTemplate(
+        "templates/b3/intraday/b3-trades-intraday-consolidated.yaml"
+    )
+
+    assert tpl.id == "b3-trades-intraday-consolidated"
+    assert tpl.is_etl
+    assert not tpl.has_downloader
+    assert not tpl.has_reader
+    assert tpl.etl.is_pipeline
+
+
+def test_b3_trades_intraday_legacy_template_unchanged():
+    tpl = MarketDataTemplate("templates/b3/intraday/b3-trades-intraday.yaml")
+
+    assert tpl.id == "b3-trades-intraday"
+    assert tpl.has_downloader
+    assert tpl.has_reader
+    assert not tpl.is_etl
