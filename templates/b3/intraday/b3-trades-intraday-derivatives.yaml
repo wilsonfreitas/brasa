@@ -1,0 +1,75 @@
+# B3 intraday trades — derivatives (type=2)
+id: b3-trades-intraday-derivatives
+description: Negócios Intraday - Derivativos (type=2)
+
+downloader:
+  function: brasa.downloaders.datetime_download
+  url: https://drp.b3.com.br/rapinegocios/tickercsv/%Y-%m-%d?type=2
+  format: zip
+  args:
+    refdate: ~
+
+reader:
+  locale: en
+  pipeline:
+    - step: read_csv
+      separator: ";"
+
+    - step: rename_columns
+      mapping:
+        DataReferencia: refdate
+        CodigoInstrumento: symbol
+        AcaoAtualizacao: update_action
+        PrecoNegocio: traded_price
+        QuantidadeNegociada: traded_quantity
+        HoraFechamento: trade_time
+        CodigoIdentificadorNegocio: trade_id
+        TipoSessaoPregao: trade_session_id
+        DataNegocio: trade_date
+        CodigoParticipanteComprador: buyer_code
+        CodigoParticipanteVendedor: seller_code
+
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: input
+  partitioning: [refdate]
+
+fields:
+  - name: refdate
+    description: Data de referência
+    type: date
+  - name: symbol
+    description: Código que identifica um instrumento
+    type: character
+  - name: update_action
+    description: Informa a ação de atualização que está ocorrendo
+    type: integer
+  - name: traded_price
+    description: Preço do negócio
+    type: numeric(decimal=",")
+  - name: traded_quantity
+    description: Quantidade negociada
+    type: numeric
+  - name: trade_time
+    description: Hora (o instante) do negócio fechado (will be merged with trade_date)
+    type: integer
+  - name: trade_id
+    description: Número do negócio
+    type: numeric
+  - name: trade_session_id
+    description: |
+      Este campo informa se o negócio foi feito no horário regular do pregão
+      ou after market
+      (Período de negociação que funciona fora do horário regular do pregão).
+    type: integer
+  - name: trade_date
+    description: Data e hora do pregão (combined from trade_date + trade_time)
+    type: datetime
+  - name: buyer_code
+    description: Código do Participante Comprador
+    type: numeric
+  - name: seller_code
+    description: Código do Participante Vendedor
+    type: numeric
