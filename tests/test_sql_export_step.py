@@ -9,6 +9,7 @@ import pyarrow.parquet as pq
 from brasa.engine import CacheManager
 from brasa.engine.catalog import DatasetCatalog
 from brasa.engine.pipeline.etl_context import ETLPipelineContext
+from brasa.engine.pipeline.etl_executor import ETLPipeline
 from brasa.engine.pipeline.etl_results import ETLWriteComplete
 from brasa.engine.pipeline.registry import StepRegistry
 from brasa.engine.template import MarketDataWriter
@@ -148,3 +149,28 @@ def test_sql_export_unpartitioned_writes_single_file():
     assert isinstance(result, ETLWriteComplete)
     man = CacheManager()
     assert Path(man.db_path("staging/ti-solo-out/data.parquet")).exists()
+
+
+def test_executor_skips_default_write_on_sentinel():
+    _write_input("ti-sc", [(dt.date(2026, 5, 1), "Z", 5.0)])
+    pipeline = ETLPipeline.from_config(
+        [
+            {
+                "step": "sql_export",
+                "datasets": ["input.ti-sc"],
+                "query": ("SELECT refdate, symbol, traded_price FROM 'input.ti-sc'"),
+            }
+        ]
+    )
+    writer = MarketDataWriter(
+        {"layer": "staging", "dataset": "ti-sc-out", "partitioning": ["refdate"]},
+        "tpl",
+    )
+
+    # Must not raise (no pa.Table.from_pandas on a sentinel); step does the write
+    pipeline.execute_and_write("tpl", writer=writer, fields=None)
+
+    man = CacheManager()
+    out = Path(man.db_path("staging/ti-sc-out"))
+    assert (out / ".last_processed").exists()
+    assert sorted(p.name for p in out.glob("refdate=*")) == ["refdate=2026-05-01"]

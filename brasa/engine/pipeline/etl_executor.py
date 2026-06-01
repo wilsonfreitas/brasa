@@ -18,6 +18,7 @@ from brasa.engine.cache import CacheManager
 from brasa.fieldsets.adapters import PyArrowAdapter
 
 from .etl_context import ETLPipelineContext
+from .etl_results import ETLWriteComplete
 from .registry import StepRegistry
 from .step import PipelineStep
 
@@ -142,6 +143,13 @@ class ETLPipeline:
             fields: Optional field definitions for schema enforcement.
         """
         df = self.execute(template_id, writer, fields)
+
+        # Steps like sql_export write + register their output themselves and
+        # return a sentinel; skip the default DataFrame-based write.
+        if isinstance(df, ETLWriteComplete):
+            logger.info(f"ETL output written by step to {df.path}")
+            return
+
         man = CacheManager()
 
         # Get output path using layer and dataset from writer
