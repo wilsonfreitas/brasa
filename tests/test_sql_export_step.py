@@ -12,7 +12,7 @@ from brasa.engine.pipeline.etl_context import ETLPipelineContext
 from brasa.engine.pipeline.etl_executor import ETLPipeline
 from brasa.engine.pipeline.etl_results import ETLWriteComplete
 from brasa.engine.pipeline.registry import StepRegistry
-from brasa.engine.template import MarketDataWriter
+from brasa.engine.template import MarketDataTemplate, MarketDataWriter
 from brasa.queries import get_dataset
 
 
@@ -174,3 +174,19 @@ def test_executor_skips_default_write_on_sentinel():
     out = Path(man.db_path("staging/ti-sc-out"))
     assert (out / ".last_processed").exists()
     assert sorted(p.name for p in out.glob("refdate=*")) == ["refdate=2026-05-01"]
+
+
+def test_consolidated_template_uses_sql_export():
+    tpl = MarketDataTemplate(
+        "templates/b3/intraday/b3-trades-intraday-consolidated.yaml"
+    )
+    assert tpl.id == "b3-trades-intraday-consolidated"
+    assert tpl.is_etl
+    assert tpl.etl.is_pipeline
+
+    step_names = [s.name for s in tpl.etl.pipeline.steps]
+    assert step_names == ["sql_export"]
+
+    assert tpl.writer.layer.value == "staging"
+    assert tpl.writer.dataset == "b3-trades-intraday"
+    assert tpl.writer.partitioning == ["refdate"]
