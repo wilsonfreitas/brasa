@@ -1,5 +1,6 @@
 """Tests for the streaming sql_export ETL step and the executor short-circuit."""
 
+import datetime as dt
 from pathlib import Path
 
 import pyarrow as pa
@@ -7,7 +8,11 @@ import pyarrow.parquet as pq
 
 from brasa.engine import CacheManager
 from brasa.engine.catalog import DatasetCatalog
+from brasa.engine.pipeline.etl_context import ETLPipelineContext
 from brasa.engine.pipeline.etl_results import ETLWriteComplete
+from brasa.engine.pipeline.registry import StepRegistry
+from brasa.engine.template import MarketDataWriter
+from brasa.queries import get_dataset
 
 
 def _write_input(name: str, rows: list[tuple]) -> None:
@@ -42,3 +47,104 @@ def test_etl_write_complete_is_frozen_dataclass():
     assert result.path == "/tmp/x"
     assert result.layer == "staging"
     assert result.dataset == "d"
+
+
+def test_sql_export_step_registered():
+    step = StepRegistry.create(
+        "sql_export",
+        {
+            "step": "sql_export",
+            "datasets": ["input.x"],
+            "query": "SELECT * FROM 'input.x'",
+        },
+    )
+    assert step is not None
+    assert step.name == "sql_export"
+    assert step.get_input_datasets() == ["input.x"]
+
+
+def test_sql_export_writes_partitioned_with_date_cutover():
+    # legacy: the 2026-05-01 row must be dropped (legacy ends in April)
+    _write_input(
+        "ti-legacy",
+        [(dt.date(2026, 4, 30), "L", 1.0), (dt.date(2026, 5, 1), "L", 9.0)],
+    )
+    # equities: the 2026-04-01 row must be dropped (equities start in May)
+    _write_input(
+        "ti-eq",
+        [(dt.date(2026, 4, 1), "E", 7.0), (dt.date(2026, 5, 1), "E", 2.0)],
+    )
+
+    query = (
+        "SELECT refdate, symbol, traded_price FROM 'input.ti-legacy' "
+        "WHERE refdate <= DATE '2026-04-30' "
+        "UNION ALL "
+        "SELECT refdate, symbol, traded_price FROM 'input.ti-eq' "
+        "WHERE refdate >= DATE '2026-05-01'"
+    )
+    step = StepRegistry.create(
+        "sql_export",
+        {
+            "step": "sql_export",
+            "datasets": ["input.ti-legacy", "input.ti-eq"],
+            "query": query,
+        },
+    )
+    writer = MarketDataWriter(
+        {"layer": "staging", "dataset": "ti-out", "partitioning": ["refdate"]},
+        "consolidated-tpl",
+    )
+    ctx = ETLPipelineContext(template_id="consolidated-tpl", writer=writer)
+
+    result = step.execute(None, ctx)
+
+    assert isinstance(result, ETLWriteComplete)
+    assert result.layer == "staging"
+    assert result.dataset == "ti-out"
+
+    man = CacheManager()
+    out_path = Path(man.db_path("staging/ti-out"))
+    assert (out_path / ".last_processed").exists()
+    part_dirs = sorted(p.name for p in out_path.glob("refdate=*"))
+    assert part_dirs == ["refdate=2026-04-30", "refdate=2026-05-01"]
+
+    # Catalog row registered with refdate partitioning
+    info = DatasetCatalog().get_dataset_info("staging", "ti-out")
+    assert info is not None
+    assert info.partitioning == ["refdate"]
+
+    df = (
+        get_dataset(
+            "ti-out",
+            layer="staging",
+            use_template_schema=False,
+            use_catalog_schema=True,
+        )
+        .to_table()
+        .to_pandas()
+        .sort_values("refdate")
+        .reset_index(drop=True)
+    )
+    # Legacy May row and equities April row excluded; no day sourced twice
+    assert list(df["symbol"]) == ["L", "E"]
+    assert list(df["traded_price"]) == [1.0, 2.0]
+
+
+def test_sql_export_unpartitioned_writes_single_file():
+    _write_input("ti-solo", [(dt.date(2026, 5, 1), "S", 3.0)])
+    step = StepRegistry.create(
+        "sql_export",
+        {
+            "step": "sql_export",
+            "datasets": ["input.ti-solo"],
+            "query": "SELECT refdate, symbol, traded_price FROM 'input.ti-solo'",
+        },
+    )
+    writer = MarketDataWriter({"layer": "staging", "dataset": "ti-solo-out"}, "tpl")
+    ctx = ETLPipelineContext(template_id="tpl", writer=writer)
+
+    result = step.execute(None, ctx)
+
+    assert isinstance(result, ETLWriteComplete)
+    man = CacheManager()
+    assert Path(man.db_path("staging/ti-solo-out/data.parquet")).exists()
