@@ -20,6 +20,7 @@ import pyarrow.dataset as ds
 
 from brasa.engine.pipeline.context import PipelineContext
 
+from ..etl_results import ETLWriteComplete
 from ..registry import StepRegistry
 from ..step import PipelineStep
 from . import shared_transforms
@@ -530,6 +531,129 @@ class RunQueryStep(PipelineStep):
         Returns:
             List of dataset names that are inputs to this step.
         """
+        return self.params.get("datasets", [])
+
+
+@StepRegistry.register("sql_export")
+class SqlExportStep(PipelineStep):
+    """Execute a SQL query and stream the result directly to partitioned parquet.
+
+    Unlike ``sql_query``, this step never materializes the result as a pandas
+    DataFrame. It registers the input datasets in an in-memory DuckDB
+    connection (lazy PyArrow scans) and uses DuckDB's ``COPY ... TO`` to write
+    the query result straight to parquet, partitioned according to the
+    template's writer configuration. This keeps memory bounded for very large
+    consolidations.
+
+    The step performs its own catalog registration and ``.last_processed``
+    marker bookkeeping and returns an :class:`ETLWriteComplete` sentinel so the
+    executor skips its default write.
+
+    Parameters:
+        datasets: List of input dataset names to register as DuckDB views.
+            Names may be given as ``"<layer>.<dataset>"``.
+        query: SQL query string (typically a ``UNION ALL``) to execute.
+    """
+
+    def execute(self, _data: Any, context: Any) -> ETLWriteComplete:
+        """Run the query and write partitioned parquet directly via DuckDB.
+
+        Args:
+            _data: Ignored (datasets are loaded explicitly).
+            context: ETL pipeline context (provides ``writer`` and ``template_id``).
+
+        Returns:
+            An ``ETLWriteComplete`` sentinel indicating the output was written.
+
+        Raises:
+            ValueError: If required parameters or writer config are missing.
+            RuntimeError: If the DuckDB query/export fails.
+        """
+        import shutil
+        from pathlib import Path
+
+        import duckdb
+
+        from brasa.engine.cache import CacheManager
+        from brasa.engine.catalog import DatasetCatalog
+        from brasa.engine.dependency_resolver import _touch_marker
+        from brasa.queries import get_dataset
+
+        datasets = self.require_param("datasets")
+        query = self.require_param("query")
+
+        if not datasets:
+            raise ValueError("sql_export requires a non-empty 'datasets' list")
+        if not query or not query.strip():
+            raise ValueError("sql_export requires a non-empty 'query' string")
+
+        writer = getattr(context, "writer", None)
+        if writer is None:
+            raise ValueError("sql_export requires a writer configuration")
+
+        layer = writer.layer.value
+        dataset = writer.dataset
+        partitioning = list(getattr(writer, "partitioning", []) or [])
+
+        man = CacheManager()
+        output_path = man.db_path(f"{layer}/{dataset}")
+
+        # Idempotent run: clear any previous output
+        if Path(output_path).exists():
+            shutil.rmtree(output_path)
+
+        conn = duckdb.connect(":memory:")
+        try:
+            for dataset_name in datasets:
+                if "." in dataset_name:
+                    layer_name, base_name = dataset_name.split(".", 1)
+                    dset = get_dataset(
+                        base_name,
+                        layer=layer_name,
+                        use_template_schema=False,
+                        use_catalog_schema=True,
+                    )
+                else:
+                    dset = get_dataset(dataset_name)
+                conn.register(dataset_name, dset)
+
+            if partitioning:
+                # DuckDB creates the leaf + partition dirs but not the parent
+                # chain; ensure the layer directory exists first.
+                Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+                partition_clause = ", ".join(partitioning)
+                conn.execute(
+                    f"COPY ({query}) TO '{output_path}' "
+                    f"(FORMAT PARQUET, PARTITION_BY ({partition_clause}))"
+                )
+            else:
+                Path(output_path).mkdir(parents=True, exist_ok=True)
+                conn.execute(
+                    f"COPY ({query}) TO '{output_path}/data.parquet' (FORMAT PARQUET)"
+                )
+
+            # Cheap schema read (no rows) for catalog registration
+            output_schema = (
+                conn.execute(f"SELECT * FROM ({query}) LIMIT 0").arrow().schema
+            )
+        except Exception as e:
+            raise RuntimeError(f"sql_export failed: {e!s}") from e
+        finally:
+            conn.close()
+
+        DatasetCatalog().register_dataset(
+            layer=layer,
+            dataset_name=dataset,
+            schema=output_schema,
+            partitioning=partitioning,
+            source_template=context.template_id,
+        )
+        _touch_marker(output_path)
+
+        return ETLWriteComplete(path=output_path, layer=layer, dataset=dataset)
+
+    def get_input_datasets(self) -> list[str]:
+        """Return the list of input dataset names from the 'datasets' parameter."""
         return self.params.get("datasets", [])
 
 

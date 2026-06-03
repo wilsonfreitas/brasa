@@ -3,14 +3,31 @@ description: Negócios Intraday consolidados (legado + ações + derivativos)
 
 etl:
   pipeline:
-    - step: concat_datasets
-      inputs:
-        - b3-trades-intraday
-        - b3-trades-intraday-equities
-        - b3-trades-intraday-derivatives
-      layer: input
-    - step: sort
-      by: [refdate]
+    - step: sql_export
+      datasets:
+        - input.b3-trades-intraday
+        - input.b3-trades-intraday-equities
+        - input.b3-trades-intraday-derivatives
+      query: |
+        SELECT refdate, symbol, update_action, traded_price, traded_quantity,
+               trade_time, trade_id, trade_session_id, trade_date,
+               buyer_code, seller_code
+        FROM 'input.b3-trades-intraday'
+        WHERE refdate <= DATE '2026-04-30'
+        UNION ALL
+        SELECT refdate, symbol, update_action, traded_price, traded_quantity,
+               trade_time, trade_id, trade_session_id, trade_date,
+               buyer_code, seller_code
+        FROM 'input.b3-trades-intraday-equities'
+        WHERE refdate >= DATE '2026-05-01'
+        UNION ALL
+        SELECT refdate, symbol, update_action, traded_price, traded_quantity,
+               trade_time, trade_id, trade_session_id, trade_date,
+               buyer_code, seller_code
+        FROM 'input.b3-trades-intraday-derivatives'
+        WHERE refdate >= DATE '2026-05-01'
 
 writer:
   layer: staging
+  dataset: b3-trades-intraday
+  partitioning: [refdate]
