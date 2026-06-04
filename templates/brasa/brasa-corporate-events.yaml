@@ -1,0 +1,182 @@
+id: brasa-corporate-events
+description: >
+    Unified corporate-events dataset across cash, stock, and subscription families.
+    UNION ALL over staging.b3-cash-dividends-events, staging.b3-stock-events, and
+    staging.b3-subscription-events, projected to one normalized schema with a
+    normalized event_type vocabulary (plus the raw B3 label in event_type_raw).
+    Event-specific columns are NULL where not applicable.
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - staging.b3-cash-dividends-events
+        - staging.b3-stock-events
+        - staging.b3-subscription-events
+      query: |+
+        -- CASH family
+        SELECT
+            code_cvm,
+            issuing_company,
+            symbol,
+            share_class,
+            'CASH' AS event_family,
+            CASE event_type_raw
+                WHEN 'DIVIDENDO'        THEN 'CASH_DIVIDEND'
+                WHEN 'JRS CAP PROPRIO'  THEN 'INTEREST_ON_CAPITAL'
+                WHEN 'RENDIMENTO'       THEN 'INCOME'
+                WHEN 'REST CAP DIN'     THEN 'CAPITAL_RETURN_CASH'
+                WHEN 'AT MONETARIA'     THEN 'MONETARY_RESTATEMENT'
+                WHEN 'JUROS RF'         THEN 'INTEREST_FIXED_INCOME'
+                WHEN 'AMORTIZACAO RF'   THEN 'AMORTIZATION_FIXED_INCOME'
+                ELSE 'OTHER'
+            END AS event_type,
+            event_type_raw,
+            ex_date,
+            approved_on,
+            payment_date,
+            value_cash,
+            CAST(NULL AS DOUBLE)  AS factor,
+            ratio,
+            CAST(NULL AS DOUBLE)  AS subscription_price,
+            CAST(NULL AS DATE)    AS subscription_date,
+            yield_pct,
+            prior_ex_close,
+            related_to,
+            isin,
+            source
+        FROM 'staging.b3-cash-dividends-events'
+
+        UNION ALL
+
+        -- STOCK family
+        SELECT
+            code_cvm,
+            issuing_company,
+            symbol,
+            share_class,
+            'STOCK' AS event_family,
+            CASE event_type_raw
+                WHEN 'DESDOBRAMENTO'    THEN 'SPLIT'
+                WHEN 'GRUPAMENTO'       THEN 'REVERSE_SPLIT'
+                WHEN 'BONIFICACAO'      THEN 'BONUS_SHARES'
+                WHEN 'CIS RED CAP'      THEN 'SPINOFF'
+                WHEN 'CIS RED CAP QTD'  THEN 'SPINOFF'
+                WHEN 'INCORPORACAO'     THEN 'MERGER'
+                WHEN 'RESG TOTAL RV'    THEN 'FULL_REDEMPTION'
+                WHEN 'REST CAP ACOES'   THEN 'CAPITAL_RETURN_SHARES'
+                WHEN 'REST CAP C/ RED'  THEN 'CAPITAL_RETURN_WITH_REDUCTION'
+                ELSE 'OTHER'
+            END AS event_type,
+            event_type_raw,
+            ex_date,
+            approved_on,
+            CAST(NULL AS DATE)    AS payment_date,
+            CAST(NULL AS DOUBLE)  AS value_cash,
+            factor,
+            CAST(NULL AS DOUBLE)  AS ratio,
+            CAST(NULL AS DOUBLE)  AS subscription_price,
+            CAST(NULL AS DATE)    AS subscription_date,
+            CAST(NULL AS DOUBLE)  AS yield_pct,
+            CAST(NULL AS DOUBLE)  AS prior_ex_close,
+            CAST(NULL AS VARCHAR) AS related_to,
+            isin,
+            'company-info' AS source
+        FROM 'staging.b3-stock-events'
+
+        UNION ALL
+
+        -- SUBSCRIPTION family
+        SELECT
+            code_cvm,
+            issuing_company,
+            symbol,
+            share_class,
+            'SUBSCRIPTION' AS event_family,
+            CASE event_type_raw
+                WHEN 'SUBSCRICAO'       THEN 'SUBSCRIPTION'
+                WHEN 'PRIORIDADE SUBS'  THEN 'SUBSCRIPTION_PRIORITY'
+                WHEN 'SUBS C/ RENUNC'   THEN 'SUBSCRIPTION_WITH_WAIVER'
+                ELSE 'OTHER'
+            END AS event_type,
+            event_type_raw,
+            ex_date,
+            approved_on,
+            CAST(NULL AS DATE)    AS payment_date,
+            CAST(NULL AS DOUBLE)  AS value_cash,
+            CAST(NULL AS DOUBLE)  AS factor,
+            CAST(NULL AS DOUBLE)  AS ratio,
+            subscription_price,
+            subscription_date,
+            CAST(NULL AS DOUBLE)  AS yield_pct,
+            CAST(NULL AS DOUBLE)  AS prior_ex_close,
+            CAST(NULL AS VARCHAR) AS related_to,
+            isin,
+            'company-info' AS source
+        FROM 'staging.b3-subscription-events'
+
+writer:
+  layer: staging
+  dataset: brasa-corporate-events
+
+fields:
+  - name: code_cvm
+    description: CVM company code (links to staging.brasa-companies)
+    type: string
+  - name: issuing_company
+    description: B3 short company code (e.g. PETR, BBAS)
+    type: string
+  - name: symbol
+    description: Traded ticker the event applies to (may be NULL for some cash rows)
+    type: string
+  - name: share_class
+    description: Share class (ON, PN, UNT, OTHER)
+    type: string
+  - name: event_family
+    description: Event family (CASH, STOCK, SUBSCRIPTION)
+    type: string
+  - name: event_type
+    description: Normalized event type (CASH_DIVIDEND, SPLIT, SUBSCRIPTION, ...)
+    type: string
+  - name: event_type_raw
+    description: Raw B3 event label
+    type: string
+  - name: ex_date
+    description: Last COM date (last trading day before going ex)
+    type: date
+  - name: approved_on
+    description: Date the event was approved/declared
+    type: date
+  - name: payment_date
+    description: Payment start date (cash events; else NULL)
+    type: date
+  - name: value_cash
+    description: Cash value per share (cash events; else NULL)
+    type: numeric
+  - name: factor
+    description: Split/grouping factor or percentage (stock events; else NULL)
+    type: numeric
+  - name: ratio
+    description: Ratio (cash events; else NULL)
+    type: numeric
+  - name: subscription_price
+    description: Subscription issue price (subscription events; else NULL)
+    type: numeric
+  - name: subscription_date
+    description: Subscription deadline (subscription events; else NULL)
+    type: date
+  - name: yield_pct
+    description: Provento/price yield % (cash events; else NULL)
+    type: numeric
+  - name: prior_ex_close
+    description: Closing price on last COM date (cash events; else NULL)
+    type: numeric
+  - name: related_to
+    description: Reference period (cash events; else NULL)
+    type: string
+  - name: isin
+    description: ISIN of the affected asset (where available)
+    type: string
+  - name: source
+    description: Origin row source (b3-cash-dividends | company-info)
+    type: string

@@ -1,0 +1,95 @@
+id: b3-stock-events
+description: >
+    Stock corporate events (splits, reverse splits, bonus shares, spinoffs, mergers,
+    share-capital returns) per company per share class, from
+    input.b3-company-info-stock_dividends. One row per event, latest snapshot kept.
+    Company link keys resolved via staging.b3-companies-names.
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - input.b3-company-info-stock_dividends
+        - staging.b3-companies-names
+      query: |+
+        WITH names_by_company AS (
+            SELECT issuing_company, code_cvm FROM (
+                SELECT
+                    instrument_asset          AS issuing_company,
+                    CAST(code_cvm AS VARCHAR) AS code_cvm,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY instrument_asset ORDER BY refdate DESC
+                    ) AS rn
+                FROM 'staging.b3-companies-names'
+            ) WHERE rn = 1
+        ),
+        raw AS (
+            SELECT
+                nc.code_cvm,
+                sd.issuingCompany    AS issuing_company,
+                sd.assetIssued       AS symbol,
+                CASE regexp_extract(sd.assetIssued, '[0-9]+$')
+                    WHEN '3'  THEN 'ON'
+                    WHEN '4'  THEN 'PN'
+                    WHEN '5'  THEN 'PN'
+                    WHEN '6'  THEN 'PN'
+                    WHEN '7'  THEN 'PN'
+                    WHEN '8'  THEN 'PN'
+                    WHEN '11' THEN 'UNT'
+                    WHEN '12' THEN 'UNT'
+                    WHEN '13' THEN 'UNT'
+                    ELSE 'OTHER'
+                END AS share_class,
+                sd.label             AS event_type_raw,
+                sd.factor            AS factor,
+                sd.approvedOn        AS approved_on,
+                sd.lastDatePrior     AS ex_date,
+                sd.isinCode          AS isin,
+                sd.refdate           AS refdate
+            FROM 'input.b3-company-info-stock_dividends' sd
+            LEFT JOIN names_by_company nc ON sd.issuingCompany = nc.issuing_company
+        )
+        SELECT
+            code_cvm, issuing_company, symbol, share_class, event_type_raw,
+            factor, approved_on, ex_date, isin
+        FROM (
+            SELECT *, ROW_NUMBER() OVER (
+                PARTITION BY issuing_company, share_class, event_type_raw,
+                             ex_date, approved_on, factor
+                ORDER BY refdate DESC
+            ) AS rn
+            FROM raw
+        ) WHERE rn = 1
+
+writer:
+  layer: staging
+  dataset: b3-stock-events
+
+fields:
+  - name: code_cvm
+    description: CVM company code (links to staging.brasa-companies)
+    type: string
+  - name: issuing_company
+    description: B3 short company code (e.g. PETR, BBAS)
+    type: string
+  - name: symbol
+    description: Traded ticker the event applies to (assetIssued)
+    type: string
+  - name: share_class
+    description: Share class (ON, PN, UNT, OTHER)
+    type: string
+  - name: event_type_raw
+    description: Raw B3 stock-event label (DESDOBRAMENTO, GRUPAMENTO, BONIFICACAO, ...)
+    type: string
+  - name: factor
+    description: Percentage or grouping/split factor
+    type: numeric
+  - name: approved_on
+    description: Date the event was approved/declared
+    type: date
+  - name: ex_date
+    description: Last COM date (last trading day before going ex)
+    type: date
+  - name: isin
+    description: ISIN of the affected asset
+    type: string

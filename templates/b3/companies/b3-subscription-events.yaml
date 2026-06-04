@@ -1,0 +1,108 @@
+id: b3-subscription-events
+description: >
+    Subscription corporate events (rights subscriptions, priority subscriptions,
+    subscriptions with waiver) per company per share class, from
+    input.b3-company-info-subscriptions. One row per event, latest snapshot kept.
+    Company link keys resolved via staging.b3-companies-names.
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - input.b3-company-info-subscriptions
+        - staging.b3-companies-names
+      query: |+
+        WITH names_by_company AS (
+            SELECT issuing_company, code_cvm FROM (
+                SELECT
+                    instrument_asset          AS issuing_company,
+                    CAST(code_cvm AS VARCHAR) AS code_cvm,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY instrument_asset ORDER BY refdate DESC
+                    ) AS rn
+                FROM 'staging.b3-companies-names'
+            ) WHERE rn = 1
+        ),
+        raw AS (
+            SELECT
+                nc.code_cvm,
+                su.issuingCompany    AS issuing_company,
+                su.assetIssued       AS symbol,
+                CASE regexp_extract(su.assetIssued, '[0-9]+$')
+                    WHEN '3'  THEN 'ON'
+                    WHEN '4'  THEN 'PN'
+                    WHEN '5'  THEN 'PN'
+                    WHEN '6'  THEN 'PN'
+                    WHEN '7'  THEN 'PN'
+                    WHEN '8'  THEN 'PN'
+                    WHEN '11' THEN 'UNT'
+                    WHEN '12' THEN 'UNT'
+                    WHEN '13' THEN 'UNT'
+                    ELSE 'OTHER'
+                END AS share_class,
+                su.label             AS event_type_raw,
+                su.percentage        AS percentage,
+                su.priceUnit         AS subscription_price,
+                su.tradingPeriod     AS trading_period,
+                su.subscriptionDate  AS subscription_date,
+                su.approvedOn        AS approved_on,
+                su.lastDatePrior     AS ex_date,
+                su.isinCode          AS isin,
+                su.refdate           AS refdate
+            FROM 'input.b3-company-info-subscriptions' su
+            LEFT JOIN names_by_company nc ON su.issuingCompany = nc.issuing_company
+        )
+        SELECT
+            code_cvm, issuing_company, symbol, share_class, event_type_raw,
+            percentage, subscription_price, trading_period, subscription_date,
+            approved_on, ex_date, isin
+        FROM (
+            SELECT *, ROW_NUMBER() OVER (
+                PARTITION BY issuing_company, share_class, event_type_raw,
+                             ex_date, approved_on
+                ORDER BY refdate DESC
+            ) AS rn
+            FROM raw
+        ) WHERE rn = 1
+
+writer:
+  layer: staging
+  dataset: b3-subscription-events
+
+fields:
+  - name: code_cvm
+    description: CVM company code (links to staging.brasa-companies)
+    type: string
+  - name: issuing_company
+    description: B3 short company code (e.g. PETR, BBAS)
+    type: string
+  - name: symbol
+    description: Traded ticker the event applies to (assetIssued)
+    type: string
+  - name: share_class
+    description: Share class (ON, PN, UNT, OTHER)
+    type: string
+  - name: event_type_raw
+    description: Raw B3 subscription label (SUBSCRICAO, PRIORIDADE SUBS, SUBS C/ RENUNC)
+    type: string
+  - name: percentage
+    description: Subscription percentage
+    type: numeric
+  - name: subscription_price
+    description: Issue price per share (R$)
+    type: numeric
+  - name: trading_period
+    description: Rights trading period (free text)
+    type: string
+  - name: subscription_date
+    description: Subscription deadline
+    type: date
+  - name: approved_on
+    description: Date the event was approved/declared
+    type: date
+  - name: ex_date
+    description: Last COM date (last trading day before going ex)
+    type: date
+  - name: isin
+    description: ISIN of the affected asset
+    type: string

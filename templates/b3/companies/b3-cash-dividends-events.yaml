@@ -1,0 +1,197 @@
+id: b3-cash-dividends-events
+description: >
+    Cash corporate events (dividends, interest on capital, income, capital returns)
+    per company per share class. Primary source input.b3-cash-dividends (richer:
+    yield %, prior-ex close, ratio); falls back to input.b3-company-info-cash_dividends
+    for events the primary source lacks. One row per event, latest snapshot kept.
+    Company link keys resolved via staging.b3-companies-names.
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - input.b3-cash-dividends
+        - input.b3-company-info-cash_dividends
+        - staging.b3-companies-names
+      query: |+
+        WITH names_by_trading AS (
+            SELECT trading_name, code_cvm, issuing_company FROM (
+                SELECT
+                    trim(trading_name)        AS trading_name,
+                    CAST(code_cvm AS VARCHAR) AS code_cvm,
+                    instrument_asset          AS issuing_company,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY trim(trading_name) ORDER BY refdate DESC
+                    ) AS rn
+                FROM 'staging.b3-companies-names'
+            ) WHERE rn = 1
+        ),
+        names_by_company AS (
+            SELECT issuing_company, code_cvm FROM (
+                SELECT
+                    instrument_asset          AS issuing_company,
+                    CAST(code_cvm AS VARCHAR) AS code_cvm,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY instrument_asset ORDER BY refdate DESC
+                    ) AS rn
+                FROM 'staging.b3-companies-names'
+            ) WHERE rn = 1
+        ),
+        primary_raw AS (
+            SELECT
+                n.code_cvm,
+                n.issuing_company,
+                CAST(NULL AS VARCHAR) AS symbol,
+                CASE
+                    WHEN upper(cd.type_stock) LIKE 'ON%'  THEN 'ON'
+                    WHEN upper(cd.type_stock) LIKE 'PN%'  THEN 'PN'
+                    WHEN upper(cd.type_stock) LIKE 'UNT%' THEN 'UNT'
+                    ELSE upper(cd.type_stock)
+                END AS share_class,
+                cd.corporate_action          AS event_type_raw,
+                cd.last_date_prior_ex        AS ex_date,
+                cd.date_approval             AS approved_on,
+                CAST(NULL AS DATE)           AS payment_date,
+                cd.value_cash                AS value_cash,
+                cd.ratio                     AS ratio,
+                cd.corporate_action_price    AS yield_pct,
+                cd.closing_price_prior_ex_date AS prior_ex_close,
+                CAST(NULL AS VARCHAR)        AS related_to,
+                CAST(NULL AS VARCHAR)        AS isin,
+                'b3-cash-dividends'          AS source,
+                cd.refdate                   AS refdate
+            FROM 'input.b3-cash-dividends' cd
+            LEFT JOIN names_by_trading n ON trim(cd.trading_name) = n.trading_name
+        ),
+        primary_dedup AS (
+            SELECT
+                code_cvm, issuing_company, symbol, share_class, event_type_raw,
+                ex_date, approved_on, payment_date, value_cash, ratio,
+                yield_pct, prior_ex_close, related_to, isin, source
+            FROM (
+                SELECT *, ROW_NUMBER() OVER (
+                    PARTITION BY issuing_company, share_class, event_type_raw,
+                                 ex_date, approved_on, value_cash
+                    ORDER BY refdate DESC
+                ) AS rn
+                FROM primary_raw
+            ) WHERE rn = 1
+        ),
+        fallback_raw AS (
+            SELECT
+                nc.code_cvm,
+                ci.issuingCompany    AS issuing_company,
+                ci.assetIssued       AS symbol,
+                CASE regexp_extract(ci.assetIssued, '[0-9]+$')
+                    WHEN '3'  THEN 'ON'
+                    WHEN '4'  THEN 'PN'
+                    WHEN '5'  THEN 'PN'
+                    WHEN '6'  THEN 'PN'
+                    WHEN '7'  THEN 'PN'
+                    WHEN '8'  THEN 'PN'
+                    WHEN '11' THEN 'UNT'
+                    WHEN '12' THEN 'UNT'
+                    WHEN '13' THEN 'UNT'
+                    ELSE 'OTHER'
+                END AS share_class,
+                ci.label             AS event_type_raw,
+                ci.lastDatePrior     AS ex_date,
+                ci.approvedOn        AS approved_on,
+                ci.paymentDate       AS payment_date,
+                ci.rate              AS value_cash,
+                CAST(NULL AS DOUBLE) AS ratio,
+                CAST(NULL AS DOUBLE) AS yield_pct,
+                CAST(NULL AS DOUBLE) AS prior_ex_close,
+                ci.relatedTo         AS related_to,
+                ci.isinCode          AS isin,
+                'company-info'       AS source,
+                ci.refdate           AS refdate
+            FROM 'input.b3-company-info-cash_dividends' ci
+            LEFT JOIN names_by_company nc ON ci.issuingCompany = nc.issuing_company
+        ),
+        fallback_dedup AS (
+            SELECT
+                code_cvm, issuing_company, symbol, share_class, event_type_raw,
+                ex_date, approved_on, payment_date, value_cash, ratio,
+                yield_pct, prior_ex_close, related_to, isin, source
+            FROM (
+                SELECT *, ROW_NUMBER() OVER (
+                    PARTITION BY issuing_company, share_class, event_type_raw,
+                                 ex_date, approved_on, value_cash
+                    ORDER BY refdate DESC
+                ) AS rn
+                FROM fallback_raw
+            ) WHERE rn = 1
+        ),
+        fallback_only AS (
+            SELECT f.* FROM fallback_dedup f
+            WHERE NOT EXISTS (
+                SELECT 1 FROM primary_dedup p
+                WHERE p.issuing_company = f.issuing_company
+                  AND p.share_class    = f.share_class
+                  AND p.ex_date        = f.ex_date
+                  AND round(p.value_cash, 6) = round(f.value_cash, 6)
+            )
+        )
+        SELECT
+            code_cvm, issuing_company, symbol, share_class, event_type_raw,
+            ex_date, approved_on, payment_date, value_cash, ratio,
+            yield_pct, prior_ex_close, related_to, isin, source
+        FROM primary_dedup
+        UNION ALL
+        SELECT
+            code_cvm, issuing_company, symbol, share_class, event_type_raw,
+            ex_date, approved_on, payment_date, value_cash, ratio,
+            yield_pct, prior_ex_close, related_to, isin, source
+        FROM fallback_only
+
+writer:
+  layer: staging
+  dataset: b3-cash-dividends-events
+
+fields:
+  - name: code_cvm
+    description: CVM company code (links to staging.brasa-companies)
+    type: string
+  - name: issuing_company
+    description: B3 short company code (e.g. PETR, BBAS)
+    type: string
+  - name: symbol
+    description: Traded ticker (only present for company-info-sourced rows; else NULL)
+    type: string
+  - name: share_class
+    description: Share class (ON, PN, UNT, OTHER)
+    type: string
+  - name: event_type_raw
+    description: Raw B3 cash-event label (DIVIDENDO, JRS CAP PROPRIO, ...)
+    type: string
+  - name: ex_date
+    description: Last COM date (last trading day before going ex)
+    type: date
+  - name: approved_on
+    description: Date the event was approved/declared
+    type: date
+  - name: payment_date
+    description: Payment start date (company-info source only; else NULL)
+    type: date
+  - name: value_cash
+    description: Cash value per share (R$)
+    type: numeric
+  - name: ratio
+    description: Ratio (b3-cash-dividends source only; else NULL)
+    type: numeric
+  - name: yield_pct
+    description: Provento/price yield % (b3-cash-dividends source only)
+    type: numeric
+  - name: prior_ex_close
+    description: Closing price on the last COM date (b3-cash-dividends source only)
+    type: numeric
+  - name: related_to
+    description: Reference period of the provento (company-info source only)
+    type: string
+  - name: isin
+    description: ISIN (company-info source only; else NULL)
+    type: string
+  - name: source
+    description: Origin row source (b3-cash-dividends | company-info)
+    type: string
