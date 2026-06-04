@@ -6,6 +6,7 @@ description: Consolidated futures settlement prices (repartitioned by commodity)
 etl:
   pipeline:
     - step: load
+      layer: input
       input: b3-futures-settlement-prices
 
 writer:
