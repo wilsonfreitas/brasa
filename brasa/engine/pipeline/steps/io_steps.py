@@ -193,8 +193,20 @@ class ReadExcelStep(PipelineStep):
         skip = self.get_param("skip", 0)
         header = self.get_param("header", 0)
 
+        # Cached files are gzip-compressed; pandas does not transparently
+        # decompress Excel inputs, so hand it a decompressed in-memory buffer.
+        # pandas sniffs the magic bytes to pick the engine, so the original
+        # extension (e.g. ".xls" for files that are actually xlsx) is irrelevant.
+        source: Any = filepath
+        if str(filepath).endswith(".gz"):
+            import gzip
+            import io
+
+            with gzip.open(filepath, "rb") as f:
+                source = io.BytesIO(f.read())
+
         return pd.read_excel(
-            filepath,
+            source,
             sheet_name=sheet,
             skiprows=skip,
             header=header,
