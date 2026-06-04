@@ -7,6 +7,7 @@ etl:
   pipeline:
     # Step 1: Load the source dataset
     - step: load
+      layer: input
       input: b3-futures-settlement-prices
 
     # Step 2: Filter to DI1 contracts only
