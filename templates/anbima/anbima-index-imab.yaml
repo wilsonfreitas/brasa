@@ -3,6 +3,7 @@ description: Historico do indice IMA Geral (ANBIMA)
 downloader:
   verify_ssl: false
   function: brasa.downloaders.simple_download
+  extra-key: date
   url: https://s3-data-prd-use1-precos.s3.us-east-1.amazonaws.com/arquivos/indices-historico/IMAGERAL-HISTORICO.xls
   format: xls
 reader:
@@ -22,11 +23,14 @@ reader:
         "Variação 24 Meses (%)": return_24m_pct
         "Duration (d.u.)": duration_du
         "PMR": pmr
+    - step: str_replace
+      column: index_name
+      pattern: "IMA - Geral"
+      replacement: "IMA-GERAL"
     - step: apply_fields
       errors: coerce
 writer:
   layer: input
-  partitioning: [index_name]
 fields:
 - name: index_name
   description: Nome do indice
