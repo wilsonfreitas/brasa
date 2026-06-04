@@ -10,17 +10,18 @@ etl:
       datasets:
         - input.b3-company-info-info
       query: |+
-        select refdate, code_cvm, trading_name, instrument_asset from (
-        select
-          distinct refdate,
-            codeCVM as code_cvm,
-            trim(tradingName) as trading_name,
-            issuingCompany as instrument_asset,
-            row_number() over (partition by codeCVM, tradingName, issuingCompany order by refdate desc) as row_num
-        from
-          'input.b3-company-info-info'
+        with d as (
+          select distinct refdate, codeCVM, tradingName, issuingCompany
+          from 'input.b3-company-info-info'
         )
-        where row_num = 1 and code_cvm <> 0
+        select
+          refdate,
+          codeCVM as code_cvm,
+          trim(tradingName) as trading_name,
+          issuingCompany as instrument_asset
+        from d
+        where codeCVM <> '0'
+        qualify row_number() over (partition by codeCVM, tradingName, issuingCompany order by refdate desc) = 1
         order by refdate desc, instrument_asset
     - step: select_fields
     - step: apply_fields
