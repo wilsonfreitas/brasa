@@ -19,6 +19,7 @@ etl:
             code_cvm,
             issuing_company,
             symbol,
+            asset_isin,
             share_class,
             'CASH' AS event_family,
             CASE event_type_raw
@@ -54,6 +55,7 @@ etl:
             code_cvm,
             issuing_company,
             symbol,
+            asset_isin,
             share_class,
             'STOCK' AS event_family,
             CASE event_type_raw
@@ -91,6 +93,7 @@ etl:
             code_cvm,
             issuing_company,
             symbol,
+            asset_isin,
             share_class,
             'SUBSCRIPTION' AS event_family,
             CASE event_type_raw
@@ -127,7 +130,10 @@ fields:
     description: B3 short company code (e.g. PETR, BBAS)
     type: string
   - name: symbol
-    description: Traded ticker the event applies to (may be NULL for some cash rows)
+    description: B3 ticker the event applies to (may be NULL for some rows)
+    type: string
+  - name: asset_isin
+    description: ISIN of the specific share class (company-info rows; NULL for primary cash rows)
     type: string
   - name: share_class
     description: Share class (ON, PN, UNT, OTHER)

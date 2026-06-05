@@ -3,7 +3,10 @@ description: >
     Subscription corporate events (rights subscriptions, priority subscriptions,
     subscriptions with waiver) per company per share class, from
     input.b3-company-info-subscriptions. One row per event, latest snapshot kept.
-    Company link keys resolved via staging.b3-companies-names.
+    The asset is identified by its ISIN (asset_isin); share_class is parsed from the
+    ISIN share-type token and symbol is resolved to a B3 ticker via
+    staging.b3-companies-symbols (NULL for delisted/historical assets). Company link
+    keys resolved via staging.b3-companies-names.
 
 etl:
   pipeline:
@@ -11,8 +14,23 @@ etl:
       datasets:
         - input.b3-company-info-subscriptions
         - staging.b3-companies-names
+        - staging.b3-companies-symbols
       query: |+
-        WITH names_by_company AS (
+        -- Dedup snapshots BEFORE joining (a window over a join trips a DuckDB
+        -- internal binder error), keeping the latest snapshot per event.
+        WITH dedup AS (
+            SELECT
+                issuingCompany, assetIssued, isinCode, label, percentage,
+                priceUnit, tradingPeriod, subscriptionDate, approvedOn, lastDatePrior
+            FROM 'input.b3-company-info-subscriptions'
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY issuingCompany,
+                             COALESCE(NULLIF(assetIssued, ''), isinCode),
+                             label, lastDatePrior, approvedOn
+                ORDER BY refdate DESC
+            ) = 1
+        ),
+        names_by_company AS (
             SELECT issuing_company, code_cvm FROM (
                 SELECT
                     instrument_asset          AS issuing_company,
@@ -23,47 +41,35 @@ etl:
                 FROM 'staging.b3-companies-names'
             ) WHERE rn = 1
         ),
-        raw AS (
-            SELECT
-                nc.code_cvm,
-                su.issuingCompany    AS issuing_company,
-                su.assetIssued       AS symbol,
-                CASE regexp_extract(su.assetIssued, '[0-9]+$')
-                    WHEN '3'  THEN 'ON'
-                    WHEN '4'  THEN 'PN'
-                    WHEN '5'  THEN 'PN'
-                    WHEN '6'  THEN 'PN'
-                    WHEN '7'  THEN 'PN'
-                    WHEN '8'  THEN 'PN'
-                    WHEN '11' THEN 'UNT'
-                    WHEN '12' THEN 'UNT'
-                    WHEN '13' THEN 'UNT'
-                    ELSE 'OTHER'
-                END AS share_class,
-                su.label             AS event_type_raw,
-                su.percentage        AS percentage,
-                su.priceUnit         AS subscription_price,
-                su.tradingPeriod     AS trading_period,
-                su.subscriptionDate  AS subscription_date,
-                su.approvedOn        AS approved_on,
-                su.lastDatePrior     AS ex_date,
-                su.isinCode          AS isin,
-                su.refdate           AS refdate
-            FROM 'input.b3-company-info-subscriptions' su
-            LEFT JOIN names_by_company nc ON su.issuingCompany = nc.issuing_company
+        symbols AS (
+            SELECT isin, symbol FROM (
+                SELECT isin, symbol,
+                    ROW_NUMBER() OVER (PARTITION BY isin ORDER BY symbol) AS rn
+                FROM 'staging.b3-companies-symbols' WHERE isin IS NOT NULL
+            ) WHERE rn = 1
         )
         SELECT
-            code_cvm, issuing_company, symbol, share_class, event_type_raw,
-            percentage, subscription_price, trading_period, subscription_date,
-            approved_on, ex_date, isin
-        FROM (
-            SELECT *, ROW_NUMBER() OVER (
-                PARTITION BY issuing_company, share_class, event_type_raw,
-                             ex_date, approved_on
-                ORDER BY refdate DESC
-            ) AS rn
-            FROM raw
-        ) WHERE rn = 1
+            nc.code_cvm,
+            d.issuingCompany AS issuing_company,
+            sym.symbol       AS symbol,
+            COALESCE(NULLIF(d.assetIssued, ''), d.isinCode) AS asset_isin,
+            CASE
+                WHEN substr(COALESCE(NULLIF(d.assetIssued, ''), d.isinCode), 10, 2) = 'OR' THEN 'ON'
+                WHEN substr(COALESCE(NULLIF(d.assetIssued, ''), d.isinCode), 10, 1) = 'P'  THEN 'PN'
+                ELSE 'UNT'
+            END AS share_class,
+            d.label             AS event_type_raw,
+            d.percentage        AS percentage,
+            d.priceUnit         AS subscription_price,
+            d.tradingPeriod     AS trading_period,
+            d.subscriptionDate  AS subscription_date,
+            d.approvedOn        AS approved_on,
+            d.lastDatePrior     AS ex_date,
+            d.isinCode          AS isin
+        FROM dedup d
+        LEFT JOIN names_by_company nc ON d.issuingCompany = nc.issuing_company
+        LEFT JOIN symbols sym
+            ON COALESCE(NULLIF(d.assetIssued, ''), d.isinCode) = sym.isin
 
 writer:
   layer: staging
@@ -77,10 +83,13 @@ fields:
     description: B3 short company code (e.g. PETR, BBAS)
     type: string
   - name: symbol
-    description: Traded ticker the event applies to (assetIssued)
+    description: B3 ticker resolved from asset_isin (NULL for delisted/historical assets)
+    type: string
+  - name: asset_isin
+    description: ISIN of the specific share class affected by the event
     type: string
   - name: share_class
-    description: Share class (ON, PN, UNT, OTHER)
+    description: Share class parsed from the ISIN token (ON, PN, UNT)
     type: string
   - name: event_type_raw
     description: Raw B3 subscription label (SUBSCRICAO, PRIORIDADE SUBS, SUBS C/ RENUNC)
@@ -104,5 +113,5 @@ fields:
     description: Last COM date (last trading day before going ex)
     type: date
   - name: isin
-    description: ISIN of the affected asset
+    description: Company ISIN code reported for the event (isinCode)
     type: string

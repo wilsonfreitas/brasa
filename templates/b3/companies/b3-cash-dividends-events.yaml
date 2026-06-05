@@ -2,9 +2,11 @@ id: b3-cash-dividends-events
 description: >
     Cash corporate events (dividends, interest on capital, income, capital returns)
     per company per share class. Primary source input.b3-cash-dividends (richer:
-    yield %, prior-ex close, ratio); falls back to input.b3-company-info-cash_dividends
-    for events the primary source lacks. One row per event, latest snapshot kept.
-    Company link keys resolved via staging.b3-companies-names.
+    yield %, prior-ex close, ratio; share_class from type_stock); falls back to
+    input.b3-company-info-cash_dividends for events the primary source lacks (asset
+    identified by ISIN, share_class parsed from the ISIN token, symbol resolved via
+    staging.b3-companies-symbols). One row per event, latest snapshot kept. Company
+    link keys resolved via staging.b3-companies-names.
 
 etl:
   pipeline:
@@ -13,6 +15,7 @@ etl:
         - input.b3-cash-dividends
         - input.b3-company-info-cash_dividends
         - staging.b3-companies-names
+        - staging.b3-companies-symbols
       query: |+
         WITH names_by_trading AS (
             SELECT trading_name, code_cvm, issuing_company FROM (
@@ -37,112 +40,116 @@ etl:
                 FROM 'staging.b3-companies-names'
             ) WHERE rn = 1
         ),
-        primary_raw AS (
+        symbols AS (
+            SELECT isin, symbol FROM (
+                SELECT isin, symbol,
+                    ROW_NUMBER() OVER (PARTITION BY isin ORDER BY symbol) AS rn
+                FROM 'staging.b3-companies-symbols' WHERE isin IS NOT NULL
+            ) WHERE rn = 1
+        ),
+        -- Primary source: dedup snapshots to the latest per event.
+        -- DISTINCT ON (not a windowed QUALIFY) avoids a DuckDB internal binder
+        -- error that triggers when a window result later feeds joins + UNION.
+        primary_dedup AS (
+            SELECT DISTINCT ON (
+                trading_name, type_stock, corporate_action, last_date_prior_ex,
+                date_approval, value_cash
+            )
+                trading_name, type_stock, corporate_action, last_date_prior_ex,
+                date_approval, value_cash, ratio, corporate_action_price,
+                closing_price_prior_ex_date
+            FROM 'input.b3-cash-dividends'
+            ORDER BY
+                trading_name, type_stock, corporate_action, last_date_prior_ex,
+                date_approval, value_cash, refdate DESC
+        ),
+        primary_rows AS (
             SELECT
                 n.code_cvm,
                 n.issuing_company,
                 CAST(NULL AS VARCHAR) AS symbol,
+                CAST(NULL AS VARCHAR) AS asset_isin,
                 CASE
-                    WHEN upper(cd.type_stock) LIKE 'ON%'  THEN 'ON'
-                    WHEN upper(cd.type_stock) LIKE 'PN%'  THEN 'PN'
-                    WHEN upper(cd.type_stock) LIKE 'UNT%' THEN 'UNT'
-                    ELSE upper(cd.type_stock)
+                    WHEN upper(p.type_stock) LIKE 'ON%'  THEN 'ON'
+                    WHEN upper(p.type_stock) LIKE 'PN%'  THEN 'PN'
+                    WHEN upper(p.type_stock) LIKE 'UNT%' THEN 'UNT'
+                    ELSE upper(p.type_stock)
                 END AS share_class,
-                cd.corporate_action          AS event_type_raw,
-                cd.last_date_prior_ex        AS ex_date,
-                cd.date_approval             AS approved_on,
-                CAST(NULL AS DATE)           AS payment_date,
-                cd.value_cash                AS value_cash,
-                cd.ratio                     AS ratio,
-                cd.corporate_action_price    AS yield_pct,
-                cd.closing_price_prior_ex_date AS prior_ex_close,
-                CAST(NULL AS VARCHAR)        AS related_to,
-                CAST(NULL AS VARCHAR)        AS isin,
-                'b3-cash-dividends'          AS source,
-                cd.refdate                   AS refdate
-            FROM 'input.b3-cash-dividends' cd
-            LEFT JOIN names_by_trading n ON trim(cd.trading_name) = n.trading_name
+                p.corporate_action            AS event_type_raw,
+                p.last_date_prior_ex          AS ex_date,
+                p.date_approval               AS approved_on,
+                CAST(NULL AS DATE)            AS payment_date,
+                p.value_cash                  AS value_cash,
+                p.ratio                       AS ratio,
+                p.corporate_action_price      AS yield_pct,
+                p.closing_price_prior_ex_date AS prior_ex_close,
+                CAST(NULL AS VARCHAR)         AS related_to,
+                CAST(NULL AS VARCHAR)         AS isin,
+                'b3-cash-dividends'           AS source
+            FROM primary_dedup p
+            LEFT JOIN names_by_trading n ON trim(p.trading_name) = n.trading_name
         ),
-        primary_dedup AS (
-            SELECT
-                code_cvm, issuing_company, symbol, share_class, event_type_raw,
-                ex_date, approved_on, payment_date, value_cash, ratio,
-                yield_pct, prior_ex_close, related_to, isin, source
-            FROM (
-                SELECT *, ROW_NUMBER() OVER (
-                    PARTITION BY issuing_company, share_class, event_type_raw,
-                                 ex_date, approved_on, value_cash
-                    ORDER BY refdate DESC
-                ) AS rn
-                FROM primary_raw
-            ) WHERE rn = 1
+        -- Fallback source: dedup snapshots to the latest per event (DISTINCT ON
+        -- for the same binder-safety reason as primary_dedup above).
+        fallback_dedup AS (
+            SELECT DISTINCT ON (
+                issuingCompany, COALESCE(NULLIF(assetIssued, ''), isinCode),
+                label, lastDatePrior, approvedOn, rate
+            )
+                issuingCompany, assetIssued, isinCode, label, rate, relatedTo,
+                lastDatePrior, approvedOn, paymentDate
+            FROM 'input.b3-company-info-cash_dividends'
+            ORDER BY
+                issuingCompany, COALESCE(NULLIF(assetIssued, ''), isinCode),
+                label, lastDatePrior, approvedOn, rate, refdate DESC
         ),
-        fallback_raw AS (
+        fallback AS (
             SELECT
                 nc.code_cvm,
-                ci.issuingCompany    AS issuing_company,
-                ci.assetIssued       AS symbol,
-                CASE regexp_extract(ci.assetIssued, '[0-9]+$')
-                    WHEN '3'  THEN 'ON'
-                    WHEN '4'  THEN 'PN'
-                    WHEN '5'  THEN 'PN'
-                    WHEN '6'  THEN 'PN'
-                    WHEN '7'  THEN 'PN'
-                    WHEN '8'  THEN 'PN'
-                    WHEN '11' THEN 'UNT'
-                    WHEN '12' THEN 'UNT'
-                    WHEN '13' THEN 'UNT'
-                    ELSE 'OTHER'
+                f.issuingCompany AS issuing_company,
+                sym.symbol       AS symbol,
+                COALESCE(NULLIF(f.assetIssued, ''), f.isinCode) AS asset_isin,
+                CASE
+                    WHEN substr(COALESCE(NULLIF(f.assetIssued, ''), f.isinCode), 10, 2) = 'OR' THEN 'ON'
+                    WHEN substr(COALESCE(NULLIF(f.assetIssued, ''), f.isinCode), 10, 1) = 'P'  THEN 'PN'
+                    ELSE 'UNT'
                 END AS share_class,
-                ci.label             AS event_type_raw,
-                ci.lastDatePrior     AS ex_date,
-                ci.approvedOn        AS approved_on,
-                ci.paymentDate       AS payment_date,
-                ci.rate              AS value_cash,
+                f.label          AS event_type_raw,
+                f.lastDatePrior  AS ex_date,
+                f.approvedOn     AS approved_on,
+                f.paymentDate    AS payment_date,
+                f.rate           AS value_cash,
                 CAST(NULL AS DOUBLE) AS ratio,
                 CAST(NULL AS DOUBLE) AS yield_pct,
                 CAST(NULL AS DOUBLE) AS prior_ex_close,
-                ci.relatedTo         AS related_to,
-                ci.isinCode          AS isin,
-                'company-info'       AS source,
-                ci.refdate           AS refdate
-            FROM 'input.b3-company-info-cash_dividends' ci
-            LEFT JOIN names_by_company nc ON ci.issuingCompany = nc.issuing_company
-        ),
-        fallback_dedup AS (
-            SELECT
-                code_cvm, issuing_company, symbol, share_class, event_type_raw,
-                ex_date, approved_on, payment_date, value_cash, ratio,
-                yield_pct, prior_ex_close, related_to, isin, source
-            FROM (
-                SELECT *, ROW_NUMBER() OVER (
-                    PARTITION BY issuing_company, share_class, event_type_raw,
-                                 ex_date, approved_on, value_cash
-                    ORDER BY refdate DESC
-                ) AS rn
-                FROM fallback_raw
-            ) WHERE rn = 1
+                f.relatedTo      AS related_to,
+                f.isinCode       AS isin,
+                'company-info'   AS source
+            FROM fallback_dedup f
+            LEFT JOIN names_by_company nc ON f.issuingCompany = nc.issuing_company
+            LEFT JOIN symbols sym
+                ON COALESCE(NULLIF(f.assetIssued, ''), f.isinCode) = sym.isin
         ),
         fallback_only AS (
-            SELECT f.* FROM fallback_dedup f
+            SELECT fb.* FROM fallback fb
             WHERE NOT EXISTS (
-                SELECT 1 FROM primary_dedup p
-                WHERE p.issuing_company = f.issuing_company
-                  AND p.share_class    = f.share_class
-                  AND p.ex_date        = f.ex_date
-                  AND round(p.value_cash, 6) = round(f.value_cash, 6)
+                SELECT 1 FROM primary_rows p
+                WHERE p.issuing_company = fb.issuing_company
+                  AND p.share_class    = fb.share_class
+                  AND p.ex_date        = fb.ex_date
+                  AND round(p.value_cash, 6) = round(fb.value_cash, 6)
             )
         )
         SELECT
-            code_cvm, issuing_company, symbol, share_class, event_type_raw,
-            ex_date, approved_on, payment_date, value_cash, ratio,
-            yield_pct, prior_ex_close, related_to, isin, source
-        FROM primary_dedup
+            code_cvm, issuing_company, symbol, asset_isin, share_class,
+            event_type_raw, ex_date, approved_on, payment_date, value_cash,
+            ratio, yield_pct, prior_ex_close, related_to, isin, source
+        FROM primary_rows
         UNION ALL
         SELECT
-            code_cvm, issuing_company, symbol, share_class, event_type_raw,
-            ex_date, approved_on, payment_date, value_cash, ratio,
-            yield_pct, prior_ex_close, related_to, isin, source
+            code_cvm, issuing_company, symbol, asset_isin, share_class,
+            event_type_raw, ex_date, approved_on, payment_date, value_cash,
+            ratio, yield_pct, prior_ex_close, related_to, isin, source
         FROM fallback_only
 
 writer:
@@ -157,10 +164,13 @@ fields:
     description: B3 short company code (e.g. PETR, BBAS)
     type: string
   - name: symbol
-    description: Traded ticker (only present for company-info-sourced rows; else NULL)
+    description: B3 ticker resolved from asset_isin (company-info rows only; else NULL)
+    type: string
+  - name: asset_isin
+    description: ISIN of the specific share class (company-info rows only; else NULL)
     type: string
   - name: share_class
-    description: Share class (ON, PN, UNT, OTHER)
+    description: Share class (ON, PN, UNT) from type_stock (primary) or ISIN token (fallback)
     type: string
   - name: event_type_raw
     description: Raw B3 cash-event label (DIVIDENDO, JRS CAP PROPRIO, ...)
@@ -190,7 +200,7 @@ fields:
     description: Reference period of the provento (company-info source only)
     type: string
   - name: isin
-    description: ISIN (company-info source only; else NULL)
+    description: Company ISIN code (company-info source only; else NULL)
     type: string
   - name: source
     description: Origin row source (b3-cash-dividends | company-info)
