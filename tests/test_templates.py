@@ -230,6 +230,7 @@ def test_b3_cash_dividends_events_template_loads():
         "approved_on",
         "payment_date",
         "value_cash",
+        "value_cash_alt",
         "ratio",
         "yield_pct",
         "prior_ex_close",
