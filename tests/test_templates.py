@@ -489,3 +489,26 @@ def test_b3_trades_intraday_legacy_template_unchanged():
     assert tpl.has_downloader
     assert tpl.has_reader
     assert not tpl.is_etl
+
+
+def test_b3_companies_symbols_template_loads():
+    """b3-companies-symbols exposes the ISIN-derived class columns."""
+    tpl = MarketDataTemplate("templates/b3/companies/b3-companies-symbols.yaml")
+
+    assert tpl.id == "b3-companies-symbols"
+    assert tpl.is_etl
+    assert not tpl.has_downloader
+    assert not tpl.has_reader
+    assert tpl.etl.is_pipeline
+
+    field_names = {f.name for f in tpl.fields}
+    expected = {
+        "symbol",
+        "isin",
+        "issuing_company",
+        "code_cvm",
+        "market",
+        "share_class",
+        "instrument_type",
+    }
+    assert expected.issubset(field_names), f"Missing: {expected - field_names}"
