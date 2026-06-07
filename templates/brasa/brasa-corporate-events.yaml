@@ -37,6 +37,7 @@ etl:
             approved_on,
             payment_date,
             value_cash,
+            value_cash_alt,
             CAST(NULL AS DOUBLE)  AS factor,
             ratio,
             CAST(NULL AS DOUBLE)  AS subscription_price,
@@ -75,6 +76,7 @@ etl:
             approved_on,
             CAST(NULL AS DATE)    AS payment_date,
             CAST(NULL AS DOUBLE)  AS value_cash,
+            CAST(NULL AS DOUBLE)  AS value_cash_alt,
             factor,
             CAST(NULL AS DOUBLE)  AS ratio,
             CAST(NULL AS DOUBLE)  AS subscription_price,
@@ -107,6 +109,7 @@ etl:
             approved_on,
             CAST(NULL AS DATE)    AS payment_date,
             CAST(NULL AS DOUBLE)  AS value_cash,
+            CAST(NULL AS DOUBLE)  AS value_cash_alt,
             CAST(NULL AS DOUBLE)  AS factor,
             CAST(NULL AS DOUBLE)  AS ratio,
             subscription_price,
@@ -158,6 +161,9 @@ fields:
     type: date
   - name: value_cash
     description: Cash value per share (cash events; else NULL)
+    type: numeric
+  - name: value_cash_alt
+    description: Company-info cash amount when it differs from value_cash (cash events; else NULL)
     type: numeric
   - name: factor
     description: Split/grouping factor or percentage (stock events; else NULL)

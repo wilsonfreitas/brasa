@@ -320,6 +320,7 @@ def test_brasa_corporate_events_template_loads():
         "approved_on",
         "payment_date",
         "value_cash",
+        "value_cash_alt",
         "factor",
         "ratio",
         "subscription_price",
