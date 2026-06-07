@@ -208,6 +208,132 @@ def test_brasa_industry_sectors_pipeline_execution():
     assert tpl.is_etl
 
 
+def test_b3_cash_dividends_events_template_loads():
+    """Cash-dividend events template loads with expected structure."""
+    tpl = MarketDataTemplate("templates/b3/companies/b3-cash-dividends-events.yaml")
+
+    assert tpl.id == "b3-cash-dividends-events"
+    assert tpl.is_etl
+    assert not tpl.has_downloader
+    assert not tpl.has_reader
+    assert tpl.etl.is_pipeline
+
+    field_names = {f.name for f in tpl.fields}
+    expected = {
+        "code_cvm",
+        "issuing_company",
+        "symbol",
+        "asset_isin",
+        "share_class",
+        "event_type_raw",
+        "ex_date",
+        "approved_on",
+        "payment_date",
+        "value_cash",
+        "value_cash_alt",
+        "ratio",
+        "yield_pct",
+        "prior_ex_close",
+        "related_to",
+        "isin",
+        "source",
+    }
+    assert expected.issubset(field_names), f"Missing: {expected - field_names}"
+
+
+def test_b3_stock_events_template_loads():
+    """Stock-events template loads with expected structure."""
+    tpl = MarketDataTemplate("templates/b3/companies/b3-stock-events.yaml")
+
+    assert tpl.id == "b3-stock-events"
+    assert tpl.is_etl
+    assert not tpl.has_downloader
+    assert not tpl.has_reader
+    assert tpl.etl.is_pipeline
+
+    field_names = {f.name for f in tpl.fields}
+    expected = {
+        "code_cvm",
+        "issuing_company",
+        "symbol",
+        "asset_isin",
+        "share_class",
+        "event_type_raw",
+        "factor",
+        "approved_on",
+        "ex_date",
+        "isin",
+    }
+    assert expected.issubset(field_names), f"Missing: {expected - field_names}"
+
+
+def test_b3_subscription_events_template_loads():
+    """Subscription-events template loads with expected structure."""
+    tpl = MarketDataTemplate("templates/b3/companies/b3-subscription-events.yaml")
+
+    assert tpl.id == "b3-subscription-events"
+    assert tpl.is_etl
+    assert not tpl.has_downloader
+    assert not tpl.has_reader
+    assert tpl.etl.is_pipeline
+
+    field_names = {f.name for f in tpl.fields}
+    expected = {
+        "code_cvm",
+        "issuing_company",
+        "symbol",
+        "asset_isin",
+        "share_class",
+        "event_type_raw",
+        "percentage",
+        "subscription_price",
+        "trading_period",
+        "subscription_date",
+        "approved_on",
+        "ex_date",
+        "isin",
+    }
+    assert expected.issubset(field_names), f"Missing: {expected - field_names}"
+
+
+def test_brasa_corporate_events_template_loads():
+    """Unified corporate-events template loads with expected structure."""
+    tpl = MarketDataTemplate("templates/brasa/brasa-corporate-events.yaml")
+
+    assert tpl.id == "brasa-corporate-events"
+    assert tpl.is_etl
+    assert not tpl.has_downloader
+    assert not tpl.has_reader
+    assert tpl.etl.is_pipeline
+
+    field_names = {f.name for f in tpl.fields}
+    expected = {
+        "code_cvm",
+        "issuing_company",
+        "symbol",
+        "asset_isin",
+        "share_class",
+        "event_family",
+        "event_type",
+        "event_type_raw",
+        "ex_date",
+        "approved_on",
+        "payment_date",
+        "value_cash",
+        "value_cash_alt",
+        "factor",
+        "ratio",
+        "subscription_price",
+        "subscription_date",
+        "yield_pct",
+        "prior_ex_close",
+        "related_to",
+        "isin",
+        "source",
+    }
+    assert expected.issubset(field_names), f"Missing: {expected - field_names}"
+
+
 # --- Retry configuration tests (TASK-013) ---
 
 
@@ -365,3 +491,26 @@ def test_b3_trades_intraday_legacy_template_unchanged():
     assert tpl.has_downloader
     assert tpl.has_reader
     assert not tpl.is_etl
+
+
+def test_b3_companies_symbols_template_loads():
+    """b3-companies-symbols exposes the ISIN-derived class columns."""
+    tpl = MarketDataTemplate("templates/b3/companies/b3-companies-symbols.yaml")
+
+    assert tpl.id == "b3-companies-symbols"
+    assert tpl.is_etl
+    assert not tpl.has_downloader
+    assert not tpl.has_reader
+    assert tpl.etl.is_pipeline
+
+    field_names = {f.name for f in tpl.fields}
+    expected = {
+        "symbol",
+        "isin",
+        "issuing_company",
+        "code_cvm",
+        "market",
+        "share_class",
+        "instrument_type",
+    }
+    assert expected.issubset(field_names), f"Missing: {expected - field_names}"

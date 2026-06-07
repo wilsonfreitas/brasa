@@ -38,7 +38,23 @@ etl:
             isin,
             issuingCompany               AS issuing_company,
             CAST(codeCVM AS VARCHAR)     AS code_cvm,
-            market
+            market,
+            CASE
+                WHEN substr(isin, 7, 3) = 'ACN' THEN 'EQUITY'
+                WHEN substr(isin, 7, 3) IN ('CDA', 'UNT') THEN 'UNIT'
+                WHEN substr(isin, 7, 3) = 'BDR' THEN 'BDR'
+                WHEN regexp_matches(substr(isin, 7, 3), '^D[A-Z]') THEN 'DEBENTURE'
+                WHEN regexp_matches(substr(isin, 7, 3), '^D[0-9]') THEN 'SUBSCRIPTION_RIGHT'
+                WHEN regexp_matches(substr(isin, 7, 3), '^[RN][0-9]') THEN 'SUBSCRIPTION_RECEIPT'
+                ELSE 'OTHER'
+            END AS instrument_type,
+            CASE
+                WHEN substr(isin, 7, 3) <> 'ACN' THEN NULL
+                WHEN substr(isin, 10, 2) = 'OR' THEN 'ON'
+                WHEN substr(isin, 10, 2) = 'PR' THEN 'PN'
+                WHEN substr(isin, 10, 1) = 'P' THEN 'PN' || substr(isin, 11, 1)
+                ELSE NULL
+            END AS share_class
         FROM latest
         WHERE rn = 1
         ORDER BY symbol
@@ -62,4 +78,14 @@ fields:
     type: string
   - name: market
     description: Listing market (NOVO MERCADO, BOLSA, BOVESPA NIVEL 2, BDR / CDA, etc.)
+    type: string
+  - name: share_class
+    description: >
+        B3 equity share class parsed from the ISIN (ON, PN, PNA, PNB, PNC).
+        Mirrors input.b3-cash-dividends.type_stock. NULL for non-equity instruments.
+    type: string
+  - name: instrument_type
+    description: >
+        Security family parsed from the ISIN (EQUITY, UNIT, BDR, DEBENTURE,
+        SUBSCRIPTION_RIGHT, SUBSCRIPTION_RECEIPT, OTHER).
     type: string
