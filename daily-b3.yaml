@@ -17,22 +17,24 @@ tasks:
   - template: b3-otc-trade-information
   - template: b3-economic-indicators-fwf
   - template: b3-trades-intraday
+  - template: b3-trades-intraday-equities
+  - template: b3-trades-intraday-derivatives
   - template: b3-equity-options
 
   # bcb SGS data
   - template: bcb-sgs
     args:
-      code: [ 4389, 1178, 432, 433, 189 ] # CDI, SELIC, SETA, IPCA, IGPM
+      code: [4389, 1178, 432, 433, 189] # CDI, SELIC, SETA, IPCA, IGPM
 
   # bcb PTAX intraday quotes
   - template: bcb-currency
     args:
-      currency: [ AUD, CAD, CHF, EUR, GBP, JPY, USD ]
+      currency: [AUD, CAD, CHF, EUR, GBP, JPY, USD]
 
   # no refdate needed — template doesn't declare it
   - template: b3-listed-funds
     args:
-      typeFund: [ ETF, ETF-CRIPTO, ETF-RF, ETF-FII ]
+      typeFund: [ETF, ETF-CRIPTO, ETF-RF, ETF-FII]
   - template: b3-indexes-composition
 
   # dynamic symbol resolution
