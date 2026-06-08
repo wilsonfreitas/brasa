@@ -96,7 +96,7 @@ FROM "input.b3-cotahist-daily"
 
 ## Key Datasets Reference
 
-These are the most commonly used datasets, with their actual column names verified against the live database. This is a curated subset — run the discovery queries above to see every available table and its current schema. Column names are case-sensitive: some `input.b3-company-*` tables use camelCase (e.g. `issuingCompany`, `codeCVM`) while most processed tables use snake_case.
+These are the most commonly used datasets, with their actual column names verified against the live database. This is a curated subset — for the **complete catalog of every view grouped by topic**, see [`docs/datasets.md`](../../../docs/datasets.md) in the repo, or run the discovery queries above to see every available table and its current schema. Column names are case-sensitive: some `input.b3-company-*` tables use camelCase (e.g. `issuingCompany`, `codeCVM`) while most processed tables use snake_case.
 
 ### Prices & Trading (input layer)
 
