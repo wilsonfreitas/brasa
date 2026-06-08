@@ -96,70 +96,103 @@ FROM "input.b3-cotahist-daily"
 
 ## Key Datasets Reference
 
-These are the most commonly used datasets. Run the discovery queries above to see all available tables and their current schemas.
+These are the most commonly used datasets, with their actual column names verified against the live database. This is a curated subset — run the discovery queries above to see every available table and its current schema. Column names are case-sensitive: some `input.b3-company-*` tables use camelCase (e.g. `issuingCompany`, `codeCVM`) while most processed tables use snake_case.
 
 ### Prices & Trading (input layer)
 
 | Table | Description | Key Columns |
 |-------|-------------|-------------|
-| `input.b3-cotahist-daily` | Daily stock prices | symbol, refdate, open, high, low, close, volume |
-| `input.b3-cotahist-yearly` | Yearly historical stock prices | symbol, refdate, open, high, low, close, volume |
-| `input.b3-futures-settlement-prices` | Futures settlement prices | refdate, symbol, settlement_price |
-| `input.b3-bvbg028-equities` | Equities from BVBG028 | refdate, symbol |
-| `input.b3-bvbg028-future_contracts` | Future contracts from BVBG028 | refdate, symbol |
-| `input.b3-bvbg028-options_on_equities` | Options on equities from BVBG028 | refdate, symbol |
-| `input.b3-bvbg086` | Options market data | refdate, symbol |
+| `input.b3-cotahist-daily` | Daily stock prices | refdate, symbol, open, high, low, average, close, volume |
+| `input.b3-cotahist-yearly` | Yearly historical stock prices | refdate, symbol, open, high, low, average, close, volume |
+| `input.b3-futures-settlement-prices` | Futures settlement prices | refdate, symbol, commodity, maturity_code, price, settlement_value, price_change |
+| `input.b3-bvbg028-equities` | Equities instrument registry (BVBG028) | refdate, symbol, isin, corporation_name, close, open, market_capitalisation |
+| `input.b3-bvbg028-future_contracts` | Future contracts registry (BVBG028) | refdate, symbol, maturity_date, contract_multiplier |
+| `input.b3-bvbg028-options_on_equities` | Options on equities registry (BVBG028) | refdate, symbol, exercise_price, option_type, maturity_date |
+| `input.b3-bvbg086` | Derivatives market data (settlement, OI) | refdate, symbol, settlement_value, open_interest, volume, close |
 
 ### Indexes (input & staging layers)
 
 | Table | Description | Key Columns |
 |-------|-------------|-------------|
-| `input.b3-indexes-composition` | Index compositions (raw) | refdate, indexes, symbol |
-| `input.b3-indexes-theoretical-portfolio` | Theoretical portfolio weights | refdate, symbol |
-| `input.b3-indexes-historical-prices` | Historical index prices | refdate, symbol |
-| `input.b3-indexes-current-portfolio` | Current portfolio | symbol |
-| `staging.b3-indexes-composition` | Index compositions (processed) | refdate, indexes, symbol |
-| `staging.b3-indexes-historical-prices` | Historical index prices (processed) | refdate, symbol |
-| `staging.b3-indexes-theoretical-portfolio` | Theoretical portfolio (processed) | refdate, symbol |
-| `staging.b3-indexes-current-portfolio` | Current portfolio (processed) | symbol |
+| `input.b3-indexes-composition` | Index compositions (raw) | refdate, indexes, symbol, corporation_name |
+| `input.b3-indexes-theoretical-portfolio` | Theoretical portfolio weights | refdate, symbol, weight, index |
+| `input.b3-indexes-current-portfolio` | Current portfolio | refdate, symbol, weight, index |
+| `staging.b3-indexes-composition` | Index compositions (processed) | refdate, indexes, symbol, corporation_name, specification_code |
+| `staging.b3-indexes-historical-prices` | Historical index prices (processed, long) | refdate, symbol, value |
+| `staging.b3-indexes-theoretical-portfolio` | Theoretical portfolio (processed) | refdate, symbol, weight, index |
+| `staging.b3-indexes-current-portfolio` | Current portfolio (processed) | refdate, symbol, weight, index |
 
 ### Returns (staging layer)
 
 | Table | Description | Key Columns |
 |-------|-------------|-------------|
-| `staging.b3-equities-returns` | Equity log returns | refdate, symbol, log_return |
+| `staging.b3-equities-returns` | Equity returns | refdate, symbol, pct_return, log_return |
+| `staging.b3-equities-etfs-returns` | ETF returns | refdate, symbol, pct_return, log_return |
+
+### Macro & Rates (BCB / ANBIMA)
+
+| Table | Description | Key Columns |
+|-------|-------------|-------------|
+| `staging.bcb-sgs` | Daily macro series — `symbol` ∈ {CDI, SELIC, IPCA, IGPM, SETA} | refdate, symbol, value |
+| `input.bcb-sgs` | Raw SGS series keyed by numeric `code` | refdate, code, value |
+| `input.bcb-currency` | PTAX FX rates — `currency` ∈ {USD, EUR, GBP, JPY, CHF, CAD, AUD} | refdate, currency, bid, ask, parity_bid, parity_ask |
+| `staging.b3-economic-indicators` | B3 economic indicators (grouped) | refdate, indicator_group, symbol, value |
+| `staging.b3-futures-di1-consolidated` | DI1 (interest-rate) futures, consolidated | refdate, symbol, maturity_code, price, settlement_value |
+| `staging.b3-futures-dap` | DAP (inflation) futures with implied tax | refdate, symbol, maturity_date, price, adjusted_tax, business_days |
+| `input.anbima-index-imab` | ANBIMA IMA fixed-income index | refdate, index_name, index_number, duration_du, pmr |
+
+### Corporate Events
+
+| Table | Description | Key Columns |
+|-------|-------------|-------------|
+| `staging.brasa-corporate-events` | Unified events — `event_family` ∈ {CASH, STOCK, SUBSCRIPTION} | code_cvm, symbol, event_family, event_type, ex_date, payment_date, value_cash, factor, ratio |
+| `staging.b3-cash-dividends-events` | Cash dividends/JCP events | code_cvm, symbol, ex_date, payment_date, value_cash, yield_pct |
+| `staging.b3-stock-events` | Stock events (splits, bonus, mergers) | code_cvm, symbol, event_type_raw, factor, ex_date |
+| `staging.b3-subscription-events` | Subscription rights | code_cvm, symbol, subscription_price, subscription_date, ex_date |
+| `input.b3-cash-dividends` | Raw cash dividends | refdate, trading_name, type_stock, value_cash, last_date_prior_ex |
 
 ### Company & Fund Data
 
 | Table | Description | Key Columns |
 |-------|-------------|-------------|
-| `staging.b3-companies-names` | Company name registry | code_cvm, trading_name |
-| `staging.brasa-companies` | Unified company information | symbol, company_name |
-| `staging.brasa-industry-sectors` | Industry classification | sector, subsector, segment |
-| `input.b3-company-details` | Detailed company info | issuing_company |
-| `input.b3-company-info-info` | Company general info | code_cvm |
-| `input.b3-company-info-cash_dividends` | Cash dividends | code_cvm |
-| `staging.b3-listed-funds` | Listed funds (ETF, FII) | symbol, fund_type |
-| `input.b3-listed-stock-etfs` | Stock ETFs registry | symbol |
-| `input.b3-listed-fixed-income-etfs` | Fixed income ETFs | symbol |
-| `input.b3-listed-reits` | REITs (FIIs) | symbol |
+| `staging.brasa-companies` | Unified company information (no `symbol` column — join via `code_cvm`) | code_cvm, company_name, trading_name, sector, subsector, segment |
+| `staging.b3-companies-profile` | Company profile | code_cvm, trading_name, company_name, cnpj, segment |
+| `staging.b3-companies-symbols` | Symbol ↔ company mapping | symbol, isin, code_cvm, share_class |
+| `staging.b3-companies-names` | Company name registry | refdate, code_cvm, trading_name, instrument_asset |
+| `staging.brasa-industry-sectors` | Industry classification | sector, subsector, gics_sector, icb_sector |
+| `input.cvm-companies-registration` | CVM company registry | code_cvm, cnpj_cia, denom_social, setor_ativ, sit |
+| `input.b3-company-details` | Detailed company info (camelCase) | refdate, issuingCompany, tradingName, codeCVM, industryClassification |
+| `input.b3-company-info-info` | Company general info (camelCase) | refdate, issuingCompany, codeCVM, segment, totalNumberShares |
+| `input.b3-company-info-cash_dividends` | Cash dividends (camelCase) | refdate, issuingCompany, paymentDate, rate, lastDatePrior |
+| `staging.b3-listed-funds` | Listed funds (ETF, FII) | refdate, symbol, fund_name, fund_type |
+
+> Note: the registry views `input.b3-listed-stock-etfs`, `input.b3-listed-fixed-income-etfs`, `input.b3-listed-cripto-etfs`, and `input.b3-listed-reits` exist but may currently hold no parquet files (queries raise an `IO Error: No files found`). Use `staging.b3-listed-funds` for fund data instead.
 
 ### Equities (staging layer)
 
 | Table | Description | Key Columns |
 |-------|-------------|-------------|
-| `staging.b3-cotahist` | Unified cotahist data | refdate, symbol, close |
-| `staging.b3-equities-instrument-assets` | Instrument asset mapping | instrument_asset |
-| `staging.b3-equities-register` | Equities register | symbol |
-| `staging.b3-equities-spot-market` | Spot market data | refdate, symbol |
+| `staging.b3-cotahist` | Unified cotahist data | refdate, symbol, open, high, low, close, volume |
+| `staging.b3-equities-instrument-assets` | Instrument asset mapping | refdate, instrument_asset |
+| `staging.b3-equities-register` | Equities register | refdate, symbol, isin, corporation_name |
+| `staging.b3-equities-spot-market` | Spot market data | refdate, symbol, isin, corporation_name |
 
-### Futures (staging layer)
+### Futures & Options (staging / input)
 
 | Table | Description | Key Columns |
 |-------|-------------|-------------|
-| `staging.b3-futures-settlement-prices` | Futures settlement prices (processed) | refdate, symbol |
-| `staging.b3-futures-register` | Futures register | symbol |
-| `staging.b3-futures-dap` | DAP futures | refdate, symbol |
+| `staging.b3-futures-settlement-prices` | Futures settlement prices (processed) | refdate, symbol, commodity, price, settlement_value |
+| `staging.b3-futures-register` | Futures register | refdate, symbol, maturity_date, contract_multiplier |
+| `input.b3-equity-options` | Equity option theoretical prices & vol | refdate, symbol, strike, maturity_date, volatility |
+| `input.b3-equities-volatility-surface` | Equity volatility surface | refdate, underlying, delta, volatility, maturity_date |
+
+### Intraday Trades (input / staging layer)
+
+| Table | Description | Key Columns |
+|-------|-------------|-------------|
+| `input.b3-trades-intraday` | Intraday trades (tick) | refdate, symbol, traded_price, traded_quantity, trade_time |
+| `input.b3-trades-intraday-equities` | Intraday equity trades | refdate, symbol, traded_price, traded_quantity, trade_time |
+| `input.b3-trades-intraday-derivatives` | Intraday derivative trades | refdate, symbol, traded_price, traded_quantity, trade_time |
 
 ## Common Query Patterns
 
@@ -209,6 +242,38 @@ FROM "staging.b3-indexes-composition"
 WHERE indexes = 'IBOV'
   AND refdate = (SELECT MAX(refdate) FROM "staging.b3-indexes-composition")
 ORDER BY symbol
+```
+
+### Get a macro series (CDI, SELIC, IPCA, ...)
+
+```sql
+SELECT refdate, value
+FROM "staging.bcb-sgs"
+WHERE symbol = 'CDI'
+  AND refdate >= '2024-01-01'
+ORDER BY refdate
+```
+
+### Get FX rates (PTAX)
+
+```sql
+SELECT refdate, bid, ask
+FROM "input.bcb-currency"
+WHERE currency = 'USD'
+  AND refdate >= '2024-01-01'
+ORDER BY refdate
+```
+
+### Find dividends/corporate events for a stock
+
+`staging.brasa-corporate-events` has no price/refdate of trading — use `ex_date` for timing. Filter by `event_family` (`CASH`, `STOCK`, `SUBSCRIPTION`) or a specific `event_type` (e.g. `CASH_DIVIDEND`, `INTEREST_ON_CAPITAL`, `SPLIT`, `BONUS_SHARES`).
+
+```sql
+SELECT ex_date, payment_date, event_type, value_cash, yield_pct
+FROM "staging.brasa-corporate-events"
+WHERE symbol = 'PETR4'
+  AND event_family = 'CASH'
+ORDER BY ex_date DESC
 ```
 
 ## Creating Derived Views
