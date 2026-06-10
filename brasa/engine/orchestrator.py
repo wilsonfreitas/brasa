@@ -143,6 +143,129 @@ class OrchestratorReport:
 
 
 # ---------------------------------------------------------------------------
+# RunAllReport
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RunAllEntry:
+    """One template's outcome in a ``run-all`` pass.
+
+    Attributes:
+        template_id: The template this entry describes.
+        template_type: ``"download"`` or ``"etl"``.
+        status: One of ``"executed"``, ``"failed"``, ``"skipped"``,
+            ``"blocked"``.
+        reason: Human-readable explanation of the status.
+        report: The ``TaskReport`` produced by execution, if any.
+    """
+
+    template_id: str
+    template_type: str
+    status: str
+    reason: str
+    report: TaskReport | None = None
+
+
+@dataclass
+class RunAllReport:
+    """Aggregated report from a ``run-all`` pipeline convergence pass.
+
+    Attributes:
+        entries: Per-template outcomes in execution (topological) order.
+        dry_run: Whether this was a dry-run (no actual execution).
+    """
+
+    entries: list[RunAllEntry] = field(default_factory=list)
+    dry_run: bool = False
+    _start_time: datetime | None = field(default=None, repr=False)
+    _end_time: datetime | None = field(default=None, repr=False)
+
+    def add(
+        self,
+        template_id: str,
+        template_type: str,
+        status: str,
+        reason: str,
+        report: TaskReport | None = None,
+    ) -> None:
+        """Append a ``RunAllEntry`` to the report."""
+        self.entries.append(
+            RunAllEntry(template_id, template_type, status, reason, report)
+        )
+
+    @property
+    def executed(self) -> list[RunAllEntry]:
+        """Entries that were executed (successfully)."""
+        return [e for e in self.entries if e.status == "executed"]
+
+    @property
+    def failed(self) -> list[RunAllEntry]:
+        """Entries whose execution failed."""
+        return [e for e in self.entries if e.status == "failed"]
+
+    @property
+    def blocked(self) -> list[RunAllEntry]:
+        """Entries that could not run (e.g. download with no data)."""
+        return [e for e in self.entries if e.status == "blocked"]
+
+    @property
+    def skipped(self) -> list[RunAllEntry]:
+        """Entries skipped because an upstream failed or was blocked."""
+        return [e for e in self.entries if e.status == "skipped"]
+
+    @property
+    def total_duration(self) -> float:
+        """Total wall-clock duration of the pass in seconds."""
+        if self._start_time and self._end_time:
+            return (self._end_time - self._start_time).total_seconds()
+        return 0.0
+
+    @property
+    def success(self) -> bool:
+        """Whether the pass had no execution failures.
+
+        Dry runs and runs with only blocked/skipped entries are
+        considered successful.
+        """
+        if self.dry_run:
+            return True
+        return not any(e.status == "failed" for e in self.entries)
+
+    def summary(self) -> str:
+        """Return a human-readable summary of the pass."""
+        if not self.entries:
+            return "Everything is up to date."
+
+        lines = ["Run-all report:"]
+        lines.append(
+            "  Mode: DRY RUN (no steps executed)" if self.dry_run else "  Mode: EXECUTE"
+        )
+        lines.append(
+            f"  Templates: {len(self.executed)} executed, "
+            f"{len(self.skipped)} skipped, "
+            f"{len(self.blocked)} blocked, "
+            f"{len(self.failed)} failed"
+        )
+        if not self.dry_run:
+            lines.append(f"  Duration: {self.total_duration:.1f}s")
+            lines.append(f"  Success: {self.success}")
+
+        marks = {
+            "executed": "EXEC",
+            "failed": "FAIL",
+            "skipped": "SKIP",
+            "blocked": "BLOCK",
+        }
+        for e in self.entries:
+            lines.append(
+                f"  [{marks[e.status]}] {e.template_id} "
+                f"({e.template_type}) — {e.reason}"
+            )
+        return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # PipelineOrchestrator
 # ---------------------------------------------------------------------------
 
@@ -336,3 +459,115 @@ class PipelineOrchestrator:
         fallback_report.add_result(result)
         fallback_report.finish()
         return fallback_report
+
+    def _staleness_check(self, template_id: str) -> tuple[str, str]:
+        """Return ``(action, reason)`` for a template, reusing run predicates.
+
+        Mirrors the predicates used by ``brasa run`` / ``brasa map`` so
+        ``run-all`` stays consistent.
+
+        Args:
+            template_id: The template to classify.
+
+        Returns:
+            ``(action, reason)`` where action is ``"process"``, ``"etl"``,
+            ``"blocked"`` or ``"skip"``.
+        """
+        graph = self.graph
+        if graph.get_template_type(template_id) == "download":
+            status, _ = graph.get_download_status(template_id)
+            if status == "stale":
+                return ("process", "unprocessed downloads detected")
+            if status == "never-run":
+                return ("blocked", "no downloaded data")
+            return ("skip", "all downloads already processed")
+
+        if graph._check_etl_template_staleness(template_id):
+            return ("etl", "output missing or outdated")
+        return ("skip", "output is up to date")
+
+    def execute_all(
+        self,
+        dry_run: bool = False,
+        verbosity: Verbosity = Verbosity.NORMAL,
+    ) -> RunAllReport:
+        """Converge the whole pipeline in a single topological pass.
+
+        Walks every template sources-first. For each node it re-checks
+        staleness live (after upstreams have run) and executes it if
+        needed. Descendants of failed/blocked templates are skipped;
+        independent branches keep running.
+
+        Args:
+            dry_run: If ``True``, predict the run via forward-closure
+                without executing anything.
+            verbosity: Output verbosity level for executed steps.
+
+        Returns:
+            A ``RunAllReport`` describing every template's outcome.
+        """
+        graph = self.graph
+        report = RunAllReport(dry_run=dry_run)
+        report._start_time = datetime.now()
+
+        failed: set[str] = set()
+        blocked: set[str] = set()
+        will_run: set[str] = set()  # dry-run forward-closure tracking
+
+        for tid in graph.global_topological_order():
+            ttype = graph.get_template_type(tid)
+            upstreams = graph.get_upstream(tid)
+
+            broken = [u for u in upstreams if u in failed or u in blocked]
+            if broken:
+                report.add(
+                    tid,
+                    ttype,
+                    "skipped",
+                    f"upstream '{broken[0]}' failed or blocked",
+                )
+                blocked.add(tid)
+                continue
+
+            action, reason = self._staleness_check(tid)
+
+            if action == "blocked":
+                report.add(tid, ttype, "blocked", reason)
+                blocked.add(tid)
+                continue
+
+            if action == "skip":
+                # In a real run an upstream that just executed makes this
+                # node stale on the next iteration's live check; in dry-run
+                # nothing executes, so we propagate the prediction manually.
+                if dry_run and any(u in will_run for u in upstreams):
+                    up = next(u for u in upstreams if u in will_run)
+                    report.add(tid, ttype, "executed", f"downstream of '{up}'")
+                    will_run.add(tid)
+                continue
+
+            # action is "process" or "etl" — the node is stale.
+            if dry_run:
+                report.add(tid, ttype, "executed", reason)
+                will_run.add(tid)
+                continue
+
+            step = ExecutionStep(
+                template_id=tid,
+                action=action,  # type: ignore[arg-type]
+                reason=reason,
+                template_type=ttype,  # type: ignore[arg-type]
+            )
+            step_report = self._execute_step(step, verbosity)
+            has_error = any(
+                r.status in (TaskStatus.ERROR, TaskStatus.FAILED)
+                for r in step_report.results
+            )
+            if has_error:
+                report.add(tid, ttype, "failed", reason, report=step_report)
+                failed.add(tid)
+            else:
+                report.add(tid, ttype, "executed", reason, report=step_report)
+
+        report._end_time = datetime.now()
+        return report

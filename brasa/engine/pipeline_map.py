@@ -7,7 +7,6 @@ classification into flat / grouped / tree output for the CLI.
 
 from __future__ import annotations
 
-import bisect
 from dataclasses import dataclass
 from typing import Literal
 
@@ -30,28 +29,6 @@ class TemplateStatus:
     reason: str  # empty for "ok"
 
 
-def _global_topological_order(graph: TemplateDependencyGraph) -> list[str]:
-    """Topologically sort every template in the graph.
-
-    Sources first, leaves last. Ties broken by template_id for determinism.
-    """
-    in_degree: dict[str, int] = dict.fromkeys(graph.template_ids, 0)
-    for tid, upstreams in graph.edges.items():
-        in_degree[tid] = len(upstreams)
-
-    queue = sorted(t for t, d in in_degree.items() if d == 0)
-    result: list[str] = []
-    while queue:
-        node = queue.pop(0)
-        result.append(node)
-        for tid, upstreams in graph.edges.items():
-            if node in upstreams:
-                in_degree[tid] -= 1
-                if in_degree[tid] == 0:
-                    bisect.insort(queue, tid)
-    return result
-
-
 def build_pipeline_map(include_ok: bool = False) -> list[TemplateStatus]:
     """Topologically ordered status of every template.
 
@@ -64,7 +41,7 @@ def build_pipeline_map(include_ok: bool = False) -> list[TemplateStatus]:
     """
     graph = TemplateDependencyGraph()
     items: list[TemplateStatus] = []
-    for tid in _global_topological_order(graph):
+    for tid in graph.global_topological_order():
         ttype = graph.get_template_type(tid)
         if ttype == "download":
             status, reason = graph.get_download_status(tid)

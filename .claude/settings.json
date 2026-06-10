@@ -2,7 +2,7 @@
   "plansDirectory": "./.claude/plans",
   "permissions": {
     "allow": [
-      "Uv run pytest:*"
+      "Bash(uv run pytest:*)"
     ]
   }
 }

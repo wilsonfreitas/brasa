@@ -85,7 +85,7 @@ from .exceptions import (
 from .layers import DEFAULT_ETL_LAYER, DEFAULT_LAYER, LAYER_ORDER, DataLayer
 
 # Orchestrator
-from .orchestrator import OrchestratorReport, PipelineOrchestrator
+from .orchestrator import OrchestratorReport, PipelineOrchestrator, RunAllReport
 
 # Parsers
 from .parsers import (
@@ -180,6 +180,7 @@ __all__ = [
     "PipelineOrchestrator",
     "ProgressDisplay",
     "PtBRNumericParser",
+    "RunAllReport",
     "Singleton",
     "TaskReport",
     "TaskResult",
