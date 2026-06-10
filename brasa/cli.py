@@ -15,7 +15,7 @@ from .util import parse_arg_value
 # Command groups for organized help display
 _COMMAND_GROUPS = {
     "Setup": ["setup"],
-    "Execution": ["download", "process", "run"],
+    "Execution": ["download", "process", "run", "run-all"],
     "Templates": ["deps", "plan", "graph", "map"],
     "Datasets": [
         "list-unprocessed",
@@ -407,6 +407,17 @@ parser_run.add_argument(
     help="show execution plan without running anything",
 )
 add_verbosity_args(parser_run)
+
+parser_run_all = subparsers.add_parser(
+    "run-all",
+    help="converge the whole pipeline: process/ETL everything stale",
+)
+parser_run_all.add_argument(
+    "--dry-run",
+    action="store_true",
+    help="show the predicted execution plan without running anything",
+)
+add_verbosity_args(parser_run_all)
 
 parser_list_unprocessed = subparsers.add_parser(
     "list-unprocessed",
@@ -1150,6 +1161,20 @@ def main() -> None:  # noqa: PLR0912, PLR0915
                 report_path = Path(report_file)
                 file_format = "json" if report_path.suffix == ".json" else "txt"
                 target_report.save_report(report_path, format=file_format)
+
+        if not report.success:
+            sys.exit(1)
+
+    elif args.command == "run-all":
+        from .engine.orchestrator import PipelineOrchestrator
+
+        verbosity = get_verbosity(args)
+        orchestrator = PipelineOrchestrator()
+        report = orchestrator.execute_all(
+            dry_run=args.dry_run,
+            verbosity=verbosity,
+        )
+        print(report.summary())
 
         if not report.success:
             sys.exit(1)
