@@ -1,0 +1,132 @@
+id: brasa-symbol-changes
+description: >
+  Detected B3 ticker renames. A symbol whose daily series hard-stops and is
+  followed the next session by a new symbol of the same ISIN class with a
+  continuous close price (<= 10%) is recorded as a src -> dest rename, used to
+  stitch fragmented equity price histories. Derived from staging.b3-cotahist.
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - staging.b3-cotahist
+      query: |+
+        WITH universe AS (
+            SELECT refdate, symbol, close, isin,
+                   substr(isin, 7, 3) AS isin_class,
+                   corporation_name
+            FROM 'staging.b3-cotahist'
+            WHERE instrument_market = 10
+              AND substr(isin, 7, 3) IN ('ACN', 'UNT', 'CDA')
+              AND close IS NOT NULL
+        ),
+        session_rank AS (
+            SELECT refdate, row_number() OVER (ORDER BY refdate) AS rn
+            FROM (SELECT DISTINCT refdate FROM universe)
+        ),
+        bounds AS (SELECT min(rn) AS min_rn, max(rn) AS max_rn FROM session_rank),
+        spans AS (
+            SELECT symbol,
+                   min(refdate) AS first_date,
+                   max(refdate) AS last_date,
+                   arg_min(close, refdate) AS first_close,
+                   arg_max(close, refdate) AS last_close,
+                   arg_max(isin, refdate) AS isin,
+                   any_value(isin_class) AS isin_class,
+                   arg_max(corporation_name, refdate) AS corporation_name
+            FROM universe GROUP BY symbol
+        ),
+        spans_ranked AS (
+            SELECT s.*, fr.rn AS first_rn, lr.rn AS last_rn
+            FROM spans s
+            JOIN session_rank fr ON fr.refdate = s.first_date
+            JOIN session_rank lr ON lr.refdate = s.last_date
+        ),
+        flagged AS (
+            SELECT sr.*,
+                   sr.last_rn  < b.max_rn - 5 AS is_hard_stop,
+                   sr.first_rn > b.min_rn + 5 AS is_sudden_start
+            FROM spans_ranked sr CROSS JOIN bounds b
+        ),
+        candidate_pairs AS (
+            SELECT a.symbol AS src_symbol,
+                   b.symbol AS dest_symbol,
+                   b.first_date AS change_date,
+                   a.last_close AS src_last_close,
+                   b.first_close AS dest_first_close,
+                   abs(b.first_close - a.last_close) / a.last_close AS price_diff_pct,
+                   a.isin_class AS isin_class,
+                   a.isin AS src_isin,
+                   b.isin AS dest_isin,
+                   a.corporation_name AS corporation_name_src,
+                   b.corporation_name AS corporation_name_dest
+            FROM flagged a
+            JOIN flagged b
+              ON b.first_rn = a.last_rn + 1
+             AND a.isin_class = b.isin_class
+            WHERE a.is_hard_stop AND b.is_sudden_start
+              AND a.last_close > 0
+              AND abs(b.first_close - a.last_close) / a.last_close <= 0.10
+        ),
+        ranked AS (
+            -- prefer pairs that keep the symbol suffix (share-class digits),
+            -- then smallest price gap; avoids cross-pairing e.g. FJTA4->TASA3
+            SELECT *,
+                   row_number() OVER (
+                       PARTITION BY src_symbol
+                       ORDER BY (substr(src_symbol, 5) = substr(dest_symbol, 5)) DESC,
+                                price_diff_pct
+                   ) AS src_rk,
+                   row_number() OVER (
+                       PARTITION BY dest_symbol
+                       ORDER BY (substr(src_symbol, 5) = substr(dest_symbol, 5)) DESC,
+                                price_diff_pct
+                   ) AS dest_rk
+            FROM candidate_pairs
+        )
+        SELECT src_symbol, dest_symbol, change_date,
+               src_last_close, dest_first_close, price_diff_pct,
+               isin_class, src_isin, dest_isin,
+               corporation_name_src, corporation_name_dest
+        FROM ranked
+        WHERE src_rk = 1 AND dest_rk = 1
+        ORDER BY change_date, src_symbol
+
+writer:
+  layer: staging
+  dataset: brasa-symbol-changes
+
+fields:
+  - name: src_symbol
+    description: Symbol whose series hard-stopped (old ticker)
+    type: string
+  - name: dest_symbol
+    description: Successor symbol that resumed the series (new ticker)
+    type: string
+  - name: change_date
+    description: First trading session under the new ticker
+    type: date
+  - name: src_last_close
+    description: Close on the old ticker's last session
+    type: numeric
+  - name: dest_first_close
+    description: Close on the new ticker's first session
+    type: numeric
+  - name: price_diff_pct
+    description: Relative close gap across the change (continuity measure)
+    type: numeric
+  - name: isin_class
+    description: ISIN security-class token shared by both tickers (ACN/UNT/CDA)
+    type: string
+  - name: src_isin
+    description: ISIN of the old ticker
+    type: string
+  - name: dest_isin
+    description: ISIN of the new ticker
+    type: string
+  - name: corporation_name_src
+    description: Corporation name on the old ticker (corroboration only)
+    type: string
+  - name: corporation_name_dest
+    description: Corporation name on the new ticker (corroboration only)
+    type: string
