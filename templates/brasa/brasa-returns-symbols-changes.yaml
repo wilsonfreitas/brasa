@@ -34,3 +34,11 @@ etl:
       dest: CSUD3
     - src: BRDT3
       dest: VBBR3
+    - src: PETZ3
+      dest: AUAU3
+    - src: TESA3
+      dest: LAND3
+    - src: PNVL4
+      dest: RAIZ4
+    - src: OMGE3
+      dest: MEGA3
