@@ -79,3 +79,22 @@ def test_symbol_changes_detects_renames_only():
     assert "XPTO3" not in df["src_symbol"].values
     assert "DELS3" not in df["src_symbol"].values
     assert "MISM3" not in df["src_symbol"].values
+
+
+def test_symbol_spans_analysis_flags_and_marks_matched():
+    df = _run_template_query("templates/brasa/brasa-symbol-spans-analysis.yaml")
+    matched = {
+        (r.symbol, r.event_type): bool(r.matched) for r in df.itertuples(index=False)
+    }
+    # hard-stops
+    assert matched[("KROT3", "HARD_STOP")] is True
+    assert matched[("UNTA11", "HARD_STOP")] is True
+    assert matched[("XPTO3", "HARD_STOP")] is False
+    assert matched[("DELS3", "HARD_STOP")] is False
+    assert matched[("MISM3", "HARD_STOP")] is False
+    # sudden-starts
+    assert matched[("COGN3", "SUDDEN_START")] is True
+    assert matched[("UNTB11", "SUDDEN_START")] is True
+    assert matched[("YPTO3", "SUDDEN_START")] is False
+    # the anchor symbol is neither a hard-stop nor a sudden-start
+    assert "ANCR3" not in df["symbol"].values

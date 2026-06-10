@@ -1,0 +1,120 @@
+id: brasa-symbol-spans-analysis
+description: >
+  Every hard-stop and sudden-start in the B3 equity universe, with a `matched`
+  flag indicating whether it participated in a detected ticker change. Unmatched
+  hard-stops are the candidates for corporate-event exits (delisting, merger,
+  redemption) to review. Derived from staging.b3-cotahist.
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - staging.b3-cotahist
+      query: |+
+        WITH universe AS (
+            SELECT refdate, symbol, close, isin,
+                   substr(isin, 7, 3) AS isin_class,
+                   corporation_name
+            FROM 'staging.b3-cotahist'
+            WHERE instrument_market = 10
+              AND substr(isin, 7, 3) IN ('ACN', 'UNT', 'CDA')
+              AND close IS NOT NULL
+        ),
+        session_rank AS (
+            SELECT refdate, row_number() OVER (ORDER BY refdate) AS rn
+            FROM (SELECT DISTINCT refdate FROM universe)
+        ),
+        bounds AS (SELECT min(rn) AS min_rn, max(rn) AS max_rn FROM session_rank),
+        spans AS (
+            SELECT symbol,
+                   min(refdate) AS first_date,
+                   max(refdate) AS last_date,
+                   arg_min(close, refdate) AS first_close,
+                   arg_max(close, refdate) AS last_close,
+                   arg_max(isin, refdate) AS isin,
+                   any_value(isin_class) AS isin_class,
+                   arg_max(corporation_name, refdate) AS corporation_name
+            FROM universe GROUP BY symbol
+        ),
+        spans_ranked AS (
+            SELECT s.*, fr.rn AS first_rn, lr.rn AS last_rn
+            FROM spans s
+            JOIN session_rank fr ON fr.refdate = s.first_date
+            JOIN session_rank lr ON lr.refdate = s.last_date
+        ),
+        flagged AS (
+            SELECT sr.*,
+                   sr.last_rn  < b.max_rn - 5 AS is_hard_stop,
+                   sr.first_rn > b.min_rn + 5 AS is_sudden_start
+            FROM spans_ranked sr CROSS JOIN bounds b
+        ),
+        candidate_pairs AS (
+            SELECT a.symbol AS src_symbol, b.symbol AS dest_symbol,
+                   abs(b.first_close - a.last_close) / a.last_close AS price_diff_pct
+            FROM flagged a
+            JOIN flagged b
+              ON b.first_rn = a.last_rn + 1
+             AND a.isin_class = b.isin_class
+            WHERE a.is_hard_stop AND b.is_sudden_start
+              AND a.last_close > 0
+              AND abs(b.first_close - a.last_close) / a.last_close <= 0.10
+        ),
+        ranked AS (
+            -- prefer pairs that keep the symbol suffix (share-class digits),
+            -- then smallest price gap; avoids cross-pairing e.g. FJTA4->TASA3
+            SELECT *,
+                   row_number() OVER (
+                       PARTITION BY src_symbol
+                       ORDER BY (substr(src_symbol, 5) = substr(dest_symbol, 5)) DESC,
+                                price_diff_pct
+                   ) AS src_rk,
+                   row_number() OVER (
+                       PARTITION BY dest_symbol
+                       ORDER BY (substr(src_symbol, 5) = substr(dest_symbol, 5)) DESC,
+                                price_diff_pct
+                   ) AS dest_rk
+            FROM candidate_pairs
+        ),
+        changes AS (
+            SELECT src_symbol, dest_symbol FROM ranked WHERE src_rk = 1 AND dest_rk = 1
+        )
+        SELECT symbol, 'HARD_STOP' AS event_type, last_date AS event_date,
+               last_close AS close, isin, isin_class, corporation_name,
+               symbol IN (SELECT src_symbol FROM changes) AS matched
+        FROM flagged WHERE is_hard_stop
+        UNION ALL
+        SELECT symbol, 'SUDDEN_START' AS event_type, first_date AS event_date,
+               first_close AS close, isin, isin_class, corporation_name,
+               symbol IN (SELECT dest_symbol FROM changes) AS matched
+        FROM flagged WHERE is_sudden_start
+        ORDER BY event_date, symbol
+
+writer:
+  layer: staging
+  dataset: brasa-symbol-spans-analysis
+
+fields:
+  - name: symbol
+    description: The symbol that hard-stopped or suddenly started
+    type: string
+  - name: event_type
+    description: HARD_STOP or SUDDEN_START
+    type: string
+  - name: event_date
+    description: last_date for HARD_STOP, first_date for SUDDEN_START
+    type: date
+  - name: close
+    description: Close on the event date
+    type: numeric
+  - name: isin
+    description: ISIN of the symbol at the event date
+    type: string
+  - name: isin_class
+    description: ISIN security-class token (ACN/UNT/CDA)
+    type: string
+  - name: corporation_name
+    description: Corporation name at the event date
+    type: string
+  - name: matched
+    description: True if this event is part of a detected ticker change
+    type: boolean
