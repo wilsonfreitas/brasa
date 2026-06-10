@@ -18,7 +18,11 @@ from brasa.engine.dependency_graph import (
     ExecutionStep,
     TemplateDependencyGraph,
 )
-from brasa.engine.orchestrator import OrchestratorReport, PipelineOrchestrator
+from brasa.engine.orchestrator import (
+    OrchestratorReport,
+    PipelineOrchestrator,
+    RunAllReport,
+)
 from brasa.engine.reporting import (
     TaskReport,
     TaskResult,
@@ -783,3 +787,145 @@ class TestETLStalenessReEvaluation:
         assert staleness_calls.count("my-etl") == 1
         assert report.steps_executed == 0
         assert report.steps_skipped == 2
+
+
+class TestRunAllReport:
+    def test_counts_and_success(self):
+        r = RunAllReport()
+        r.add("a", "download", "executed", "unprocessed downloads detected")
+        r.add("b", "etl", "skipped", "upstream 'a' failed or blocked")
+        r.add("c", "download", "blocked", "no downloaded data")
+        assert [e.template_id for e in r.executed] == ["a"]
+        assert [e.template_id for e in r.skipped] == ["b"]
+        assert [e.template_id for e in r.blocked] == ["c"]
+        assert r.failed == []
+        assert r.success is True  # blocked/skipped are not failures
+
+    def test_failure_makes_unsuccessful(self):
+        r = RunAllReport()
+        r.add("a", "etl", "failed", "output missing or outdated")
+        assert [e.template_id for e in r.failed] == ["a"]
+        assert r.success is False
+
+    def test_dry_run_always_successful(self):
+        r = RunAllReport(dry_run=True)
+        r.add("a", "etl", "failed", "x")
+        assert r.success is True
+
+    def test_summary_empty_is_up_to_date(self):
+        assert RunAllReport().summary() == "Everything is up to date."
+
+    def test_summary_lists_entries(self):
+        r = RunAllReport()
+        r.add("a", "download", "executed", "unprocessed downloads detected")
+        out = r.summary()
+        assert "Run-all report:" in out
+        assert "Mode: EXECUTE" in out
+        assert "a (download)" in out
+        assert "unprocessed downloads detected" in out
+
+
+class TestExecuteAll:
+    def test_runs_sources_first(self):
+        src = _make_download_template("dl-src")
+        mid = _make_etl_template("etl-mid", input_datasets=["dl-src"])
+        end = _make_etl_template("etl-end", input_datasets=["staging.etl-mid"])
+        graph = _build_graph_from_templates([src, mid, end])
+        orch = PipelineOrchestrator(graph=graph)
+
+        call_order = []
+
+        def mpm(template_name, **kwargs):
+            call_order.append(template_name)
+            return _make_success_report(template_name, "process")
+
+        def mpe(template_name, **kwargs):
+            call_order.append(template_name)
+            return _make_success_report(template_name, "etl")
+
+        with (
+            patch.object(graph, "get_download_status", return_value=("stale", "x")),
+            patch.object(graph, "_check_etl_template_staleness", return_value=True),
+            patch("brasa.engine.api.process_marketdata", side_effect=mpm),
+            patch("brasa.engine.api.process_etl", side_effect=mpe),
+        ):
+            report = orch.execute_all(verbosity=Verbosity.QUIET)
+
+        assert call_order == ["dl-src", "etl-mid", "etl-end"]
+        assert report.success is True
+        assert [e.template_id for e in report.executed] == [
+            "dl-src",
+            "etl-mid",
+            "etl-end",
+        ]
+
+    def test_blocked_download_skips_descendants(self):
+        src = _make_download_template("dl-src")
+        mid = _make_etl_template("etl-mid", input_datasets=["dl-src"])
+        graph = _build_graph_from_templates([src, mid])
+        orch = PipelineOrchestrator(graph=graph)
+
+        with (
+            patch.object(
+                graph,
+                "get_download_status",
+                return_value=("never-run", "no downloads found"),
+            ),
+            patch.object(graph, "_check_etl_template_staleness", return_value=True),
+            patch("brasa.engine.api.process_marketdata") as mpm,
+            patch("brasa.engine.api.process_etl") as mpe,
+        ):
+            report = orch.execute_all(verbosity=Verbosity.QUIET)
+
+        mpm.assert_not_called()
+        mpe.assert_not_called()
+        assert [e.template_id for e in report.blocked] == ["dl-src"]
+        assert [e.template_id for e in report.skipped] == ["etl-mid"]
+        assert report.success is True
+
+    def test_failed_step_skips_descendants(self):
+        src = _make_download_template("dl-src")
+        mid = _make_etl_template("etl-mid", input_datasets=["dl-src"])
+        end = _make_etl_template("etl-end", input_datasets=["staging.etl-mid"])
+        graph = _build_graph_from_templates([src, mid, end])
+        orch = PipelineOrchestrator(graph=graph)
+
+        def mpm(template_name, **kwargs):
+            return _make_error_report(template_name, "process")
+
+        def mpe(template_name, **kwargs):
+            return _make_success_report(template_name, "etl")
+
+        with (
+            patch.object(graph, "get_download_status", return_value=("stale", "x")),
+            patch.object(graph, "_check_etl_template_staleness", return_value=True),
+            patch("brasa.engine.api.process_marketdata", side_effect=mpm),
+            patch("brasa.engine.api.process_etl", side_effect=mpe),
+        ):
+            report = orch.execute_all(verbosity=Verbosity.QUIET)
+
+        assert [e.template_id for e in report.failed] == ["dl-src"]
+        assert [e.template_id for e in report.skipped] == ["etl-mid", "etl-end"]
+        assert report.success is False
+
+    def test_dry_run_predicts_without_executing(self):
+        src = _make_download_template("dl-src")
+        mid = _make_etl_template("etl-mid", input_datasets=["dl-src"])
+        graph = _build_graph_from_templates([src, mid])
+        orch = PipelineOrchestrator(graph=graph)
+
+        with (
+            patch.object(graph, "get_download_status", return_value=("stale", "x")),
+            patch.object(graph, "_check_etl_template_staleness", return_value=False),
+            patch("brasa.engine.api.process_marketdata") as mpm,
+            patch("brasa.engine.api.process_etl") as mpe,
+        ):
+            report = orch.execute_all(dry_run=True, verbosity=Verbosity.QUIET)
+
+        mpm.assert_not_called()
+        mpe.assert_not_called()
+        assert report.dry_run is True
+        assert report.success is True
+        assert [e.template_id for e in report.executed] == ["dl-src", "etl-mid"]
+        mid_entry = next(e for e in report.entries if e.template_id == "etl-mid")
+        assert "downstream" in mid_entry.reason
