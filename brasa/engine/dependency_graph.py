@@ -923,6 +923,31 @@ class TemplateDependencyGraph:
 
         return plan
 
+    def global_topological_order(self) -> list[str]:
+        """Topologically sort every template in the graph.
+
+        Sources first, leaves last. Ties broken by template_id for
+        determinism.
+
+        Returns:
+            Ordered list of all template ids, sources first.
+        """
+        in_degree: dict[str, int] = dict.fromkeys(self.template_ids, 0)
+        for tid, upstreams in self.edges.items():
+            in_degree[tid] = len(upstreams)
+
+        queue = sorted(t for t, d in in_degree.items() if d == 0)
+        result: list[str] = []
+        while queue:
+            node = queue.pop(0)
+            result.append(node)
+            for tid, upstreams in self.edges.items():
+                if node in upstreams:
+                    in_degree[tid] -= 1
+                    if in_degree[tid] == 0:
+                        bisect.insort(queue, tid)
+        return result
+
     @property
     def template_ids(self) -> list[str]:
         """Return a sorted list of all template ids in the graph."""

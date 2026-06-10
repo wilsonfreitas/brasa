@@ -1761,3 +1761,18 @@ class TestIntegrationDownloadTemplateDeps:
             f"{consolidated} (step {idx_consolidated}) must come before "
             f"{target} (step {idx_target})"
         )
+
+
+class TestGlobalTopologicalOrder:
+    def test_sources_first_chain(self):
+        src = _make_download_template("dl-src")
+        mid = _make_etl_template("etl-mid", input_datasets=["dl-src"])
+        end = _make_etl_template("etl-end", input_datasets=["staging.etl-mid"])
+        graph = _build_graph_from_templates([src, mid, end])
+        assert graph.global_topological_order() == ["dl-src", "etl-mid", "etl-end"]
+
+    def test_ties_broken_by_id(self):
+        a = _make_download_template("a-dl")
+        b = _make_download_template("b-dl")
+        graph = _build_graph_from_templates([b, a])
+        assert graph.global_topological_order() == ["a-dl", "b-dl"]
