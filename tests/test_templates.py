@@ -514,3 +514,49 @@ def test_b3_companies_symbols_template_loads():
         "instrument_type",
     }
     assert expected.issubset(field_names), f"Missing: {expected - field_names}"
+
+
+def test_b3_futures_template_loads():
+    """Test that the b3-futures template (bvbg028 x bvbg086 join) loads correctly."""
+    tpl = MarketDataTemplate("templates/b3/futures/b3-futures.yaml")
+
+    assert tpl.id == "b3-futures"
+    assert tpl.is_etl
+    assert not tpl.has_downloader
+    assert not tpl.has_reader
+    assert tpl.etl.is_pipeline
+
+    inputs = tpl.etl.get_input_datasets()
+    assert "input.b3-bvbg028-future_contracts" in inputs
+    assert "input.b3-bvbg086" in inputs
+
+    field_names = {f.name for f in tpl.fields}
+    expected_fields = {
+        "refdate",
+        "symbol",
+        "commodity",
+        "expiration_code",
+        "maturity_date",
+        "contract_multiplier",
+        "trading_currency",
+        "isin",
+        "open",
+        "high",
+        "low",
+        "close",
+        "average",
+        "adjusted_quote",
+        "adjusted_tax",
+        "previous_adjusted_quote",
+        "previous_adjusted_tax",
+        "adjusted_value_contract",
+        "variation_points",
+        "days_to_settlement",
+        "traded_contracts",
+        "volume",
+        "open_interest",
+    }
+    assert expected_fields == field_names, (
+        f"Missing: {expected_fields - field_names}; "
+        f"extra: {field_names - expected_fields}"
+    )
