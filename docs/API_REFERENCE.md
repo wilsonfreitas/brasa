@@ -631,7 +631,7 @@ python -m brasa.cli query "SELECT * FROM 'b3-cotahist-daily'" -o output.parquet
 ### ETL Datasets
 
 **Futures**:
-- `b3-futures`: Consolidated settlement prices (under review)
+- `b3-futures`: Futures contracts with prices and settlement rates (bvbg028 + bvbg086)
 - `b3-futures-settlement-prices-consolidated`: Settlement prices repartitioned by commodity
 - `b3-futures-di1-consolidated`: DI1 futures consolidated
 - `b3-futures-dap`: DAP futures

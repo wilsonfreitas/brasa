@@ -125,7 +125,7 @@ Futures settlement prices and interest-rate/inflation futures.
 | Dataset | Description | Key Columns |
 |---------|-------------|-------------|
 | `input.b3-futures-settlement-prices` | Futures settlement prices (raw; frozen — no longer updated, historical data only) | refdate, symbol, commodity, price, settlement_value |
-| `staging.b3-futures` | Futures settlement prices (processed) | refdate, symbol, commodity, price, settlement_value |
+| `staging.b3-futures` | Futures contracts (BVBG028 registry) with prices and settlement rates (BVBG086) | refdate, symbol, commodity, maturity_date, close, adjusted_quote, adjusted_tax, open_interest |
 | `staging.b3-futures-settlement-prices` | Futures settlement prices (processed, alt) | refdate, symbol, commodity, price, settlement_value |
 | `staging.b3-futures-di1-consolidated` | DI1 (interest-rate) futures, consolidated | refdate, symbol, maturity_code, price, settlement_value |
 | `staging.b3-futures-dap` | DAP (inflation) futures with implied tax | refdate, symbol, maturity_date, price, adjusted_tax |
