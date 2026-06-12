@@ -124,7 +124,7 @@ Futures settlement prices and interest-rate/inflation futures.
 
 | Dataset | Description | Key Columns |
 |---------|-------------|-------------|
-| `input.b3-futures-settlement-prices` | Futures settlement prices (raw) | refdate, symbol, commodity, price, settlement_value |
+| `input.b3-futures-settlement-prices` | Futures settlement prices (raw; frozen — no longer updated, historical data only) | refdate, symbol, commodity, price, settlement_value |
 | `staging.b3-futures` | Futures settlement prices (processed) | refdate, symbol, commodity, price, settlement_value |
 | `staging.b3-futures-settlement-prices` | Futures settlement prices (processed, alt) | refdate, symbol, commodity, price, settlement_value |
 | `staging.b3-futures-di1-consolidated` | DI1 (interest-rate) futures, consolidated | refdate, symbol, maturity_code, price, settlement_value |

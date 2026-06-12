@@ -102,7 +102,9 @@ fields:
 
 ### Example 1: Reading HTML with Pipeline
 
-**Template:** `b3-futures-settlement-prices` (simplified)
+**Template:** `b3-futures-settlement-prices` (simplified; this template is frozen —
+its data is no longer updated — but it remains a good reference for the HTML reader
+pipeline)
 
 ```yaml
 id: b3-futures-settlement-prices
