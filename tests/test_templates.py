@@ -446,6 +446,48 @@ def test_b3_cotahist_yearly_parsed_output_has_refdate():
     assert len(df) > 0
 
 
+def test_get_marketdata_loads_processed_partitioned_dataset():
+    """get_marketdata returns a DataFrame for an already-processed,
+    refdate-partitioned dataset (no network)."""
+    from datetime import date
+
+    from brasa.engine.processing import save_partitioned_parquet_file
+    from brasa.util import DownloadArgs
+
+    template = retrieve_template("b3-cotahist-yearly")
+    man = CacheManager()
+
+    df = pd.DataFrame(
+        {
+            "refdate": [date(2000, 1, 3), date(2000, 1, 4)],
+            "symbol": ["PETR4", "VALE3"],
+            "close": [11.30, 13.87],
+        }
+    )
+
+    meta = CacheMetadata(template.id)
+    meta.download_args = DownloadArgs({"year": 2000})
+    meta.extra_key = template.downloader.extra_key
+
+    save_partitioned_parquet_file(
+        meta,
+        man.cache_path(man.db_folder(template)),
+        df,
+        ["refdate"],
+        layer=template.writer.layer.value,
+        dataset_name=template.writer.dataset,
+        source_template=template.id,
+    )
+    man.save_meta(meta)
+
+    result = get_marketdata("b3-cotahist-yearly", year=2000)
+
+    assert isinstance(result, pd.DataFrame)
+    assert {"refdate", "symbol", "close"}.issubset(result.columns)
+    assert len(result) == 2
+    assert set(result["symbol"]) == {"PETR4", "VALE3"}
+
+
 def test_b3_trades_intraday_equities_template_loads():
     tpl = MarketDataTemplate("templates/b3/intraday/b3-trades-intraday-equities.yaml")
 
