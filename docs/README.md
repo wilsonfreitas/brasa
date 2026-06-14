@@ -226,12 +226,14 @@ See: [API Reference - Query API](API_REFERENCE.md#query-api)
 
 ### Fixed Income Workflow
 ```
-1. Download futures → b3-futures-settlement-prices
-2. Process futures → process_marketdata
-3. Create curves → process_etl("b3-futures-di1")
-4. Interpolate → process_etl("b3-curves-di1-standard")
-5. Analyze → get_dataset("b3-curves-di1-standard")
+1. Consolidate futures → process_etl("b3-futures-settlement-prices-consolidated")
+2. Consolidate DI1 → process_etl("b3-futures-di1-consolidated")
+3. Analyze → get_dataset("b3-futures-di1-consolidated")
 ```
+
+> **Note**: `b3-futures-settlement-prices` is frozen (no longer updated; historical
+> data only) and the legacy `b3-futures-*` ETL chain was moved to `templates/legacy/`.
+> A refactor sourcing futures from `b3-bvbg028`/`b3-bvbg086` is planned.
 
 ### Portfolio Analysis Workflow
 ```
@@ -295,9 +297,9 @@ result = con.execute("""
 - `b3-equities-adjusted-prices`: Adjusted prices (ETL)
 
 **Futures**:
-- `b3-futures-settlement-prices`: Futures settlement
-- `b3-futures-di1`: DI1 curve (ETL)
-- `b3-futures-dol`: Dollar futures (ETL)
+- `b3-futures-settlement-prices`: Futures settlement (frozen — historical data only)
+- `b3-futures-di1-consolidated`: DI1 futures consolidated (ETL)
+- `b3-futures-dap`: DAP inflation futures (ETL)
 
 **Indexes**:
 - `b3-indexes-composition`: Index compositions

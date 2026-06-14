@@ -446,6 +446,48 @@ def test_b3_cotahist_yearly_parsed_output_has_refdate():
     assert len(df) > 0
 
 
+def test_get_marketdata_loads_processed_partitioned_dataset():
+    """get_marketdata returns a DataFrame for an already-processed,
+    refdate-partitioned dataset (no network)."""
+    from datetime import date
+
+    from brasa.engine.processing import save_partitioned_parquet_file
+    from brasa.util import DownloadArgs
+
+    template = retrieve_template("b3-cotahist-yearly")
+    man = CacheManager()
+
+    df = pd.DataFrame(
+        {
+            "refdate": [date(2000, 1, 3), date(2000, 1, 4)],
+            "symbol": ["PETR4", "VALE3"],
+            "close": [11.30, 13.87],
+        }
+    )
+
+    meta = CacheMetadata(template.id)
+    meta.download_args = DownloadArgs({"year": 2000})
+    meta.extra_key = template.downloader.extra_key
+
+    save_partitioned_parquet_file(
+        meta,
+        man.cache_path(man.db_folder(template)),
+        df,
+        ["refdate"],
+        layer=template.writer.layer.value,
+        dataset_name=template.writer.dataset,
+        source_template=template.id,
+    )
+    man.save_meta(meta)
+
+    result = get_marketdata("b3-cotahist-yearly", year=2000)
+
+    assert isinstance(result, pd.DataFrame)
+    assert {"refdate", "symbol", "close"}.issubset(result.columns)
+    assert len(result) == 2
+    assert set(result["symbol"]) == {"PETR4", "VALE3"}
+
+
 def test_b3_trades_intraday_equities_template_loads():
     tpl = MarketDataTemplate("templates/b3/intraday/b3-trades-intraday-equities.yaml")
 
@@ -514,3 +556,49 @@ def test_b3_companies_symbols_template_loads():
         "instrument_type",
     }
     assert expected.issubset(field_names), f"Missing: {expected - field_names}"
+
+
+def test_b3_futures_template_loads():
+    """Test that the b3-futures template (bvbg028 x bvbg086 join) loads correctly."""
+    tpl = MarketDataTemplate("templates/b3/futures/b3-futures.yaml")
+
+    assert tpl.id == "b3-futures"
+    assert tpl.is_etl
+    assert not tpl.has_downloader
+    assert not tpl.has_reader
+    assert tpl.etl.is_pipeline
+
+    inputs = tpl.etl.get_input_datasets()
+    assert "input.b3-bvbg028-future_contracts" in inputs
+    assert "input.b3-bvbg086" in inputs
+
+    field_names = {f.name for f in tpl.fields}
+    expected_fields = {
+        "refdate",
+        "symbol",
+        "commodity",
+        "expiration_code",
+        "maturity_date",
+        "contract_multiplier",
+        "trading_currency",
+        "isin",
+        "open",
+        "high",
+        "low",
+        "close",
+        "average",
+        "adjusted_quote",
+        "adjusted_tax",
+        "previous_adjusted_quote",
+        "previous_adjusted_tax",
+        "adjusted_value_contract",
+        "variation_points",
+        "days_to_settlement",
+        "traded_contracts",
+        "volume",
+        "open_interest",
+    }
+    assert expected_fields == field_names, (
+        f"Missing: {expected_fields - field_names}; "
+        f"extra: {field_names - expected_fields}"
+    )

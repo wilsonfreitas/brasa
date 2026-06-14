@@ -308,7 +308,8 @@ parts:
 
 #### ETL Section
 
-For templates that only transform existing data:
+For templates that only transform existing data (legacy function-based format,
+shown here for reference — prefer pipeline-based ETL for new templates):
 
 ```yaml
 etl:
@@ -440,6 +441,9 @@ writer:
 ```
 
 #### Example 4: Legacy ETL Function
+
+> This format is still supported but deprecated. The `b3-futures-di1` template
+> shown below was retired to `templates/legacy/`.
 
 ```yaml
 id: b3-futures-di1
@@ -731,7 +735,6 @@ EQUITY_TEMPLATES = [
 ]
 
 FUTURES_TEMPLATES = [
-    "b3-futures-settlement-prices",
     "b3-bvbg028",
 ]
 

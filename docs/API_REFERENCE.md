@@ -68,8 +68,8 @@ Execute ETL transformation defined in template.
 ```python
 from brasa import process_etl
 
-# Create DI1 futures curve dataset
-process_etl("b3-futures-di1")
+# Consolidate DI1 futures
+process_etl("b3-futures-di1-consolidated")
 
 # Create equity returns dataset
 process_etl("b3-equities-returns")
@@ -566,7 +566,7 @@ python -m brasa.cli download b3-cotahist-daily -d 2024-01
 
 # Process market data
 python -m brasa.cli process b3-cotahist-daily
-python -m brasa.cli process b3-futures-di1  # ETL templates
+python -m brasa.cli process b3-futures-di1-consolidated  # ETL templates
 
 # Create DuckDB views
 python -m brasa.cli create-views
@@ -594,7 +594,7 @@ python -m brasa.cli query "SELECT * FROM 'b3-cotahist-daily'" -o output.parquet
 - `b3-bvbg028`: Futures and derivatives
 - `b3-bvbg086`: Equity quotes
 - `b3-bvbg087`: Index data
-- `b3-futures-settlement-prices`: Futures settlement
+- `b3-futures-settlement-prices`: Futures settlement (frozen — historical data only)
 - `b3-trades-intraday`: Intraday trades
 
 **Options & Volatility**:
@@ -631,15 +631,15 @@ python -m brasa.cli query "SELECT * FROM 'b3-cotahist-daily'" -o output.parquet
 ### ETL Datasets
 
 **Futures**:
-- `b3-futures-di1`: DI1 futures
-- `b3-futures-ddi`: DDI futures
-- `b3-futures-dol`: Dollar futures
-- `b3-futures-wdo`: Mini dollar futures
-- `b3-futures-win`: Mini index futures
+- `b3-futures`: Futures contracts with prices and settlement rates (bvbg028 + bvbg086)
+- `b3-futures-settlement-prices-consolidated`: Settlement prices repartitioned by commodity
+- `b3-futures-di1-consolidated`: DI1 futures consolidated
 - `b3-futures-dap`: DAP futures
-- `b3-futures-frc`: FRC futures
-- `b3-futures-{contract}-first-generic`: Front-month contracts
-- `b3-futures-{contract}-adjusted`: Adjusted continuous series
+- `b3-futures-dap-first-generic`: DAP front-month contract
+
+> The legacy futures ETLs (`b3-futures-{di1,ddi,dol,wdo,win,frc}` and their
+> first-generic/adjusted chains) were moved to `templates/legacy/` and are no
+> longer available.
 
 **Curves**:
 - `b3-curves-di1`: DI1 term structure

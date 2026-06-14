@@ -2,6 +2,11 @@
 
 This document describes the design and implementation of the ETL pipeline system for brasa, enabling declarative dataset transformations through YAML templates.
 
+> **Status note (2026-06-12):** This is a historical design document. Some templates
+> used as examples (`b3-futures-di1`, `b3-futures-dol`) have since been retired to
+> `templates/legacy/`, and `b3-futures-settlement-prices` is frozen (no longer
+> updated; historical data only).
+
 ## Problem Statement
 
 The brasa system downloads and processes market data into partitioned parquet files. For example, `b3-futures-settlement-prices` creates many small parquet files partitioned by `refdate`.

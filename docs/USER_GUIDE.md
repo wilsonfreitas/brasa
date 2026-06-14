@@ -52,8 +52,8 @@ period = DateRange(start=datetime(2024, 1, 1), end=datetime.today(), calendar="B
 # Download daily price data
 download_marketdata("b3-cotahist-daily", refdate=period)
 
-# Download futures settlement prices
-download_marketdata("b3-futures-settlement-prices", refdate=period)
+# Download derivatives market data (futures contracts)
+download_marketdata("b3-bvbg028", refdate=period)
 
 # Download index composition (no date parameter needed)
 download_marketdata("b3-indexes-composition")
@@ -69,8 +69,8 @@ from brasa import process_marketdata
 # Process COTAHIST data
 process_marketdata("b3-cotahist-daily")
 
-# Process futures data
-process_marketdata("b3-futures-settlement-prices")
+# Process derivatives market data
+process_marketdata("b3-bvbg028")
 ```
 
 ### 3. Run ETL Transformations
@@ -80,8 +80,8 @@ Create derived datasets:
 ```python
 from brasa import process_etl
 
-# Create DI1 interest rate curve
-process_etl("b3-futures-di1")
+# Consolidate DI1 futures
+process_etl("b3-futures-di1-consolidated")
 
 # Create equity returns dataset
 process_etl("b3-equities-returns")
@@ -146,42 +146,41 @@ print(volatility.sort_values(ascending=False).head(10))
 
 ### Use Case 2: Interest Rate Curve Analysis
 
-Work with DI1 futures curves:
+Work with futures-implied rate curves (DAP — IPCA-linked real rates):
+
+> **Note**: `b3-futures-settlement-prices` is frozen (no longer updated), so this
+> workflow only covers historical data. The legacy DI1/DOL/etc. ETL chain was moved
+> to `templates/legacy/`; a refactor sourcing futures from `b3-bvbg028`/`b3-bvbg086`
+> is planned.
 
 ```python
-from brasa import download_marketdata, process_marketdata, process_etl
+from brasa import process_etl
 from brasa.queries import get_dataset
-from brasa.util import DateRange
 from datetime import datetime
 import pyarrow.compute as pc
 
-# 1. Download futures settlement prices
-period = DateRange(start=datetime(2024, 1, 1), end=datetime.today(), calendar="B3")
-download_marketdata("b3-futures-settlement-prices", refdate=period)
-process_marketdata("b3-futures-settlement-prices")
+# 1. Consolidate the (historical) futures settlement prices into staging
+process_etl("b3-futures-settlement-prices-consolidated")
 
-# 2. Create DI1 curve dataset
-process_etl("b3-futures-di1")
+# 2. Create the DAP futures dataset with implied rates
+process_etl("b3-futures-dap")
 
-# 3. Create standardized terms
-process_etl("b3-curves-di1-standard")
-
-# 4. Query specific date
+# 3. Query specific date
 date = datetime(2024, 12, 31)
 curve = (
-    get_dataset("b3-curves-di1-standard")
+    get_dataset("b3-futures-dap")
     .filter(pc.field("refdate") == date)
     .to_table()
     .to_pandas()
 )
 
-# 5. Plot curve
+# 4. Plot curve
 import matplotlib.pyplot as plt
 plt.figure(figsize=(10, 6))
 plt.plot(curve["business_days"], curve["adjusted_tax"] * 100)
 plt.xlabel("Business Days")
 plt.ylabel("Rate (%)")
-plt.title(f"DI1 Curve - {date.date()}")
+plt.title(f"DAP Curve - {date.date()}")
 plt.grid(True)
 plt.show()
 ```
@@ -372,7 +371,7 @@ ls templates/*.yaml
 Common templates:
 - **brasa-companies**: BOLSA-registered companies (consolidated ETL)
 - **b3-cotahist-daily**: Daily historical prices
-- **b3-futures-settlement-prices**: Futures settlement
+- **b3-futures-settlement-prices**: Futures settlement (frozen — historical data only)
 - **b3-indexes-composition**: Index compositions
 - **b3-company-info**: Company information
 - **b3-cash-dividends**: Cash dividends
@@ -757,7 +756,7 @@ from brasa import process_marketdata
 
 templates = [
     "b3-cotahist-daily",
-    "b3-futures-settlement-prices",
+    "b3-bvbg028",
     "b3-bvbg086",
     "b3-bvbg087"
 ]

@@ -39,7 +39,10 @@
 2. **[2026-04-20] XML nested paths use forward slashes—handle optional and nested structures**
    Do instead: For nested XML like `<UndrlygInstrmId><OthrId><Id>`, use tag path `InstrmInf/DatasetName/UndrlygInstrmId/OthrId/Id`. Optional fields (may be null in some records) should still be declared in schema.
 
-3. **[2026-04-20] Parquet files are partitioned by refdate in `.brasa-cache/db/`**
+3. **[2026-06-12] `templates/legacy/` is excluded from template discovery**
+   Do instead: To retire a template, `git mv` it into `templates/legacy/` — `list_templates()`/`retrieve_template()` skip any path containing a `legacy` part (`brasa/engine/template.py:710,764`). Check test/template references to the id first (e.g., `tests/test_pipeline.py` uses real templates as loading examples).
+
+4. **[2026-04-20] Parquet files are partitioned by refdate in `.brasa-cache/db/`**
    Do instead: Query via PyArrow datasets or DuckDB views (`input.dataset-name`, `staging.dataset-name`). Always create views with `from brasa import create_all_views; create_all_views()` before querying.
 
 ## User Directives

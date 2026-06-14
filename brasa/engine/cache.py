@@ -707,18 +707,57 @@ class CacheManager(Singleton):
     def load_marketdata(
         self, meta: CacheMetadata, reprocess: bool = False
     ) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
-        """Load processed market data from cache."""
+        """Load processed market data from cache.
+
+        Reads the materialized parquet dataset(s) for the template into
+        memory. Single-dataset templates return a ``DataFrame``; multi-dataset
+        templates return a ``dict`` mapping output name to ``DataFrame``.
+
+        Because processed data is stored as hive-partitioned parquet
+        directories (metadata only tracks an ``is_processed`` flag), the whole
+        materialized dataset for the template is returned — not just the rows
+        for this entry's download args.
+        """
         if reprocess:
             self.read_marketdata(meta)
+        elif self.has_meta(meta):
+            self.load_meta(meta)
         if not meta.is_processed:
             warn("No processed files", stacklevel=2)
             return None
-        warn(
-            "load_marketdata() cannot load by path for partitioned datasets. "
-            "Use get_marketdata() instead.",
-            stacklevel=2,
-        )
-        return None
+        return self._read_processed_dataset(meta)
+
+    def _read_processed_dataset(
+        self, meta: CacheMetadata
+    ) -> pd.DataFrame | dict[str, pd.DataFrame] | None:
+        """Read materialized parquet dataset(s) for a template into memory."""
+        from .template import retrieve_template
+
+        template = retrieve_template(meta.template)
+
+        if template.datasets or template.reader.multi:
+            result: dict[str, pd.DataFrame] = {}
+            for output_name, folder in self.db_folders(template).items():
+                df = self._read_partitioned_folder(self.cache_path(folder))
+                if df is not None:
+                    result[output_name] = df
+            return result or None
+
+        return self._read_partitioned_folder(self.cache_path(self.db_folder(template)))
+
+    @staticmethod
+    def _read_partitioned_folder(folder: str) -> pd.DataFrame | None:
+        """Read a hive-partitioned parquet folder into a DataFrame.
+
+        Returns None when the folder is missing or contains no parquet files.
+        """
+        import pyarrow.dataset as ds
+
+        path = Path(folder)
+        if not path.exists() or not any(path.glob("**/*.parquet")):
+            return None
+        dataset = ds.dataset(str(path), format="parquet", partitioning="hive")
+        return dataset.to_table().to_pandas()
 
     def download_marketdata(self, meta: CacheMetadata) -> DownloadResult:
         """Download market data and save to cache.

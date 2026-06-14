@@ -1,41 +1,130 @@
-# Pipeline-based ETL template for consolidated futures data
-# This template demonstrates the new ETL pipeline approach
 id: b3-futures
-description: Consolidated futures settlement prices (repartitioned by commodity)
+description: Contratos futuros da B3 com preços e taxas de ajuste (BVBG028 + BVBG086)
 
 etl:
   pipeline:
-    - step: load
-      layer: input
-      input: b3-futures-settlement-prices
+    - step: sql_query
+      datasets:
+        - input.b3-bvbg028-future_contracts
+        - input.b3-bvbg086
+      query: |+
+        -- Futures contracts registered for the day (bvbg028) joined with
+        -- market prices/rates (bvbg086). Inner join: a row exists only when
+        -- the contract is registered AND priced on that refdate.
+        -- bvbg086 can carry more than one row per (refdate, symbol); the row
+        -- with the highest liquidity holds the official settlement values
+        -- (validated against the frozen b3-futures-settlement-prices), so
+        -- QUALIFY keeps only that row.
+        select
+          fc.refdate,
+          fc.symbol,
+          fc.instrument_asset as commodity,
+          fc.expiration_code,
+          fc.maturity_date,
+          fc.contract_multiplier,
+          fc.trading_currency,
+          fc.isin,
+          p.open,
+          p.high,
+          p.low,
+          p.close,
+          p.average,
+          p.adjusted_quote,
+          p.adjusted_tax,
+          p.previous_adjusted_quote,
+          p.previous_adjusted_tax,
+          p.adjusted_value_contract,
+          p.variation_points,
+          p.days_to_settlement,
+          p.traded_contracts,
+          p.volume,
+          p.open_interest
+        from
+          'input.b3-bvbg028-future_contracts' fc
+        join
+          'input.b3-bvbg086' p
+          on p.refdate = fc.refdate and p.symbol = fc.symbol
+        qualify
+          row_number() over (
+            partition by fc.refdate, fc.symbol
+            order by p.traded_contracts desc nulls last, p.volume desc nulls last
+          ) = 1
+
+    - step: select_fields
+    - step: apply_fields
+      errors: coerce
 
 writer:
+  layer: staging
   partitioning: [commodity]
 
-# Fields inherited from input dataset (b3-futures-settlement-prices)
-# Uncomment to override:
-# fields:
-# - name: commodity
-#   description: Commodity code
-#   type: character
-# - name: maturity_code
-#   description: Maturity code (3 chars)
-#   type: character
-# - name: previous_price
-#   description: Previous settlement price
-#   type: number
-# - name: price
-#   description: Current settlement price
-#   type: number
-# - name: price_change
-#   description: Price change
-#   type: number
-# - name: settlement_value
-#   description: Settlement value per contract (R$)
-#   type: number
-# - name: refdate
-#   description: Reference date
-#   type: date(format="%Y-%m-%d")
-# - name: symbol
-#   description: Futures contract symbol
-#   type: character
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Ticker symbol
+    type: string
+  - name: commodity
+    description: Commodity code (bvbg028 instrument_asset)
+    type: string
+  - name: expiration_code
+    description: Expiration code
+    type: string
+  - name: maturity_date
+    description: Maturity/expiration date
+    type: date
+  - name: contract_multiplier
+    description: Contract multiplier
+    type: numeric
+  - name: trading_currency
+    description: Trading currency
+    type: string
+  - name: isin
+    description: ISIN code
+    type: string
+  - name: open
+    description: Opening price
+    type: numeric
+  - name: high
+    description: Highest price
+    type: numeric
+  - name: low
+    description: Lowest price
+    type: numeric
+  - name: close
+    description: Closing price
+    type: numeric
+  - name: average
+    description: Average price
+    type: numeric
+  - name: adjusted_quote
+    description: Settlement price
+    type: numeric
+  - name: adjusted_tax
+    description: Settlement rate
+    type: numeric
+  - name: previous_adjusted_quote
+    description: Previous settlement price
+    type: numeric
+  - name: previous_adjusted_tax
+    description: Previous settlement rate
+    type: numeric
+  - name: adjusted_value_contract
+    description: Settlement value per contract (R$)
+    type: numeric
+  - name: variation_points
+    description: Variation in points
+    type: numeric
+  - name: days_to_settlement
+    description: Days to settlement
+    type: integer
+  - name: traded_contracts
+    description: Traded contracts
+    type: numeric
+  - name: volume
+    description: Financial volume
+    type: numeric
+  - name: open_interest
+    description: Open interest
+    type: numeric
