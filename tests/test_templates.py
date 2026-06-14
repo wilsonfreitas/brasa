@@ -602,3 +602,31 @@ def test_b3_futures_template_loads():
         f"Missing: {expected_fields - field_names}; "
         f"extra: {field_names - expected_fields}"
     )
+
+
+def test_b3_curves_di1_template_loads():
+    """Test that the b3-curves-di1 template (DI1 curve from futures + indicators) loads."""
+    tpl = MarketDataTemplate("templates/b3/curves/b3-curves-di1.yaml")
+
+    assert tpl.id == "b3-curves-di1"
+    assert tpl.is_etl
+    assert not tpl.has_downloader
+    assert not tpl.has_reader
+    assert tpl.etl.is_pipeline
+
+    inputs = tpl.etl.get_input_datasets()
+    assert "staging.b3-futures" in inputs
+    assert "staging.b3-economic-indicators" in inputs
+
+    field_names = {f.name for f in tpl.fields}
+    expected_fields = {
+        "refdate",
+        "symbol",
+        "maturity_date",
+        "business_days",
+        "adjusted_tax",
+    }
+    assert expected_fields == field_names, (
+        f"Missing: {expected_fields - field_names}; "
+        f"extra: {field_names - expected_fields}"
+    )

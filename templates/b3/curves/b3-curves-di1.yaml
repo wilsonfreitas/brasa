@@ -1,7 +1,76 @@
 id: b3-curves-di1
-description: Curva de juros prefixados baseada nos futuros de DI1
+description: Curva de juros prefixados DI1 (vértices dos contratos futuros + CDI overnight)
+
 etl:
-  function: brasa.etl.create_b3_curves_di1
-  futures_dataset: b3-futures-di1
-  bcb_dataset: bcb-data
-  calendar: ANBIMA
+  pipeline:
+    - step: sql_query
+      datasets:
+        - staging.b3-futures
+        - staging.b3-economic-indicators
+      query: |+
+        -- DI1 prefixed yield curve: futures contract vertices + CDI first vertex.
+        -- Rates are published in percent in both sources; divide by 100 to store
+        -- decimals. The CDI vertex maturity is refdate + 1 calendar day, later
+        -- rolled to the next ANBIMA business day by the following_bizday step.
+        select
+          refdate,
+          symbol,
+          maturity_date as maturity_date_raw,
+          adjusted_tax / 100.0 as adjusted_tax
+        from
+          'staging.b3-futures'
+        where
+          commodity = 'DI1'
+          and maturity_date > refdate
+          and adjusted_tax is not null
+        union all
+        select
+          refdate,
+          'CDI' as symbol,
+          cast(refdate + interval 1 day as date) as maturity_date_raw,
+          value / 100.0 as adjusted_tax
+        from
+          'staging.b3-economic-indicators'
+        where
+          indicator_group = 'RT'
+          and symbol = 'DI1'
+          and value is not null
+
+    - step: following_bizday
+      date_column: maturity_date_raw
+      adjusted_column: maturity_date
+      calendar: ANBIMA
+
+    - step: bizdays
+      from_column: refdate
+      to_column: maturity_date
+      output_column: business_days
+      calendar: ANBIMA
+
+    - step: sort
+      by: [refdate, maturity_date]
+
+    - step: select_fields
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+  partitioning: []
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Vertex symbol — DI1 contract ticker, or 'CDI' for the overnight vertex
+    type: string
+  - name: maturity_date
+    description: Vertex maturity date, adjusted to the next ANBIMA business day
+    type: date
+  - name: business_days
+    description: Business days from refdate to maturity (ANBIMA calendar)
+    type: integer
+  - name: adjusted_tax
+    description: Annualized rate in decimal form (e.g. 0.14359)
+    type: numeric
