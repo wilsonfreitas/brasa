@@ -24,7 +24,11 @@ etl:
           and maturity_date > refdate
           and adjusted_tax is not null
         union all
-        select
+        -- CDI overnight first vertex: restricted to refdates where the DI1
+        -- futures curve exists (so the short end accompanies the term structure
+        -- and stays within the ANBIMA calendar range, which starts in 2000).
+        -- select distinct collapses a handful of exact-duplicate source rows.
+        select distinct
           refdate,
           'CDI' as symbol,
           cast(refdate + interval 1 day as date) as maturity_date_raw,
@@ -35,6 +39,14 @@ etl:
           indicator_group = 'RT'
           and symbol = 'DI1'
           and value is not null
+          and refdate in (
+            select distinct refdate
+            from 'staging.b3-futures'
+            where
+              commodity = 'DI1'
+              and maturity_date > refdate
+              and adjusted_tax is not null
+          )
 
     - step: following_bizday
       date_column: maturity_date_raw
