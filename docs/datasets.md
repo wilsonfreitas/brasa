@@ -128,6 +128,7 @@ Futures settlement prices and interest-rate/inflation futures.
 | `staging.b3-futures` | Futures contracts (BVBG028 registry) with prices and settlement rates (BVBG086) | refdate, symbol, commodity, maturity_date, close, adjusted_quote, adjusted_tax, open_interest |
 | `staging.b3-futures-settlement-prices` | Futures settlement prices (processed, alt) | refdate, symbol, commodity, price, settlement_value |
 | `staging.b3-futures-di1-consolidated` | DI1 (interest-rate) futures, consolidated | refdate, symbol, maturity_code, price, settlement_value |
+| `staging.b3-curves-di1` | DI1 prefixed yield curve (futures vertices + CDI overnight) | refdate, symbol, maturity_date, business_days, adjusted_tax |
 | `staging.b3-futures-dap` | DAP (inflation) futures with implied tax | refdate, symbol, maturity_date, price, adjusted_tax |
 
 ## Macro & FX (BCB / ANBIMA)

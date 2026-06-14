@@ -642,7 +642,7 @@ python -m brasa.cli query "SELECT * FROM 'b3-cotahist-daily'" -o output.parquet
 > longer available.
 
 **Curves**:
-- `b3-curves-di1`: DI1 term structure
+- `b3-curves-di1`: DI1 prefixed yield curve (b3-futures + b3-economic-indicators)
 - `b3-curves-di1-standard`: Interpolated DI1 curve
 - `b3-curves-di1-standard-returns`: DI1 curve returns
 - `b3-curves-dap`: DAP term structure
