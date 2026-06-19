@@ -7,7 +7,20 @@ dependencies:
       from:
         datasets:
           - staging.b3-companies-names
-        query: "SELECT code_cvm FROM 'staging.b3-companies-names'"
+          - input.cvm-companies-registration
+        # Exclude every codeCVM whose CVM registration status is CANCELADA.
+        # B3's GetDetail endpoint returns an empty payload for cancelled/delisted
+        # companies (marked INVALID on download), so filtering all CANCELADA
+        # removes the bulk of those while keeping every active company.
+        query: |
+          SELECT DISTINCT n.code_cvm
+          FROM 'staging.b3-companies-names' n
+          WHERE n.code_cvm IS NOT NULL
+            AND n.code_cvm NOT IN (
+              SELECT TRY_CAST(code_cvm AS BIGINT)
+              FROM 'input.cvm-companies-registration'
+              WHERE sit = 'CANCELADA'
+            )
 
 downloader:
   function: brasa.downloaders.b3_url_encoded_download
