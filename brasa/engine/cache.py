@@ -539,11 +539,22 @@ class CacheManager(Singleton):
         pass
 
     def clean_meta_db(self, meta: CacheMetadata) -> None:
-        """Remove metadata and related download_trials from the database."""
+        """Remove metadata from the database.
+
+        Does NOT delete download_trials: in the download flow this is called
+        right after save_trial for DUPLICATED/INVALID/etc. outcomes, and those
+        trials must persist for REQ-010/REQ-011 scheduling. Trial deletion is
+        scoped to drop() only.
+        """
+        with closing(self.meta_db_connection) as conn, conn:
+            c = conn.cursor()
+            c.execute("delete from cache_metadata where id = ?", (meta.id,))
+
+    def _delete_trials(self, meta: CacheMetadata) -> None:
+        """Delete all download_trials rows for a cache entry."""
         with closing(self.meta_db_connection) as conn, conn:
             c = conn.cursor()
             c.execute("delete from download_trials where cache_id = ?", (meta.id,))
-            c.execute("delete from cache_metadata where id = ?", (meta.id,))
 
     def remove_meta(self, meta: CacheMetadata) -> None:
         """Remove all traces of a cache entry (files and metadata)."""
@@ -568,6 +579,7 @@ class CacheManager(Singleton):
         meta = CacheMetadata(template=meta_dict["template"])
         meta.from_dict(meta_dict)
         self.remove_meta(meta)
+        self._delete_trials(meta)
 
     def save_trial(
         self,

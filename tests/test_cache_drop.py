@@ -45,8 +45,12 @@ def _count_trials(cm: CacheManager, cache_id: str) -> int:
         conn.close()
 
 
-def test_clean_meta_db_removes_trials_atomically():
-    """clean_meta_db deletes both cache_metadata and download_trials rows."""
+def test_clean_meta_db_keeps_trials():
+    """clean_meta_db deletes the cache_metadata row but leaves download_trials.
+
+    Regression for WIL-75: clean_meta_db runs in the download flow (INVALID,
+    DUPLICATED, ...) right after save_trial, so it must NOT delete trials.
+    """
     cm = CacheManager()
 
     meta = _seed_meta(cm)
@@ -56,7 +60,53 @@ def test_clean_meta_db_removes_trials_atomically():
     cm.clean_meta_db(meta)
 
     assert cm.has_meta(meta) is False
-    assert _count_trials(cm, meta.id) == 0
+    assert _count_trials(cm, meta.id) == 3
+
+
+def test_download_flow_invalid_keeps_trial_and_skips():
+    """INVALID outcome (save_trial + clean_meta_db) keeps the trial and is skipped.
+
+    Regression for WIL-75 / REQ-011.
+    """
+    from brasa.engine.api import _should_download
+
+    cm = CacheManager()
+    meta = _seed_meta(cm, template="wil75-invalid")
+
+    # Mirror download_marketdata INVALID branch: record trial, then clean meta row.
+    cm.save_trial(
+        meta,
+        downloaded=False,
+        status_code="I",
+        status_name="INVALID",
+        reason="empty content",
+    )
+    cm.clean_meta_db(meta)
+
+    assert _count_trials(cm, meta.id) == 1
+    assert cm.get_last_download_status(meta)["code"] == "I"
+    assert _should_download(cm, meta, force=False) is False
+
+
+def test_download_flow_duplicated_keeps_trial_and_skips():
+    """DUPLICATED outcome keeps the trial and is skipped on the next run."""
+    from brasa.engine.api import _should_download
+
+    cm = CacheManager()
+    meta = _seed_meta(cm, template="wil75-dup")
+
+    cm.save_trial(
+        meta,
+        downloaded=True,
+        status_code="D",
+        status_name="DUPLICATED",
+        reason="duplicate folder",
+    )
+    cm.clean_meta_db(meta)
+
+    assert _count_trials(cm, meta.id) == 1
+    assert cm.get_last_download_status(meta)["code"] == "D"
+    assert _should_download(cm, meta, force=False) is False
 
 
 def test_clean_meta_db_with_no_trials():
