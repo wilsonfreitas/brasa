@@ -431,11 +431,12 @@ def _count_processed_items(
 def _get_stale_extra_key_ids(template_name: str, cache: CacheManager) -> set[str]:
     """Find cache entry IDs that are stale within their (template, args) group.
 
-    An entry is stale when, for its ``(template, download_args)`` group, a
-    *newer* entry (by ``extra_key`` ordering, restricted to non-empty
-    ``extra_key`` values) exists **and** is already processed. Entries with
-    an empty ``extra_key`` (pre-``extra-key: date`` migration) are never
-    flagged and never used as newer-references.
+    An entry is stale when, for its ``(template, download_args)`` group, another
+    entry with a greater ``extra_key`` exists (restricted to non-empty
+    ``extra_key`` values), regardless of processing state. Only the entry with
+    the maximum ``extra_key`` per group is kept. Entries with an empty
+    ``extra_key`` (pre-``extra-key: date`` migration) are never flagged and
+    never used as newer-references.
 
     Args:
         template_name: Template whose cache rows are under consideration.
@@ -443,7 +444,7 @@ def _get_stale_extra_key_ids(template_name: str, cache: CacheManager) -> set[str
 
     Returns:
         Set of cache entry IDs that should be skipped by ``process_marketdata``
-        because a newer processed snapshot already owns the output partition.
+        because a newer snapshot already owns the output partition.
     """
     from collections import defaultdict
 
@@ -451,24 +452,20 @@ def _get_stale_extra_key_ids(template_name: str, cache: CacheManager) -> set[str
     with closing(cache.meta_db_connection) as conn, conn:
         c = conn.cursor()
         c.execute(
-            "select id, download_args, extra_key, processed_files "
+            "select id, download_args, extra_key "
             "from cache_metadata where template = ? and extra_key != ''",
             (template_name,),
         )
         rows = c.fetchall()
 
-    groups: dict[str, list[tuple[str, str, bool]]] = defaultdict(list)
-    for row_id, dargs, ekey, processed_raw in rows:
-        is_processed = processed_raw == "true" or processed_raw is True
-        groups[dargs].append((row_id, ekey, is_processed))
+    groups: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    for row_id, dargs, ekey in rows:
+        groups[dargs].append((row_id, ekey))
 
     for _dargs, items in groups.items():
-        processed_keys = [ekey for _id, ekey, proc in items if proc]
-        if not processed_keys:
-            continue
-        newest_processed_key = max(processed_keys)
-        for row_id, ekey, _proc in items:
-            if ekey < newest_processed_key:
+        newest_key = max(ekey for _id, ekey in items)
+        for row_id, ekey in items:
+            if ekey < newest_key:
                 stale.add(row_id)
 
     return stale

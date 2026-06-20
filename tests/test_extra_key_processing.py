@@ -199,8 +199,8 @@ class TestGetStaleExtraKeyIds:
         assert meta_old.id in result
         assert meta_new.id not in result
 
-    def test_older_entry_not_stale_when_newer_unprocessed(self):
-        """Older entry is NOT stale if the newer entry hasn't been processed yet."""
+    def test_older_entry_stale_even_when_newer_unprocessed(self):
+        """Older entry is stale even if the newer entry hasn't been processed."""
         from brasa.engine.api import _get_stale_extra_key_ids
 
         cache = CacheManager()
@@ -208,13 +208,14 @@ class TestGetStaleExtraKeyIds:
 
         meta_old = _make_meta("b3-indexes-historical-prices", args, "2026-04-15")
         meta_new = _make_meta("b3-indexes-historical-prices", args, "2026-04-16")
-        # meta_new is NOT processed
+        # meta_new is NOT processed — older entry must still be flagged stale
 
         _save_meta_to_db(cache, meta_old)
         _save_meta_to_db(cache, meta_new)
 
         result = _get_stale_extra_key_ids("b3-indexes-historical-prices", cache)
-        assert result == set()
+        assert meta_old.id in result
+        assert meta_new.id not in result
 
     def test_empty_extra_key_entries_ignored(self):
         """Entries with empty extra_key (pre-migration) are never filtered."""
