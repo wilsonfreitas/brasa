@@ -4,7 +4,7 @@ This document describes the design and implementation of the ETL pipeline system
 
 > **Status note (2026-06-12):** This is a historical design document. Some templates
 > used as examples (`b3-futures-di1`, `b3-futures-dol`) have since been retired to
-> `templates/legacy/`, and `b3-futures-settlement-prices` is frozen (no longer
+> `brasa/files/templates/legacy/`, and `b3-futures-settlement-prices` is frozen (no longer
 > updated; historical data only).
 
 ## Problem Statement
@@ -480,7 +480,7 @@ brasa/engine/pipeline/
   ├── etl_steps.py    # ETL step base + registry + built-ins (NEW)
   └── shared_transforms.py  # Shared transformation functions (NEW)
 
-templates/
+brasa/files/templates/
 ├── b3-futures.yaml                    # Pipeline ETL example (NEW)
 ├── b3-futures-di1-consolidated.yaml   # Pipeline ETL example (NEW)
 ├── b3-futures-dol.yaml                # Function ETL (existing)

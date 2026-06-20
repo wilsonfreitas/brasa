@@ -638,7 +638,7 @@ python -m brasa.cli query "SELECT * FROM 'b3-cotahist-daily'" -o output.parquet
 - `b3-futures-dap-first-generic`: DAP front-month contract
 
 > The legacy futures ETLs (`b3-futures-{di1,ddi,dol,wdo,win,frc}` and their
-> first-generic/adjusted chains) were moved to `templates/legacy/` and are no
+> first-generic/adjusted chains) were moved to `brasa/files/templates/legacy/` and are no
 > longer available.
 
 **Curves**:

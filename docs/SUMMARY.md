@@ -220,7 +220,7 @@ python -m brasa.cli query "SELECT * FROM 'b3-cotahist-daily'"
 ### Learning Path
 1. Read USER_GUIDE.md
 2. Try examples from use cases
-3. Explore templates in templates/
+3. Explore templates in brasa/files/templates/
 4. Review notebooks in notebooks/
 5. Check API_REFERENCE.md for functions
 

@@ -150,7 +150,7 @@ Work with futures-implied rate curves (DAP — IPCA-linked real rates):
 
 > **Note**: `b3-futures-settlement-prices` is frozen (no longer updated), so this
 > workflow only covers historical data. The legacy DI1/DOL/etc. ETL chain was moved
-> to `templates/legacy/`; a refactor sourcing futures from `b3-bvbg028`/`b3-bvbg086`
+> to `brasa/files/templates/legacy/`; a refactor sourcing futures from `b3-bvbg028`/`b3-bvbg086`
 > is planned.
 
 ```python
@@ -365,7 +365,7 @@ plt.show()
 List all available templates:
 
 ```bash
-ls templates/*.yaml
+ls brasa/files/templates/*.yaml
 ```
 
 Common templates:
@@ -816,7 +816,7 @@ if cal.isbizday(datetime.today()):
 
 If you create custom templates, version control them:
 ```bash
-git add templates/my-custom-template.yaml
+git add brasa/files/templates/my-custom-template.yaml
 git commit -m "Add custom template"
 ```
 
@@ -839,7 +839,7 @@ print(f"Cache size: {cache_size:.2f} GB")
 
 ## Next Steps
 
-- Explore available templates in `templates/` directory
+- Explore available templates in `brasa/files/templates/` directory
 - Review example notebooks in `notebooks/` directory
 - Check API reference for detailed function documentation
 - Consult architecture documentation for system internals

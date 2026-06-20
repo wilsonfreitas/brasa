@@ -625,7 +625,7 @@ No test validates naming conventions. Should naming be standardized? Does the CL
 
 ---
 
-### Q69. Legacy templates in `templates/b3/companies/legacy/` — what's their status?
+### Q69. Legacy templates in `brasa/files/templates/b3/companies/legacy/` — what's their status?
 
 There are 6 legacy templates that use `etl.function: brasa.etl.create_*` patterns. Are these actively used in production? Can they be migrated to pipeline-based ETL? Is there a compatibility risk in removing them?
 

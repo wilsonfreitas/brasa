@@ -232,7 +232,7 @@ See: [API Reference - Query API](API_REFERENCE.md#query-api)
 ```
 
 > **Note**: `b3-futures-settlement-prices` is frozen (no longer updated; historical
-> data only) and the legacy `b3-futures-*` ETL chain was moved to `templates/legacy/`.
+> data only) and the legacy `b3-futures-*` ETL chain was moved to `brasa/files/templates/legacy/`.
 > A refactor sourcing futures from `b3-bvbg028`/`b3-bvbg086` is planned.
 
 ### Portfolio Analysis Workflow
@@ -364,7 +364,7 @@ See: [Architecture - Extensibility](ARCHITECTURE.md#extensibility)
 - `brasa/etl.py`: ETL transformations (988 lines)
 - `brasa/queries.py`: Query layer (329 lines)
 - `brasa/util.py`: Utilities (205 lines)
-- `templates/*.yaml`: 100+ template definitions
+- `brasa/files/templates/*.yaml`: 100+ template definitions
 
 ### Example Scripts
 - `cli.py`: Download current data

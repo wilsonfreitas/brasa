@@ -42,7 +42,7 @@ $BRASA_DATA_PATH/
 
 ## Template Configuration
 
-Templates are YAML files in the `templates/` directory that define how to download, parse, and process data.
+Templates are YAML files in the `brasa/files/templates/` directory that define how to download, parse, and process data.
 
 ### Template Structure
 
@@ -443,7 +443,7 @@ writer:
 #### Example 4: Legacy ETL Function
 
 > This format is still supported but deprecated. The `b3-futures-di1` template
-> shown below was retired to `templates/legacy/`.
+> shown below was retired to `brasa/files/templates/legacy/`.
 
 ```yaml
 id: b3-futures-di1

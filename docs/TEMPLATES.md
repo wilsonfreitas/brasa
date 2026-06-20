@@ -524,7 +524,7 @@ fields:
 
 Produces a deterministic lookup table by joining and mapping `sector`/`subsector` values from `staging.brasa-companies` to standard GICS, ICB, and normalized sector taxonomies using a single `sql_query` step.
 
-**Source:** `staging.brasa-companies` (produced by `templates/brasa-companies.yaml`)
+**Source:** `staging.brasa-companies` (produced by `brasa/files/templates/brasa-companies.yaml`)
 **Output:** `staging.brasa-industry-sectors`
 
 ```yaml
@@ -1423,7 +1423,7 @@ def detect_template_type(template):
 
 ### Code Architecture
 
-- **Templates:** [templates/](../templates/) - YAML template definitions
+- **Templates:** [brasa/files/templates/](../brasa/files/templates/) - YAML template definitions
 - **Template Engine:** [brasa/engine/template.py](../brasa/engine/template.py) - Template loader, parser, schema
 - **Pipeline Engine:** [brasa/engine/pipeline/](../brasa/engine/pipeline/) - Step registry, context, execution
 - **Processing:** [brasa/engine/processing.py](../brasa/engine/processing.py) - Orchestrates download/read/ETL/write

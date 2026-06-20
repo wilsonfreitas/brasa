@@ -73,7 +73,7 @@ tasks:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `template` | yes | Template name (must exist in `templates/`) |
+| `template` | yes | Template name (must exist in `brasa/files/templates/`) |
 | `args` | no | Extra arguments passed to `download_marketdata` |
 | `reprocess` | no | Overrides `defaults.reprocess` for this task |
 
@@ -280,10 +280,10 @@ brasa download --plan my-plan.yaml
 # Error: Unknown template: 'b3-nonexistent'
 ```
 
-Fix: check `templates/` for the correct name or run:
+Fix: check `brasa/files/templates/` for the correct name or run:
 
 ```bash
-uv run python -m brasa.cli deps --list   # or inspect templates/ directory
+uv run python -m brasa.cli deps --list   # or inspect brasa/files/templates/ directory
 ```
 
 ### Continue-on-error (during execution)

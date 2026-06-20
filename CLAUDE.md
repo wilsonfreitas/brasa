@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**brasa** is a Python library for extracting, processing, and querying financial market data from Brazilian institutions (B3, ANBIMA, Tesouro Direto, CVM, BCB). It uses a template-driven ETL architecture where YAML templates in `templates/` declaratively define download, parsing, transformation, and storage pipelines.
+**brasa** is a Python library for extracting, processing, and querying financial market data from Brazilian institutions (B3, ANBIMA, Tesouro Direto, CVM, BCB). It uses a template-driven ETL architecture where YAML templates in `brasa/files/templates/` declaratively define download, parsing, transformation, and storage pipelines.
 
 ## Important: Always Use uv
 
@@ -50,7 +50,7 @@ uv run pre-commit run --all-files
 YAML Template → Download → Cache (raw/) → Parse/Read → Parquet (db/) → ETL → Query
 ```
 
-1. **Templates** (`templates/*.yaml`): Declarative pipeline configs defining how to download, parse, and store each dataset. Use pipeline-based templates (not legacy function-based).
+1. **Templates** (`brasa/files/templates/**/*.yaml`): Declarative pipeline configs defining how to download, parse, and store each dataset. SQL DDL lives in `brasa/files/sql/`. Use pipeline-based templates (not legacy function-based).
 2. **Downloaders** (`brasa/downloaders/`): HTTP/API clients that fetch raw data files.
 3. **Cache** (`brasa/engine/`): `CacheManager` singleton manages file storage, metadata (SQLite), and checksum-based deduplication. Cache lives in `.brasa-cache/` (override with `BRASA_DATA_PATH` env var).
 4. **Parsers/Readers** (`brasa/parsers/`, `brasa/readers/`): Parse raw files (CSV, FWF, XML, JSON) into DataFrames.
