@@ -270,3 +270,42 @@ class TestGetStaleExtraKeyIds:
         assert ibov_old.id in result
         assert ibov_new.id not in result
         assert ifix.id not in result
+
+
+# ---------------------------------------------------------------------------
+# Tests: process_marketdata honours the stale filter under reprocess=True
+# ---------------------------------------------------------------------------
+
+
+class TestProcessMarketdataReprocess:
+    """reprocess=True must still process only the newest snapshot per group."""
+
+    def test_reprocess_true_processes_only_newest(self, monkeypatch):
+        """Two entries, same download_args, neither processed: only newest runs."""
+        from brasa.engine.api import process_marketdata
+        from brasa.engine.reporting import Verbosity
+
+        cache = CacheManager()
+        args = {"year": "2026", "index": "IBOV", "language": "pt-br"}
+
+        meta_old = _make_meta("b3-indexes-historical-prices", args, "2026-04-15")
+        meta_new = _make_meta("b3-indexes-historical-prices", args, "2026-04-16")
+        _save_meta_to_db(cache, meta_old)
+        _save_meta_to_db(cache, meta_new)
+
+        processed_keys: list[str] = []
+
+        def _record(meta):
+            processed_keys.append(meta.extra_key)
+            meta.mark_as_processed()
+
+        monkeypatch.setattr("brasa.engine.processing._read_marketdata", _record)
+
+        process_marketdata(
+            "b3-indexes-historical-prices",
+            reprocess=True,
+            verbosity=Verbosity.QUIET,
+            max_workers=1,
+        )
+
+        assert processed_keys == ["2026-04-16"]
