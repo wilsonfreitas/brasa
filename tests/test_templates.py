@@ -630,3 +630,51 @@ def test_b3_curves_di1_template_loads():
         f"Missing: {expected_fields - field_names}; "
         f"extra: {field_names - expected_fields}"
     )
+
+
+def test_b3_curves_di1_standard_template_loads():
+    """Test that the b3-curves-di1-standard template (pipeline ETL) loads."""
+    tpl = MarketDataTemplate("templates/b3/curves/b3-curves-di1-standard.yaml")
+
+    assert tpl.id == "b3-curves-di1-standard"
+    assert tpl.is_etl
+    assert not tpl.has_downloader
+    assert not tpl.has_reader
+    assert tpl.etl.is_pipeline
+
+    inputs = tpl.etl.get_input_datasets()
+    assert "staging.b3-curves-di1" in inputs
+
+    field_names = {f.name for f in tpl.fields}
+    expected_fields = {
+        "refdate",
+        "symbol",
+        "maturity_date",
+        "business_days",
+        "adjusted_tax",
+    }
+    assert expected_fields == field_names, (
+        f"Missing: {expected_fields - field_names}; "
+        f"extra: {field_names - expected_fields}"
+    )
+
+
+def test_b3_curves_di1_standard_returns_template_loads():
+    """Test that the b3-curves-di1-standard-returns template (pipeline ETL) loads."""
+    tpl = MarketDataTemplate("templates/b3/curves/b3-curves-di1-standard-returns.yaml")
+
+    assert tpl.id == "b3-curves-di1-standard-returns"
+    assert tpl.is_etl
+    assert not tpl.has_downloader
+    assert not tpl.has_reader
+    assert tpl.etl.is_pipeline
+
+    inputs = tpl.etl.get_input_datasets()
+    assert "staging.b3-curves-di1-standard" in inputs
+
+    field_names = {f.name for f in tpl.fields}
+    expected_fields = {"refdate", "symbol", "returns"}
+    assert expected_fields == field_names, (
+        f"Missing: {expected_fields - field_names}; "
+        f"extra: {field_names - expected_fields}"
+    )

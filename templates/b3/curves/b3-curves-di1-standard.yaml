@@ -1,8 +1,47 @@
 id: b3-curves-di1-standard
-description: Curva de juros prefixados com vértices padronizados
+description: Curva de juros prefixados DI1 com vértices padronizados
 etl:
-  function: brasa.etl.create_b3_curves_standard_terms
-  curves_dataset: b3-curves-di1
-  standard_terms: [21, 63, 126, 252, 504, 756, 1260, 2520, 3780, 5040]
-  symbol_prefix: DI1T
-  calendar: ANBIMA
+  pipeline:
+    - step: sql_query
+      datasets:
+        - staging.b3-curves-di1
+      query: |+
+        select
+          refdate,
+          business_days,
+          adjusted_tax
+        from
+          'staging.b3-curves-di1'
+
+    - step: standard_terms
+      standard_terms: [21, 63, 126, 252, 504, 756, 1260, 2520, 3780, 5040]
+      symbol_prefix: DI1T
+      calendar: ANBIMA
+
+    - step: sort
+      by: [refdate, business_days]
+
+    - step: select_fields
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+  partitioning: []
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Standard-term vertex symbol (e.g. DI1T252)
+    type: string
+  - name: maturity_date
+    description: Vertex maturity date (refdate offset by the standard term, ANBIMA)
+    type: date
+  - name: business_days
+    description: Standard term in business days
+    type: integer
+  - name: adjusted_tax
+    description: Flat-forward interpolated annualized rate in decimal form
+    type: numeric

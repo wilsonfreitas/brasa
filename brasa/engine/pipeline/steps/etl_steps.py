@@ -400,6 +400,38 @@ class CalculateImpliedRate(PipelineStep):
         )
 
 
+@StepRegistry.register("standard_terms")
+class StandardTermsInterpolation(PipelineStep):
+    """Interpolate a yield curve at standard business-day terms (flat-forward).
+
+    Parameters:
+        standard_terms: List of business-day terms to interpolate at.
+        symbol_prefix: Prefix for generated vertex symbols (e.g. 'DI1T').
+        calendar: Business day calendar for maturity offsets (default: Actual).
+        refdate_column: Reference date column name (default: refdate).
+        business_days_column: Business-days column name (default: business_days).
+        rate_column: Rate column name (default: adjusted_tax).
+    """
+
+    def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
+        """Interpolate the curve at the configured standard terms."""
+        standard_terms = self.require_param("standard_terms")
+        symbol_prefix = self.require_param("symbol_prefix")
+        calendar = self.get_param("calendar", "Actual")
+        refdate_column = self.get_param("refdate_column", "refdate")
+        business_days_column = self.get_param("business_days_column", "business_days")
+        rate_column = self.get_param("rate_column", "adjusted_tax")
+        return shared_transforms.standard_terms_interpolation(
+            data,
+            standard_terms,
+            symbol_prefix,
+            calendar,
+            refdate_column,
+            business_days_column,
+            rate_column,
+        )
+
+
 @StepRegistry.register("flatten_columns")
 class FlattenStep(PipelineStep):
     """Flatten columns by splitting delimited values into separate rows.

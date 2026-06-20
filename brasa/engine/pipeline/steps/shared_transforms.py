@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
 import pandas as pd
 import pyarrow.dataset as ds
 
@@ -394,3 +395,78 @@ def flatten_column(
         df = df.explode(column, ignore_index=True)
 
     return df
+
+
+def interp_ff(term: np.ndarray, rates: np.ndarray, terms: np.ndarray) -> np.ndarray:
+    """Flat-forward interpolation of annualized rates.
+
+    Linear interpolation in log price-unit space; flat (clamped) beyond the
+    last knot. Mirrors the legacy ``brasa.etl.interp_ff``.
+
+    Args:
+        term: Business-day term(s) to interpolate at.
+        rates: Known annualized rates at ``terms``.
+        terms: Known business-day terms (must be ascending for np.interp).
+
+    Returns:
+        Interpolated annualized rate(s) at ``term``.
+    """
+    log_pu = np.log((1 + rates) ** (terms / 252))
+    pu = np.exp(np.interp(term, terms, log_pu))
+    return pu ** (252 / term) - 1
+
+
+def standard_terms_interpolation(
+    data: ds.Dataset | pd.DataFrame,
+    standard_terms: list[int],
+    symbol_prefix: str,
+    calendar: str = "Actual",
+    refdate_column: str = "refdate",
+    business_days_column: str = "business_days",
+    rate_column: str = "adjusted_tax",
+) -> pd.DataFrame:
+    """Interpolate a yield curve at standard business-day terms, per refdate.
+
+    For each ``refdate`` group, flat-forward interpolates the curve vertices
+    at every term in ``standard_terms`` and emits standardized vertices.
+
+    Args:
+        data: Curve vertices with refdate / business_days / rate columns.
+        standard_terms: Business-day terms to interpolate at.
+        symbol_prefix: Prefix for generated vertex symbols (e.g. ``DI1T``).
+        calendar: Business-day calendar for maturity offsets.
+        refdate_column: Reference-date column name.
+        business_days_column: Business-days (term) column name.
+        rate_column: Annualized-rate column name.
+
+    Returns:
+        DataFrame with refdate, symbol, maturity_date, business_days, rate.
+    """
+    from bizdays import Calendar
+
+    cal: Any = Calendar.load(calendar)
+    df = to_dataframe(data)
+    terms_std = np.array(standard_terms)
+    symbols_std = [f"{symbol_prefix}{t}" for t in standard_terms]
+
+    frames = []
+    for refdate, group in df.groupby(refdate_column, sort=True):
+        ordered = group.sort_values(business_days_column)
+        terms = ordered[business_days_column].to_numpy()
+        rates = ordered[rate_column].to_numpy()
+        interp_rates = interp_ff(terms_std, rates, terms)
+        ref = pd.Timestamp(refdate).date()
+        maturities = cal.offset(ref, terms_std)
+        frames.append(
+            pd.DataFrame(
+                {
+                    refdate_column: pd.Timestamp(refdate),
+                    "symbol": symbols_std,
+                    "maturity_date": pd.to_datetime(maturities),
+                    business_days_column: terms_std,
+                    rate_column: interp_rates,
+                }
+            )
+        )
+
+    return pd.concat(frames, ignore_index=True)

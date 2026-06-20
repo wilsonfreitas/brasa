@@ -10,6 +10,7 @@ from bcb import PTAX
 from bizdays import Calendar, get_option, set_option
 
 from .engine import MarketDataETL
+from .engine.pipeline.steps.shared_transforms import interp_ff
 from .parsers.b3.futures_settlement_prices import maturity2date
 from .queries import BrasaDB, get_dataset, write_dataset
 
@@ -298,12 +299,6 @@ def create_b3_curves(handler: MarketDataETL):
         ["refdate", "symbol", "maturity_date", "business_days", "adjusted_tax"]
     ).sort_by([("refdate", "ascending"), ("business_days", "ascending")])
     write_dataset(tb_curve.to_pandas(), handler.template_id)
-
-
-def interp_ff(term, rates, terms):
-    log_pu = np.log((1 + rates) ** (terms / 252))
-    pu = np.exp(np.interp(term, terms, log_pu))
-    return pu ** (252 / term) - 1
 
 
 def create_b3_curves_standard_terms(handler: MarketDataETL):

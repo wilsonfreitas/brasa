@@ -189,3 +189,88 @@ def test_add_column_where_now():
     ts = result["downloaded_at"].iloc[0]
     assert isinstance(ts, datetime)
     assert before <= ts <= after
+
+
+def test_standard_terms_interpolation_transform():
+    """standard_terms_interpolation flat-forward interpolates a curve per refdate."""
+    from datetime import date
+
+    import numpy as np
+    import pandas as pd
+    import pytest
+    from bizdays import Calendar
+
+    from brasa.engine.pipeline.steps import shared_transforms
+
+    # One refdate, three knots
+    df = pd.DataFrame(
+        {
+            "refdate": pd.to_datetime([date(2020, 1, 2)] * 3),
+            "business_days": [21, 252, 504],
+            "adjusted_tax": [0.10, 0.11, 0.12],
+        }
+    )
+
+    result = shared_transforms.standard_terms_interpolation(
+        df,
+        standard_terms=[21, 126, 252, 756],
+        symbol_prefix="DI1T",
+        calendar="ANBIMA",
+    )
+
+    # One row per standard term, in term order
+    assert list(result["business_days"]) == [21, 126, 252, 756]
+    assert list(result["symbol"]) == ["DI1T21", "DI1T126", "DI1T252", "DI1T756"]
+
+    by_term = dict(zip(result["business_days"], result["adjusted_tax"], strict=True))
+    # At exact knots the interpolated rate equals the knot rate
+    assert by_term[21] == pytest.approx(0.10)
+    assert by_term[252] == pytest.approx(0.11)
+    # Off-knot (126) and extrapolated (756 > 504) terms match a direct interp_ff call
+    knots = np.array([21, 252, 504])
+    rates = np.array([0.10, 0.11, 0.12])
+    expected = shared_transforms.interp_ff(np.array([126, 756]), rates, knots)
+    assert by_term[126] == pytest.approx(expected[0])
+    assert by_term[756] == pytest.approx(expected[1])
+
+    # Maturities use the calendar offset from refdate
+    mat_by_term = dict(
+        zip(result["business_days"], result["maturity_date"], strict=True)
+    )
+    cal = Calendar.load("ANBIMA")
+    assert (
+        pd.Timestamp(mat_by_term[252]).date()
+        == pd.Timestamp(cal.offset(date(2020, 1, 2), 252)).date()
+    )
+
+
+def test_standard_terms_step_executes():
+    """The standard_terms step interpolates curve vertices via the registry."""
+    from datetime import date
+
+    import pandas as pd
+
+    from brasa.engine.pipeline import StepRegistry
+
+    df = pd.DataFrame(
+        {
+            "refdate": pd.to_datetime([date(2020, 1, 2)] * 2),
+            "business_days": [21, 252],
+            "adjusted_tax": [0.10, 0.11],
+        }
+    )
+
+    step = StepRegistry.create(
+        "standard_terms",
+        {
+            "standard_terms": [21, 252],
+            "symbol_prefix": "DI1T",
+            "calendar": "ANBIMA",
+        },
+    )
+    result = step.execute(df, None)
+
+    assert list(result["symbol"]) == ["DI1T21", "DI1T252"]
+    assert list(result["business_days"]) == [21, 252]
+    assert "maturity_date" in result.columns
+    assert "adjusted_tax" in result.columns
