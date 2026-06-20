@@ -9,7 +9,7 @@ from brasa.fieldsets import Fieldset
 
 
 def test_load_b3_listed_funds_template():
-    tpl = MarketDataTemplate("templates/b3/equities/b3-listed-funds.yaml")
+    tpl = MarketDataTemplate("brasa/files/templates/b3/equities/b3-listed-funds.yaml")
 
     assert tpl.has_downloader
     assert tpl.has_reader
@@ -17,7 +17,7 @@ def test_load_b3_listed_funds_template():
 
 
 def test_b3_listed_funds_template_fields():
-    tpl = MarketDataTemplate("templates/b3/equities/b3-listed-funds.yaml")
+    tpl = MarketDataTemplate("brasa/files/templates/b3/equities/b3-listed-funds.yaml")
 
     assert isinstance(tpl.fields, Fieldset)
     expected = {
@@ -61,7 +61,9 @@ def test_add_column_injects_typefund_from_download_args():
 
 
 def test_b3_listed_funds_consolidated_template():
-    tpl = MarketDataTemplate("templates/b3/equities/b3-listed-funds-consolidated.yaml")
+    tpl = MarketDataTemplate(
+        "brasa/files/templates/b3/equities/b3-listed-funds-consolidated.yaml"
+    )
     assert tpl.id == "b3-listed-funds-consolidated"
     assert hasattr(tpl, "etl") and tpl.etl is not None
 

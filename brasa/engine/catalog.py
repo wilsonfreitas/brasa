@@ -21,6 +21,7 @@ import pyarrow.parquet as pq
 from .cache import CacheManager
 from .core import Singleton
 from .layers import DataLayer
+from .resources import package_path
 
 
 @dataclass
@@ -157,9 +158,7 @@ class DatasetCatalog(Singleton):
         man = CacheManager()
         db_conn = sqlite3.connect(database=man.cache_path(man.meta_db_filename))
         c = db_conn.cursor()
-        sql_path = (
-            Path(__file__).parent / ".." / ".." / "sql" / "create-dataset-catalog.sql"
-        )
+        sql_path = package_path("sql", "create-dataset-catalog.sql")
         with sql_path.open() as f:
             c.executescript(f.read())
         db_conn.commit()

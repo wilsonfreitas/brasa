@@ -178,7 +178,7 @@ def test_executor_skips_default_write_on_sentinel():
 
 def test_consolidated_template_uses_sql_export():
     tpl = MarketDataTemplate(
-        "templates/b3/intraday/b3-trades-intraday-consolidated.yaml"
+        "brasa/files/templates/b3/intraday/b3-trades-intraday-consolidated.yaml"
     )
     assert tpl.id == "b3-trades-intraday-consolidated"
     assert tpl.is_etl

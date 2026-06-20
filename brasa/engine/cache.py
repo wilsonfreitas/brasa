@@ -24,6 +24,7 @@ import pandas as pd
 from brasa.util import DownloadArgs, generate_checksum_for_template
 
 from .core import Singleton, json_convert_from_object, json_convert_to_object
+from .resources import package_path
 
 if TYPE_CHECKING:
     from .template import MarketDataTemplate
@@ -261,7 +262,7 @@ class CacheManager(Singleton):
         """Create the SQLite metadata database."""
         db_conn = sqlite3.connect(database=self.cache_path(self.meta_db_filename))
         c = db_conn.cursor()
-        sql_path = Path(__file__).parent / ".." / ".." / "sql" / "create-meta-db.sql"
+        sql_path = package_path("sql", "create-meta-db.sql")
         with sql_path.open() as f:
             c.executescript(f.read())
         db_conn.commit()
@@ -271,9 +272,7 @@ class CacheManager(Singleton):
         """Initialize the dataset catalog table if it doesn't exist."""
         db_conn = sqlite3.connect(database=self.cache_path(self.meta_db_filename))
         c = db_conn.cursor()
-        sql_path = (
-            Path(__file__).parent / ".." / ".." / "sql" / "create-dataset-catalog.sql"
-        )
+        sql_path = package_path("sql", "create-dataset-catalog.sql")
         with sql_path.open() as f:
             c.executescript(f.read())
         db_conn.commit()

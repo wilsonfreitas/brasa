@@ -80,7 +80,9 @@ def fake_cache(tmp_path, monkeypatch):
     meta_dir = tmp_path / "meta"
     meta_dir.mkdir()
     meta_db = meta_dir / "meta.db"
-    sql_path = Path(__file__).parent.parent / "sql" / "create-meta-db.sql"
+    sql_path = (
+        Path(__file__).parent.parent / "brasa" / "files" / "sql" / "create-meta-db.sql"
+    )
     with sqlite3.connect(meta_db) as conn:
         conn.executescript(sql_path.read_text())
 

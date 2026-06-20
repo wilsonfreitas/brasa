@@ -68,7 +68,7 @@ def _run_template_query(template_path: str) -> pd.DataFrame:
 
 
 def test_symbol_changes_detects_renames_only():
-    df = _run_template_query("templates/brasa/brasa-symbol-changes.yaml")
+    df = _run_template_query("brasa/files/templates/brasa/brasa-symbol-changes.yaml")
     pairs = set(zip(df["src_symbol"], df["dest_symbol"], strict=True))
     assert pairs == {("KROT3", "COGN3"), ("UNTA11", "UNTB11")}
     # ISIN class carried correctly
@@ -82,7 +82,9 @@ def test_symbol_changes_detects_renames_only():
 
 
 def test_symbol_spans_analysis_flags_and_marks_matched():
-    df = _run_template_query("templates/brasa/brasa-symbol-spans-analysis.yaml")
+    df = _run_template_query(
+        "brasa/files/templates/brasa/brasa-symbol-spans-analysis.yaml"
+    )
     matched = {
         (r.symbol, r.event_type): bool(r.matched) for r in df.itertuples(index=False)
     }

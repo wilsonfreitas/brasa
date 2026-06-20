@@ -62,7 +62,7 @@ def test_bcb_sgs_downloader_returns_none_on_error():
 
 
 def test_load_bcb_sgs_template():
-    tpl = MarketDataTemplate("templates/bcb/bcb-sgs.yaml")
+    tpl = MarketDataTemplate("brasa/files/templates/bcb/bcb-sgs.yaml")
 
     assert tpl.has_downloader
     assert tpl.has_reader
@@ -70,7 +70,7 @@ def test_load_bcb_sgs_template():
 
 
 def test_bcb_sgs_template_fields():
-    tpl = MarketDataTemplate("templates/bcb/bcb-sgs.yaml")
+    tpl = MarketDataTemplate("brasa/files/templates/bcb/bcb-sgs.yaml")
 
     assert isinstance(tpl.fields, Fieldset)
     assert len(tpl.fields) == 4

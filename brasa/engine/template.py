@@ -21,6 +21,7 @@ from brasa.fieldsets.field import Field
 
 from .core import load_function_by_name
 from .layers import DEFAULT_ETL_LAYER, DEFAULT_LAYER, DataLayer
+from .resources import package_path
 
 if TYPE_CHECKING:
     from .cache import CacheMetadata
@@ -691,12 +692,12 @@ _template_cache: dict[str, MarketDataTemplate] = {}
 
 
 def _get_templates_dir() -> Path:
-    """Get the path to the templates directory.
+    """Get the path to the bundled templates directory.
 
     Returns:
-        Path to the templates directory.
+        Path to the templates directory inside the brasa package.
     """
-    return (Path(__file__).parent / ".." / ".." / "templates").resolve()
+    return package_path("templates")
 
 
 def list_templates() -> list[str]:

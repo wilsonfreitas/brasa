@@ -73,7 +73,7 @@ def test_bcb_currency_download_helper_is_exported():
 
 
 def test_load_bcb_currency_template():
-    tpl = MarketDataTemplate("templates/bcb/bcb-currency.yaml")
+    tpl = MarketDataTemplate("brasa/files/templates/bcb/bcb-currency.yaml")
 
     assert tpl.has_downloader
     assert tpl.has_reader
@@ -81,7 +81,7 @@ def test_load_bcb_currency_template():
 
 
 def test_bcb_currency_template_fields():
-    tpl = MarketDataTemplate("templates/bcb/bcb-currency.yaml")
+    tpl = MarketDataTemplate("brasa/files/templates/bcb/bcb-currency.yaml")
 
     assert isinstance(tpl.fields, Fieldset)
     expected = {
