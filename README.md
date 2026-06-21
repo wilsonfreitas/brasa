@@ -2,6 +2,21 @@
 
 Extract finance market data from brazillian financial institutions: B3, ANBIMA, Tesouro Direto, CVM.
 
+## Installation
+
+Install from PyPI:
+
+    pip install brasa
+
+Or directly from GitHub (latest `main`):
+
+    pip install git+https://github.com/wilsonfreitas/brasa.git
+
+With `uv`:
+
+    uv add brasa
+    uv add git+https://github.com/wilsonfreitas/brasa.git
+
 ## Cache location (`BRASA_DATA_PATH`)
 
 brasa stores everything — raw downloads, parsed parquet, and the metadata DB —
