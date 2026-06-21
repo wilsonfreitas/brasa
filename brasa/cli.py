@@ -797,7 +797,11 @@ def _parse_download_args(raw_args: list[str] | None, calendar: str) -> dict:
 def main() -> None:  # noqa: PLR0912, PLR0915
     args = parser.parse_args()
     if args.command == "setup":
-        CacheManager()
+        cm = CacheManager()
+        root = Path(cm.cache_folder).resolve()
+        print(f"Brasa home ready at {root}")
+        print("\nTo use this home in your shell:")
+        print(f'  export BRASA_DATA_PATH="{root}"')
     elif args.command == "download":
         plan_file = getattr(args, "plan", None)
         templates = list(args.template or [])
