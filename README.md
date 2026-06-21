@@ -2,6 +2,28 @@
 
 Extract finance market data from brazillian financial institutions: B3, ANBIMA, Tesouro Direto, CVM.
 
+## Cache location (`BRASA_DATA_PATH`)
+
+brasa stores everything — raw downloads, parsed parquet, and the metadata DB —
+under a single *brasa home*, resolved from the `BRASA_DATA_PATH` environment
+variable (falling back to `./.brasa-cache`).
+
+A common setup keeps one central home exported globally (e.g. in `~/.env.local`).
+For a one-off, project-local dataset, create a separate home and point at it for
+the current shell only — a per-shell `export` shadows the global value:
+
+    BRASA_DATA_PATH=./brasa-home uv run python -m brasa.cli setup
+
+`setup` then prints the exact line to activate that home:
+
+    Brasa home ready at /abs/path/to/brasa-home
+
+    To use this home in your shell:
+      export BRASA_DATA_PATH="/abs/path/to/brasa-home"
+
+Run that `export` and every `brasa` command in the session uses the project-local
+home; open a new shell to return to the central one.
+
 ## Changelog
 
 ### Deterministic Download Status Codes
