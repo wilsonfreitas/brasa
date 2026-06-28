@@ -15,7 +15,7 @@ downloader:
   format: json
   encoding: latin1
   download_delay: 1
-  retry_attempts: 15
+  retry_attempts: 3
   retry_delay: 3.0
   retry_backoff: 2.0
   args:
