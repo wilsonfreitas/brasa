@@ -586,6 +586,10 @@ class MarketDataTemplate:
         if section_name == "downloader":
             self.has_downloader = True
             self.downloader = MarketDataDownloader(section_data)
+        elif section_name == "importer":
+            self.has_downloader = True
+            section_data.setdefault("function", "brasa.downloaders.local_file_import")
+            self.downloader = MarketDataDownloader(section_data)
         elif section_name == "reader":
             self.has_reader = True
             self.reader = MarketDataReader(section_data, template_id=self.id)
