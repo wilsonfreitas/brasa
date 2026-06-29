@@ -7,7 +7,13 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import download_marketdata, process_etl, process_marketdata, retrieve_template
+from . import (
+    download_marketdata,
+    import_marketdata,
+    process_etl,
+    process_marketdata,
+    retrieve_template,
+)
 from .engine import CacheManager, Verbosity, sync_catalog_from_disk
 from .queries import BrasaDB, describe_dataset, get_dataset, list_datasets
 from .util import parse_arg_value
@@ -15,7 +21,7 @@ from .util import parse_arg_value
 # Command groups for organized help display
 _COMMAND_GROUPS = {
     "Setup": ["setup"],
-    "Execution": ["download", "process", "run", "run-all"],
+    "Execution": ["download", "import", "process", "run", "run-all"],
     "Templates": ["deps", "plan", "graph", "map"],
     "Datasets": [
         "list-unprocessed",
@@ -207,6 +213,37 @@ parser_download.add_argument(
     help="explicit start date for incremental strategies (overrides cache query)",
 )
 add_verbosity_args(parser_download)
+
+parser_import = subparsers.add_parser(
+    "import", help="import local files into a template"
+)
+parser_import.add_argument("template", nargs="+", help="template names")
+parser_import.add_argument(
+    "--path",
+    metavar="PATH",
+    help="local file path or pattern (overrides the template path:)",
+)
+parser_import.add_argument(
+    "--arg",
+    action="append",
+    metavar="KEY=VALUE",
+    help=(
+        "import argument as KEY=VALUE. Repeatable. Same DSL as download: "
+        "@=date (@2026-01-01:2026-01-31), $=symbols. Commas create lists."
+    ),
+)
+parser_import.add_argument(
+    "--calendar",
+    default="B3",
+    choices=["B3", "ANBIMA"],
+    help="calendar for date range expansion",
+)
+parser_import.add_argument(
+    "--force",
+    action="store_true",
+    help="force re-import even if data already exists in cache",
+)
+add_verbosity_args(parser_import)
 
 parser_process = subparsers.add_parser(
     "process", help="process market data - transform raw data to parquet files"
@@ -867,6 +904,21 @@ def main() -> None:  # noqa: PLR0912, PLR0915
                     **({"since": since} if since else {}),
                     **download_kwargs,
                 )
+    elif args.command == "import":
+        verbosity = get_verbosity(args)
+        report_file = getattr(args, "report", None)
+        templates = list(args.template or [])
+        download_kwargs = _parse_download_args(args.arg, args.calendar)
+        if args.path is not None:
+            download_kwargs["path"] = args.path
+        for template in templates:
+            import_marketdata(
+                template,
+                force=args.force,
+                verbosity=verbosity,
+                report_file=report_file,
+                **download_kwargs,
+            )
     elif args.command == "process":
         verbosity = get_verbosity(args)
         report_file = getattr(args, "report", None)
