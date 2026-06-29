@@ -134,6 +134,7 @@ def _build_result_from_download(
     duration: float,
     meta: CacheMetadata,
     captured_warnings: list[str],
+    operation: str = "download",
 ) -> "TaskResult":
     """Build a TaskResult from a DownloadResult.
 
@@ -147,13 +148,14 @@ def _build_result_from_download(
         duration: Elapsed time in seconds.
         meta: Cache metadata (may be reloaded after download).
         captured_warnings: Warnings captured during the download.
+        operation: Label for the operation type ("download" or "import").
 
     Returns:
         A TaskResult with download status attached.
     """
     if dl.is_success:
         result = create_task_result_success(
-            operation="download",
+            operation=operation,
             template_name=template_name,
             args=args,
             duration=duration,
@@ -164,7 +166,7 @@ def _build_result_from_download(
     else:
         result = create_task_result_from_exception(
             exception=dl.exception or Exception(dl.reason),
-            operation="download",
+            operation=operation,
             template_name=template_name,
             args=args,
             duration=duration,
@@ -202,6 +204,7 @@ def _build_result_skipped(
     template_name: str,
     args: dict,
     duration: float,
+    operation: str = "download",
 ) -> "TaskResult":
     """Build a SKIPPED TaskResult with an appropriate reason.
 
@@ -211,6 +214,7 @@ def _build_result_skipped(
         template_name: Name of the template.
         args: Download arguments for this iteration.
         duration: Elapsed time in seconds.
+        operation: Label for the operation type ("download" or "import").
 
     Returns:
         A TaskResult with SKIPPED status and reason.
@@ -226,7 +230,7 @@ def _build_result_skipped(
             skip_reason = f"invalid download: {last['reason']}"
 
     result = create_task_result_skipped(
-        operation="download",
+        operation=operation,
         template_name=template_name,
         args=args,
         duration=duration,
