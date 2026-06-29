@@ -115,7 +115,13 @@ def _gzip_downloaded_files(
         Path(_fname).unlink()
 
 
-def _download_marketdata(meta: CacheMetadata, on_attempt_failure=None, **kwargs):
+def _download_marketdata(
+    meta: CacheMetadata,
+    on_attempt_failure=None,
+    acquisition_function=None,
+    retry_attempts_override=None,
+    **kwargs,
+):
     """Download market data for a cache entry.
 
     Handles the complete download workflow:
@@ -128,6 +134,11 @@ def _download_marketdata(meta: CacheMetadata, on_attempt_failure=None, **kwargs)
         meta: Cache metadata to update with download results.
         on_attempt_failure: Optional callback for per-attempt retry
             persistence. Passed through to downloader.download().
+        acquisition_function: Optional override for the acquisition function.
+            When provided, replaces the template's download function for this
+            call without mutating the cached template.
+        retry_attempts_override: Override for retry attempts count. Passed
+            through to downloader.download().
         **kwargs: Download arguments to pass to the download function.
 
     Returns:
@@ -142,7 +153,10 @@ def _download_marketdata(meta: CacheMetadata, on_attempt_failure=None, **kwargs)
     meta.download_args = DownloadArgs(kwargs)
     meta.extra_key = template.downloader.extra_key
     fp, response, retry_info = template.downloader.download(
-        on_attempt_failure=on_attempt_failure, **meta.download_args.to_dict()
+        on_attempt_failure=on_attempt_failure,
+        acquisition_function=acquisition_function,
+        retry_attempts=retry_attempts_override,
+        **meta.download_args.to_dict(),
     )
     if fp is None:
         raise DownloadException("Market data download failed: null file pointer")

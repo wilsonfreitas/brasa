@@ -770,7 +770,12 @@ class CacheManager(Singleton):
         dataset = ds.dataset(str(path), format="parquet", partitioning="hive")
         return dataset.to_table().to_pandas()
 
-    def download_marketdata(self, meta: CacheMetadata) -> DownloadResult:
+    def download_marketdata(
+        self,
+        meta: CacheMetadata,
+        acquisition_function=None,
+        retry_attempts_override=None,
+    ) -> DownloadResult:
         """Download market data and save to cache.
 
         Handles all download exceptions internally — callers never need
@@ -781,6 +786,12 @@ class CacheManager(Singleton):
         attempts are persisted as individual ``download_trials`` rows
         (RSTS-005). The final outcome is always the authoritative
         row for scheduling/reporting.
+
+        Args:
+            meta: Cache metadata for the entry to download.
+            acquisition_function: Optional override for the acquisition
+                function. Does not mutate the cached template.
+            retry_attempts_override: Override for retry attempts count.
 
         Returns:
             A DownloadResult describing the outcome.
@@ -815,6 +826,8 @@ class CacheManager(Singleton):
             retry_info = _download_marketdata(
                 meta,
                 on_attempt_failure=_on_attempt_failure,
+                acquisition_function=acquisition_function,
+                retry_attempts_override=retry_attempts_override,
                 **meta.download_args.to_dict(),
             )
             self.save_trial(

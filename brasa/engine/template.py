@@ -422,6 +422,8 @@ class MarketDataDownloader:
     def download(
         self,
         on_attempt_failure: Any | None = None,
+        acquisition_function: Any | None = None,
+        retry_attempts: int | None = None,
         **kwargs,
     ) -> tuple[IO | None, Any, dict]:
         """Execute the download with optional retry policy.
@@ -437,6 +439,11 @@ class MarketDataDownloader:
                 failed retriable attempt **before** the next retry.
                 Signature: ``(attempt: int, err: Exception,
                 status_code: int | None) -> None``.
+            acquisition_function: Optional override for the download function.
+                When provided, it is called instead of ``self.download_function``.
+                ``self.download_function`` is never reassigned.
+            retry_attempts: Override for the number of retry attempts. When
+                provided, it replaces ``self.retry_attempts`` for this call only.
             **kwargs: Arguments to pass to the download function.
 
         Returns:
@@ -457,7 +464,10 @@ class MarketDataDownloader:
         )
 
         args = self.download_args(**kwargs)
-        max_attempts = 1 + self.retry_attempts
+        effective_retry = (
+            retry_attempts if retry_attempts is not None else self.retry_attempts
+        )
+        max_attempts = 1 + effective_retry
         current_delay = self.retry_delay
 
         last_err: Exception | None = None
@@ -467,7 +477,8 @@ class MarketDataDownloader:
             caught_err: Exception | None = None
 
             try:
-                fp, response = self.download_function(self, **args)
+                acquire = acquisition_function or self.download_function
+                fp, response = acquire(self, **args)
             except Exception as err:
                 caught_err = err
 
@@ -537,7 +548,7 @@ class MarketDataDownloader:
                 )
             retry_info = {
                 "attempts_used": attempt - 1,
-                "attempts_configured": self.retry_attempts,
+                "attempts_configured": effective_retry,
                 "success_on_attempt": attempt,
             }
             return fp, response, retry_info
