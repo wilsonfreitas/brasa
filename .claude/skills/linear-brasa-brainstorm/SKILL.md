@@ -1,17 +1,17 @@
 ---
 name: linear-brasa-brainstorm
 description: >
-  Brainstorm and save a design spec into a Linear issue for the brasa project. Wraps
-  superpowers:brainstorming but persists the final design as a `## Design` section inside the
-  target issue's description instead of a `.md` file. Use whenever the user says "refine WIL-X",
-  "brainstorm WIL-X", "design WIL-X", or otherwise wants to turn a brasa Linear issue into a
-  reviewed design spec.
+  Refine a brasa Linear issue via brainstorm → grill → synthesize, persisting the result as a
+  `Design` Document on the issue (not a description section). Moves the issue to `Refined` on
+  success. Use whenever the user says "refine WIL-X", "brainstorm WIL-X", "design WIL-X", or
+  wants to turn a brasa Linear issue into a reviewed design spec.
 ---
 
-# Linear Brasa — Brainstorm (Design → Issue)
+# Linear Brasa — Brainstorm (Design Document → Refined)
 
-Take an existing brasa Linear issue and produce a reviewed design spec that lives in the
-issue's description under a `## Design` section.
+Take an existing brasa Linear issue and produce a reviewed design spec stored as a **Document**
+titled `Design` attached to the issue. Sequences brainstorm → grill → synthesize so the final
+artifact is adversarially stress-tested before being written.
 
 **Announce at start:** "I'm using the linear-brasa-brainstorm skill to design WIL-X."
 
@@ -24,123 +24,132 @@ issue's description under a `## Design` section.
 
 ---
 
+## Shared Convention A — Document upsert (never create duplicates)
+
+MCP cannot delete a Document. Always upsert:
+
+```
+1. get_issue(id=WIL-X) → read documents: [{id, title}, ...]
+2. Find the entry whose title EXACTLY equals "Design".
+3. If found:      save_document(id=<that id>, content=<new content>)   # update in place
+   If not found:  save_document(issue=WIL-X, title="Design", content=...)  # create once
+4. NEVER call save_document(issue=...) when "Design" already exists in documents.
+```
+
+## Shared Convention B — Status transition (read-back verified, never on abort)
+
+```
+1. Only after the skill's main work succeeded:
+   save_issue(id=WIL-X, state="<Target>")   # state, NOT status
+2. Read the returned JSON; confirm "status":"<Target>" before announcing.
+3. If the skill aborts/errs before completing, do NOT move the status.
+```
+
+---
+
 ## Phase 1 — Preconditions
 
 1. Require the user to provide a `WIL-X` identifier. If missing, ask once: "Which issue? (e.g., WIL-42)".
-2. Fetch the issue via `mcp__plugin_linear_linear__get_issue`. Read title, description, current label.
-3. Parse the description by level-2 headers (`## `). If a `## Design` section exists:
-   - Show its current contents to the user verbatim.
-   - Ask: "Issue already has a Design. Re-brainstorm and overwrite it? (y/n)".
-   - If the user declines, stop and exit.
-4. Briefly summarize the issue (one or two sentences) so both of you share context.
+2. Fetch the issue via `mcp__plugin_linear_linear__get_issue`. Read title, description, current label,
+   and the `documents` array.
+3. Look in `documents` for an entry with title exactly `Design`:
+   - If found: call `get_document(id=<that id>)`, show its content verbatim to the user, then ask:
+     "Issue already has a Design Document. Re-brainstorm and overwrite it? (y/n)". Exit on decline.
+   - If not found: proceed.
+4. Briefly summarize the issue title + description (one or two sentences) so both of you share context.
 
 ---
 
-## Phase 2 — Brainstorm (delegated)
+## Phase 2 — Brainstorm → Grill → Synthesize
 
-Invoke the `superpowers:brainstorming` skill. Follow its entire flow:
+### 2a — Brainstorm (diverge)
+
+Invoke the `superpowers:brainstorming` skill. Follow its flow for exploration and candidate
+generation:
 - Explore project context (files, docs, recent commits).
 - Clarifying questions, one at a time.
 - 2–3 candidate approaches with trade-offs and a recommendation.
-- Incremental design sections with per-section user approval.
 
-**CRITICAL: Override the "Write design doc" step — this is MANDATORY.**
+**Stop brainstorming before its "Write design doc" step.** Do not write to `docs/superpowers/specs/`.
+The brainstorm's job ends when the user picks a candidate approach.
 
-When `superpowers:brainstorming` reaches its "Write design doc" step (the step where it tries to save the approved design to `docs/superpowers/specs/*.md`), **DO NOT LET IT WRITE TO DISK**. Instead:
+### 2b — Grill (stress-test)
 
-### Mandatory Save-to-Linear Flow
+Invoke the `superpowers:grilling` skill on the chosen approach. Grill adversarially — one question
+at a time — until both parties share a solid understanding of the design and its failure modes.
 
-**When superpowers:brainstorming says "Writing design doc" or similar:**
+**Grilling writes nothing.** Its output is shared understanding only, not a document.
 
-1. **Get the approved design content** from superpowers:brainstorming (the full text that was just approved by the user).
-2. **Fetch current issue description:**
-   ```
-   mcp__plugin_linear_linear__get_issue(id=WIL-X)
-   ```
-3. **Parse description by level-2 headers** — identify `## Design` block (if exists) and `## Implementation Plan` block (if exists).
-4. **Construct new description** using Section Update Rules (see below):
-   - Keep intro text (above first `##`)
-   - Replace or insert `## Design` with approved content
-   - Preserve `## Implementation Plan` if it exists
-5. **Save to Linear issue:**
-   ```
-   mcp__plugin_linear_linear__save_issue(
-     id=WIL-X,
-     description=<new-description-with-design>
-   )
-   ```
+### 2c — Synthesis (mandatory write step)
 
-### Spec Self-Review (after save to Linear)
+After grilling, write the agreed design into the **Design Document** using Convention A:
 
-Read the saved `## Design` from the issue and check for:
-- Placeholder scan: Any "TBD", "TODO", incomplete sections?
-- Internal consistency: Do sections contradict?
-- Scope: Focused enough for single plan, or needs decomposition?
-- Ambiguity: Any requirement interpretable two ways?
+1. Call `get_issue(WIL-X)` to get the current `documents` list.
+2. Apply Convention A (upsert) with target title `Design` and the synthesized content.
+3. Announce: "Design Document saved."
 
-If issues found, fix inline by calling `save_issue` again.
-
-**SUCCESS CONDITION:** `## Design` section exists in Linear issue WIL-X with approved, reviewed content. No files written to `docs/superpowers/specs/`.
+This synthesis step is the only place the Design artifact is produced — brainstorm and grill
+produce no persistent output.
 
 ---
 
-## Phase 3 — User Review Gate
+## Phase 3 — Spec Self-Review
 
-**After Design is saved to Linear issue WIL-X:**
+After saving the Document:
+
+1. Call `get_document(id=<Design doc id>)` to read back exactly what was saved.
+2. Scan for: TBD · TODO · placeholder text · internal contradictions · ambiguous requirements.
+3. Fix any issues found via `save_document(id=<Design doc id>, content=<corrected>)`.
+
+**Success condition:** a `Design` Document exists on WIL-X with approved, reviewed content.
+Nothing has been written to `docs/superpowers/specs/` or to the issue description.
+
+---
+
+## Phase 4 — User Review Gate
 
 Tell the user:
-> "Design saved to WIL-X. Review it in Linear and let me know if you want changes."
+> "Design Document saved on WIL-X. Review it in Linear and let me know if you want changes."
 
 Wait for their response:
-- If they request changes: fetch the issue, edit the `## Design` section inline using `save_issue`, re-run spec self-review, ask for approval again.
-- If they approve: proceed to Phase 4.
+- If they request changes: `get_document(Design id)`, edit the content, `save_document(id=...)`,
+  re-run Phase 3 self-review, ask for approval again.
+- If they approve: proceed to Phase 5.
 
 ---
 
-## Phase 4 — Label Conversion
+## Phase 5 — Label Conversion
 
-After Design is approved:
-
-1. Check the issue's current label from the last `get_issue` call.
+1. Check the issue's current label (from the last `get_issue` call).
 2. If label is `Idea`:
    - Ask: "What label should this become now — Feature, Improvement, or Bug?"
-   - Call `save_issue(id=WIL-X, labels=[chosen_label])` to update it.
-3. If label is already `Feature`, `Improvement`, or `Bug`:
-   - Leave it unchanged.
+   - Call `save_issue(id=WIL-X, labels=[chosen_label])`.
+3. If label is already `Feature`, `Improvement`, or `Bug`: leave it unchanged.
 
 Confirm to the user: "Label updated to [label]."
 
 ---
 
-## Phase 5 — Close Out
+## Phase 6 — Status Transition to Refined
 
-Do NOT auto-invoke any other skill. End with exactly this message (substituting the identifier):
+Apply Convention B with `state="Refined"`:
 
-> ✅ Spec finalized in WIL-X. When you're ready to create the plan, ask.
+1. Call `save_issue(id=WIL-X, state="Refined")`.
+2. Read the returned JSON; confirm `"status":"Refined"` before announcing.
+3. If the call fails or returns a different status, report the error and do NOT announce Refined.
+
+Close out with exactly:
+> ✅ Design finalized in WIL-X (status: Refined). When you're ready to create the plan, ask.
 
 Share the issue URL.
-
----
-
-## Section Update Rules
-
-When modifying the issue description:
-
-1. Split the current description into blocks separated by level-2 headers (`^## `).
-2. Identify the target header (`## Design`).
-3. If it exists, replace the block from that header up to (but not including) the next `## `
-   header, or to end-of-description if no next header exists.
-4. If it does not exist, insert the new `## Design` block at the canonical position:
-   `<intro>` → `## Design` → `## Implementation Plan` → `## Execution Log`. Preserve any intro
-   text above the first `## ` header unchanged.
-5. Never modify content outside the `## Design` block.
 
 ---
 
 ## General Notes
 
 - Write issue content in **English**, even if the user speaks Portuguese.
-- Keep descriptions clean markdown — no raw HTML, no escape sequences.
-- If the user interrupts mid-brainstorm, pause, answer, resume only on their confirmation.
+- Keep markdown clean — no raw HTML, no escape sequences.
+- If the user interrupts mid-brainstorm or mid-grill, pause, answer, and resume only on their
+  confirmation. Note the interruption in context but do not write it to the Document.
 - If the design exceeds what fits comfortably in a single issue, flag it to the user rather than
   splitting silently — they may want to decompose into sub-projects (separate issues).
