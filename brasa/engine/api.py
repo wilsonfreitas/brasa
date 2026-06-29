@@ -243,6 +243,113 @@ def _build_result_skipped(
     return result
 
 
+def _run_acquisition(
+    template,
+    template_name: str,
+    kwargs: dict,
+    *,
+    operation: str,
+    force: bool,
+    verbosity: Verbosity,
+    report_file: str | Path | None,
+    acquisition_function=None,
+    retry_attempts_override=None,
+    implicit_reports: list | None = None,
+) -> TaskReport:
+    """Shared acquisition loop for download and import.
+
+    Iterates the expanded kwargs, acquires each entry (HTTP download or local
+    import depending on ``acquisition_function``), and assembles a TaskReport
+    labelled with ``operation``.
+
+    Args:
+        template: The resolved MarketDataTemplate object.
+        template_name: Template name for reporting.
+        kwargs: Expanded acquisition arguments.
+        operation: Label for the TaskReport ("download" or "import").
+        force: If True, re-acquire even if data already exists.
+        verbosity: Output verbosity level.
+        report_file: Optional path to save the report.
+        acquisition_function: Optional override for the acquisition function.
+        retry_attempts_override: Override for retry attempts count.
+        implicit_reports: Dependency reports to attach to the final report.
+
+    Returns:
+        TaskReport with results of all acquisition operations.
+    """
+    cache = CacheManager()
+    kwargs_iter = KwargsIterator(kwargs)
+    download_delay = template.downloader.download_delay
+
+    report = TaskReport(
+        operation=operation,
+        template_name=template_name,
+        verbosity=verbosity,
+    )
+    report.start(total=len(kwargs_iter))
+
+    for args in kwargs_iter:
+        start_time = datetime.now()
+
+        meta = CacheMetadata(template.id)
+        meta.extra_key = template.downloader.extra_key
+        meta.download_args = DownloadArgs(args)
+        meta.downloaded_files = []
+        meta.is_processed = False
+
+        with capture_warnings() as captured_warnings:
+            should_download = _should_download(cache, meta, force)
+
+            if force:
+                meta.is_processed = False
+
+            if should_download:
+                if download_delay > 0:
+                    time.sleep(download_delay)
+
+                dl = cache.download_marketdata(
+                    meta,
+                    acquisition_function=acquisition_function,
+                    retry_attempts_override=retry_attempts_override,
+                )
+
+                if cache.has_meta(meta):
+                    cache.load_meta(meta)
+
+                duration = (datetime.now() - start_time).total_seconds()
+                result = _build_result_from_download(
+                    dl,
+                    template_name,
+                    args,
+                    duration,
+                    meta,
+                    captured_warnings,
+                    operation=operation,
+                )
+            else:
+                duration = (datetime.now() - start_time).total_seconds()
+                result = _build_result_skipped(
+                    cache,
+                    meta,
+                    template_name,
+                    args,
+                    duration,
+                    operation=operation,
+                )
+
+        report.add_result(result)
+
+    report.finish()
+    report.dependency_reports = implicit_reports or []
+
+    if report_file:
+        report_path = Path(report_file)
+        file_format = "json" if report_path.suffix == ".json" else "txt"
+        report.save_report(report_path, format=file_format)
+
+    return report
+
+
 def download_marketdata(
     template_name: str,
     force: bool = False,
@@ -311,79 +418,16 @@ def download_marketdata(
     )
     kwargs = {**kwargs, **resolved}
 
-    cache = CacheManager()
-    kwargs_iter = KwargsIterator(kwargs)
-
-    # Get download delay from template (default 0)
-    download_delay = template.downloader.download_delay
-
-    report = TaskReport(
+    return _run_acquisition(
+        template,
+        template_name,
+        kwargs,
         operation="download",
-        template_name=template_name,
+        force=force,
         verbosity=verbosity,
+        report_file=report_file,
+        implicit_reports=implicit_reports,
     )
-    report.start(total=len(kwargs_iter))
-
-    for args in kwargs_iter:
-        start_time = datetime.now()
-
-        meta = CacheMetadata(template.id)
-        meta.extra_key = template.downloader.extra_key
-        meta.download_args = DownloadArgs(args)
-        meta.downloaded_files = []
-        meta.is_processed = False
-
-        with capture_warnings() as captured_warnings:
-            should_download = _should_download(cache, meta, force)
-
-            # _should_download may call load_meta which overwrites
-            # is_processed with the old stored value.  Reset it so
-            # a forced re-download is always marked unprocessed.
-            if force:
-                meta.is_processed = False
-
-            if should_download:
-                # Apply delay between downloads (not before the first one)
-                if download_delay > 0:
-                    time.sleep(download_delay)
-
-                dl = cache.download_marketdata(meta)
-
-                # Reload meta to get downloaded files
-                if cache.has_meta(meta):
-                    cache.load_meta(meta)
-
-                duration = (datetime.now() - start_time).total_seconds()
-                result = _build_result_from_download(
-                    dl,
-                    template_name,
-                    args,
-                    duration,
-                    meta,
-                    captured_warnings,
-                )
-            else:
-                # Task was skipped (already downloaded or duplicated/invalid)
-                duration = (datetime.now() - start_time).total_seconds()
-                result = _build_result_skipped(
-                    cache,
-                    meta,
-                    template_name,
-                    args,
-                    duration,
-                )
-
-        report.add_result(result)
-
-    report.finish()
-    report.dependency_reports = implicit_reports
-
-    if report_file:
-        report_path = Path(report_file)
-        file_format = "json" if report_path.suffix == ".json" else "txt"
-        report.save_report(report_path, format=file_format)
-
-    return report
 
 
 def _touch_output_marker(cache: CacheManager, template, report: "TaskReport") -> None:
