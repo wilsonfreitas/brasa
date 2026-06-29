@@ -430,6 +430,57 @@ def download_marketdata(
     )
 
 
+def import_marketdata(
+    template_name: str,
+    force: bool = False,
+    verbosity: Verbosity = Verbosity.NORMAL,
+    report_file: str | Path | None = None,
+    **kwargs,
+) -> TaskReport:
+    """Import local files into a template, reusing the download engine.
+
+    Replaces the acquisition step with a local-file read (``local_file_import``)
+    while reusing the template's format/validator/reader/writer/fields. Works on
+    any download template (D4b) or a standalone ``importer:``-block template.
+
+    Args:
+        template_name: Name of the template to import into.
+        force: If True, re-import even if an entry already exists.
+        verbosity: Output verbosity level.
+        report_file: Optional path to save the report (JSON or TXT).
+        **kwargs: Import arguments. ``path`` (if given) is the file path/pattern
+            and overrides any template ``path:``; remaining args render the
+            pattern and form the cache identity.
+
+    Returns:
+        TaskReport with results of all import operations.
+    """
+    from functools import partial
+
+    from brasa.downloaders import local_file_import
+
+    template = retrieve_template(template_name)
+
+    raw_path = kwargs.pop("path", None)
+    acquisition_function = (
+        local_file_import
+        if raw_path is None
+        else partial(local_file_import, _import_path=raw_path)
+    )
+
+    return _run_acquisition(
+        template,
+        template_name,
+        kwargs,
+        operation="import",
+        force=force,
+        verbosity=verbosity,
+        report_file=report_file,
+        acquisition_function=acquisition_function,
+        retry_attempts_override=0,
+    )
+
+
 def _touch_output_marker(cache: CacheManager, template, report: "TaskReport") -> None:
     """Touch .last_processed marker if any results in the report passed."""
     from .dependency_resolver import _touch_marker

@@ -1,6 +1,7 @@
 import brasa
 from brasa.engine.api import _build_result_skipped
 from brasa.engine.cache import CacheManager, CacheMetadata
+from brasa.util import DownloadArgs
 
 
 def test_build_result_skipped_uses_operation_label():
@@ -43,3 +44,45 @@ def test_run_acquisition_sets_operation_on_report(tmp_path):
         retry_attempts_override=0,
     )
     assert report.operation == "import"
+
+
+def test_import_marketdata_end_to_end_copies_and_records_provenance(tmp_path):
+    from brasa.engine.template import MarketDataTemplate, _template_cache
+
+    tpl_yaml = tmp_path / "test-import-csv.yaml"
+    tpl_yaml.write_text(
+        "id: test-import-csv\n"
+        "downloader:\n"
+        "  function: brasa.downloaders.simple_download\n"
+        "  url: http://example.invalid\n"
+        "  format: csv\n"
+        "  args:\n"
+        "    refdate: ~\n"
+    )
+    _template_cache["test-import-csv"] = MarketDataTemplate(str(tpl_yaml))
+
+    src = tmp_path / "src.csv"
+    src.write_text("symbol,price\nPETR4,10\n")
+
+    report = brasa.import_marketdata(
+        "test-import-csv",
+        path=str(src),
+        refdate="2026-06-20",
+        verbosity=brasa.Verbosity.QUIET,
+    )
+
+    assert report.operation == "import"
+    assert any(r.status.name == "PASSED" for r in report.results)
+    # copy-only: the source is untouched
+    assert src.exists()
+
+    # provenance recorded in meta.response
+    cache = CacheManager()
+    meta = CacheMetadata("test-import-csv")
+    meta.extra_key = ""
+    meta.download_args = DownloadArgs({"refdate": "2026-06-20"})
+    cache.load_meta(meta)
+    assert meta.response["acquisition"] == "import"
+    assert meta.response["original_name"] == "src.csv"
+
+    _template_cache.pop("test-import-csv", None)

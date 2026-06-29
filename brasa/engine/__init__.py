@@ -28,6 +28,7 @@ from .api import (
     get_dependency_graph,
     get_execution_plan,
     get_marketdata,
+    import_marketdata,
     process_etl,
     process_marketdata,
 )
@@ -205,6 +206,7 @@ __all__ = [
     "get_execution_plan",
     "get_fname_part",
     "get_marketdata",
+    "import_marketdata",
     "json_convert_from_object",
     "json_convert_to_object",
     "list_templates",
