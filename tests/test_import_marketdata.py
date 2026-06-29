@@ -86,3 +86,38 @@ def test_import_marketdata_end_to_end_copies_and_records_provenance(tmp_path):
     assert meta.response["original_name"] == "src.csv"
 
     _template_cache.pop("test-import-csv", None)
+
+
+def test_import_bulk_by_date_pattern(tmp_path):
+    from datetime import datetime
+
+    from brasa.engine.template import MarketDataTemplate, _template_cache
+
+    tpl_yaml = tmp_path / "test-import-bulk.yaml"
+    tpl_yaml.write_text(
+        "id: test-import-bulk\n"
+        "importer:\n"
+        f"  path: {tmp_path}/%Y-%m-%d.csv\n"
+        "  format: csv\n"
+        "  args:\n"
+        "    refdate: ~\n"
+    )
+    _template_cache["test-import-bulk"] = MarketDataTemplate(str(tpl_yaml))
+
+    days = [datetime(2026, 6, 1), datetime(2026, 6, 2), datetime(2026, 6, 3)]
+    for d in days:
+        (tmp_path / f"{d:%Y-%m-%d}.csv").write_text(f"d,{d:%Y-%m-%d}\n")
+    # leave 2026-06-02 missing to prove per-date FAILED reporting
+    (tmp_path / "2026-06-02.csv").unlink()
+
+    report = brasa.import_marketdata(
+        "test-import-bulk",
+        refdate=days,
+        verbosity=brasa.Verbosity.QUIET,
+    )
+
+    statuses = sorted(r.status.name for r in report.results)
+    assert statuses.count("PASSED") == 2
+    assert statuses.count("FAILED") == 1
+
+    _template_cache.pop("test-import-bulk", None)

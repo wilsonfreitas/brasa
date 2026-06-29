@@ -27,7 +27,7 @@ def json_convert_to_object(obj):
 
     Handles ISO format date strings to datetime objects.
     """
-    date_pattern = r"\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}Z)?"
+    date_pattern = r"\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})?)?$"
     for key, value in obj.items():
         if isinstance(value, str) and re.match(date_pattern, value):
             obj[key] = datetime.fromisoformat(value)
