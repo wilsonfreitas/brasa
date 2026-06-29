@@ -28,9 +28,13 @@ You manage the entire development lifecycle for the **brasa** project in Linear.
 **Trigger**: user wants to capture an idea, feature request, or bug they thought of.
 
 1. If the user gave only a title, ask for a short description (one paragraph is enough — or proceed without one if they say it's enough as-is).
-2. Ask which label fits: **Idea**, **Feature**, **Improvement**, or **Bug**.
-   - Default to **Idea** when the user is still exploring and hasn't refined it yet.
-   - Suggest the most likely label based on context, but let the user confirm.
+2. Recommend a label — don't just list them. Read the title and description, then lead with a
+   concrete suggestion plus a one-line justification; the user only overrides if it's wrong.
+   - Phrase it like: "This looks like an **Improvement** (it enhances existing functionality).
+     Confirm, or pick a different label: Bug / Feature / Idea."
+   - The four labels are **Idea**, **Feature**, **Improvement**, **Bug**. Default to **Idea**
+     only when the request is genuinely exploratory and not yet refined.
+   - Wait for the user to confirm or override before creating the issue.
 3. Create the issue via `mcp__plugin_linear_linear__save_issue`:
    - `team`: Wilsonfreitas team ID
    - `project`: brasa project ID

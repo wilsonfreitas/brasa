@@ -70,6 +70,14 @@ MCP cannot delete a Document. Always upsert:
    - Bite-sized tasks (2–5 minute steps) with exact file paths, complete code, exact commands, and
      the no-placeholders rule.
    - Mandatory plan header (`# ... Implementation Plan` with `Goal`, `Architecture`, `Tech Stack`).
+3. **Override: no git steps.** `superpowers:writing-plans` emits `git add` / `git commit` steps and
+   preaches frequent commits. Strip them — the plan MUST NOT contain any git, commit, push, or
+   branch steps. Version control is owned entirely by `linear-brasa-executor` (branch-per-issue,
+   one commit per task, gated merge to main). Plans describe what code changes to make and how to
+   verify them; the executor decides how they land in git.
+4. **Required header note.** The plan header MUST include this exact line directly under the
+   `Tech Stack` line:
+   > Version control (branch, commit, merge) is handled by linear-brasa-executor; this plan contains no git steps.
 
 ### 2b — Override the "Save plan" step
 

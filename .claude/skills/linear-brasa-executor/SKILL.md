@@ -3,8 +3,9 @@ name: linear-brasa-executor
 description: >
   Execute a previously-planned brasa Linear issue end-to-end: read the plan from the
   Implementation Plan Document, work through each step faithfully, tick checkboxes in that Document
-  as they complete, maintain an append-only Execution Log comment with Findings, run quality gates,
-  run gated Findings triage at close-out, and mark the issue Done. Use whenever the user says
+  as they complete, maintain an append-only Execution Log comment with Findings, work on a
+  per-issue git branch with one commit per task, run quality gates, merge to main, run gated
+  Findings triage at close-out, and mark the issue Done. Use whenever the user says
   "execute WIL-X", "run the plan for WIL-X", "implement WIL-X", or otherwise wants to turn a
   planned issue into actual code changes — even if they don't say "execute".
 ---
@@ -79,7 +80,8 @@ Where `<kind>` is one of:
 
 ## Phase 1 — Understand the Plan
 
-1. Fetch the issue with `mcp__plugin_linear_linear__get_issue`. Read title and the `documents` array.
+1. Fetch the issue with `mcp__plugin_linear_linear__get_issue`. Read title, the `gitBranchName`
+   field, and the `documents` array.
 2. Look in `documents` for an entry with title exactly `Implementation Plan`:
    - If absent, stop: "Issue WIL-X has no Implementation Plan Document. Run linear-brasa-plan first."
    - If found, call `get_document(id=<that id>)` and store both the id and the full content.
@@ -90,8 +92,12 @@ Where `<kind>` is one of:
    - Identify **acceptance criteria**, if separate from the steps.
 4. Build a `TodoWrite` list mirroring the plan's steps (one todo per top-level step). Sub-steps
    live inside the same todo — track them in your head and in the Execution Log.
-5. Apply Convention B with `state="In Progress"` (read-back). Do not touch the issue description.
-6. Create the Execution Log — see next section.
+5. **Git preflight (abort-safe).** Run the preflight guard from **The Git Workflow** above: if any
+   tracked file is modified or staged, abort here and tell the user to commit or stash first.
+   Aborting now leaves the issue in `Planned` — do NOT move the status.
+6. Apply Convention B with `state="In Progress"` (read-back). Do not touch the issue description.
+7. **Create the working branch** from local `main` using `gitBranchName` (see **The Git Workflow**).
+8. Create the Execution Log — see the section above.
 
 ---
 
@@ -132,6 +138,54 @@ Keep entries terse. The log should fit comfortably on screen — it's a trail, n
 
 ---
 
+## The Git Workflow
+
+The executor owns the **entire** version-control lifecycle for the issue. No other actor touches
+git, and the Implementation Plan contains no git commands (the planner is instructed to omit them).
+The plan's task structure **is** the commit boundary.
+
+**Branch model**
+- Work happens on a dedicated branch per issue, never directly on `main`.
+- Branch from local `main` as-is — no `git fetch` (single-developer repo).
+- The branch name is the `gitBranchName` field returned by `get_issue`
+  (e.g. `wilsonfreitas/wil-82-...`).
+
+**Preflight guard (before creating the branch)**
+- Run `git status --porcelain`. If any **tracked** file is modified or staged, abort and ask the
+  user to commit or stash first. Untracked files (e.g. `scripts/out/`, `skills-lock.json`) are
+  harmless — ignore them.
+
+**One commit per task**
+- At the end of each top-level task, if that task changed files, commit them on the branch with a
+  message derived from the task title and the issue id, e.g. `feat: <task title> (WIL-X)`.
+- Skip the commit for tasks that changed nothing (e.g. a pure verification task).
+- Stage only the files the task actually touched — never `git add -A` blindly.
+
+**Gating boundary**
+- Only the **merge into `main`** is gated. Intermediate per-task commits on the branch may have red
+  tests — that's normal on a feature branch. The Phase 3 quality gates guard the merge, not every
+  commit.
+- If a gate fails and you edit to fix it, those fixes land in one final commit:
+  `chore: satisfy quality gates (WIL-X)`.
+
+**Merge (only when all gates are green)**
+1. `git checkout main`
+2. `git merge --no-ff <branch>` — preserve a merge commit so the branch stays visible in history.
+3. On a merge conflict (rare when branching from current `main`): `git merge --abort`, leave the
+   branch intact, and report to the user — never force the merge, and do not move the issue to Done.
+4. On success: delete the branch with `git branch -d <branch>` (safe form — refuses if not merged).
+   Never use `-D`.
+- **Do not push.** Pushing stays a manual step the user runs when ready.
+
+**On gate failure that can't be fixed**
+- Leave the branch in place, do not merge, do not move the issue to Done. Report the failing output.
+
+**Logging**
+- Record the actual git actions in the Execution Log: branch name, each task's commit SHA, the
+  merge result, and the branch deletion.
+
+---
+
 ## Phase 2 — Execute the Plan
 
 For each step, in order:
@@ -144,7 +198,9 @@ For each step, in order:
    - Tick the step's `- [ ]` → `- [x]` in the **Implementation Plan Document** via Convention A
      (`save_document(id=<Plan doc id>, content=<updated content>)`). The issue description is
      never modified.
-   - Update the Execution Log comment (edit in place, same id).
+   - **Commit (one per task):** if this top-level task changed files, commit them on the branch per
+     **The Git Workflow** (`feat: <task title> (WIL-X)`); skip if nothing changed.
+   - Update the Execution Log comment (edit in place, same id) — include the commit SHA if one was made.
    - Mark the `TodoWrite` item `completed`.
 4. Move to the next step.
 
@@ -164,6 +220,9 @@ Run in order:
 2. **Ruff**: `uv run ruff check . && uv run ruff format --check .`
 3. **Pre-commit**: `uv run pre-commit run --all-files`
 
+**Gating boundary:** these gates guard the **merge into `main`**, not each branch commit (see
+**The Git Workflow**). Run them once, after all tasks are done.
+
 ### On failure
 
 Try to fix it. Fixing a real gate failure is faithful execution, not scope creep.
@@ -173,6 +232,8 @@ Try to fix it. Fixing a real gate failure is faithful execution, not scope creep
 - **Ruff failures**: run `uv run ruff check . --fix` and `uv run ruff format .`, then re-check.
 - **Pre-commit failures**: read the hook output, fix the underlying issue, re-stage, re-run. Never
   pass `--no-verify`.
+- After fixing, any code changes land in one commit `chore: satisfy quality gates (WIL-X)` on the
+  branch (see **The Git Workflow**).
 
 After fixing, rerun the failing gate (and any gate that comes after it) from scratch. Log the
 failure and the fix tersely in the Execution Log.
@@ -186,18 +247,22 @@ failing output. Don't mark Done. Don't announce completion. The user will decide
 
 Only reachable after all three gates are green.
 
-1. **Gated Findings triage**: apply Convention D — scan the Execution Log for `candidate-work`
+1. **Merge to `main`.** Run the merge from **The Git Workflow**: `git checkout main`,
+   `git merge --no-ff <branch>`, then `git branch -d <branch>`. Do not push. On conflict, abort and
+   report (do not force) and STOP — do not move the issue to Done. Log the merge result and branch
+   deletion in the Execution Log.
+2. **Gated Findings triage**: apply Convention D — scan the Execution Log for `candidate-work`
    findings, present them as a numbered list, ask once which to promote, create approved ones as new
    Backlog issues with `relatedTo=["WIL-X"]`. Never create without approval.
-2. **Finalize the Execution Log**: append the `### Completion` section with gate results and a
+3. **Finalize the Execution Log**: append the `### Completion` section with gate results and a
    closing timestamp.
-3. **Ensure all Plan Document checkboxes are ticked**: call `get_document(id=<Plan doc id>)` and
+4. **Ensure all Plan Document checkboxes are ticked**: call `get_document(id=<Plan doc id>)` and
    confirm all `- [ ]` items are now `- [x]`. If any remain, tick them via Convention A.
-4. **Move to Done**: apply Convention B with `state="Done"`. Verify the returned JSON shows
+5. **Move to Done**: apply Convention B with `state="Done"`. Verify the returned JSON shows
    `"status":"Done","statusType":"completed"` before announcing. The description is not modified.
-5. Announce verbatim: **"I'm done with this gig!"**
+6. Announce verbatim: **"I'm done with this gig!"**
    (English rendering of "Terminei essa budega!" — keep the playful tone.)
-6. Share the issue URL.
+7. Share the issue URL.
 
 ---
 
