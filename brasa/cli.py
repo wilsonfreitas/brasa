@@ -534,8 +534,8 @@ parser_doctor.add_argument(
     "--category",
     nargs="+",
     metavar="CATEGORY",
-    choices=["raw", "db", "meta", "templates", "gaps"],
-    help="run only specific categories: raw, db, meta, templates, gaps",
+    choices=["raw", "db", "meta", "templates", "gaps", "validations"],
+    help="run only specific categories: raw, db, meta, templates, gaps, validations",
 )
 parser_doctor.add_argument(
     "--template",

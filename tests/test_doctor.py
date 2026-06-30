@@ -8,17 +8,25 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import textwrap
 from contextlib import closing
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.parquet as pq
+import pytest
+import yaml
+from bizdays import Calendar
 
 from brasa.engine.cache import CacheManager
 from brasa.engine.doctor import (
     DoctorReport,
     Issue,
+    _calendar_completeness_gaps,
+    _load_validations_config,
+    _read_series_dates,
+    check_calendar_completeness,
     check_corrupted_parquet,
     check_date_gaps,
     check_empty_parquet,
@@ -500,3 +508,318 @@ class TestRunDoctor:
         """run_doctor accepts template_filter without error."""
         report = run_doctor(template_filter=["b3-cotahist-daily"])
         assert isinstance(report, DoctorReport)
+
+
+# ---------------------------------------------------------------------------
+# Calendar-completeness validation (WIL-6)
+# ---------------------------------------------------------------------------
+
+
+def _write_series_parquet(
+    dataset_rel: str, symbol: str | None, dates: list[date]
+) -> Path:
+    """Write a synthetic series parquet under db/<dataset_rel>.
+
+    When ``symbol`` is given, writes to a Hive partition ``symbol=<symbol>/``;
+    otherwise writes a single unpartitioned file.
+    """
+    man = CacheManager()
+    ds_dir = Path(man.db_path(dataset_rel))
+    part_dir = ds_dir / f"symbol={symbol}" if symbol is not None else ds_dir
+    part_dir.mkdir(parents=True, exist_ok=True)
+    table = pa.table(
+        {
+            "refdate": pa.array(dates, type=pa.date32()),
+            "value": pa.array([1.0] * len(dates), type=pa.float64()),
+        }
+    )
+    pq.write_table(table, part_dir / "part-0.parquet")
+    return ds_dir
+
+
+def _write_validations(tmp_path, body: str) -> Path:
+    p = tmp_path / "validations.yaml"
+    p.write_text(textwrap.dedent(body))
+    return p
+
+
+def _full_anbima_series(dataset_rel, symbol, start, end):
+    cal = Calendar.load("ANBIMA")
+    days = [d.date() if hasattr(d, "date") else d for d in cal.seq(start, end)]
+    _write_series_parquet(dataset_rel, symbol, days)
+    return days
+
+
+class TestLoadValidationsConfig:
+    def test_missing_file_returns_empty(self, tmp_path):
+        assert _load_validations_config(tmp_path / "nope.yaml") == {}
+
+    def test_empty_file_returns_empty(self, tmp_path):
+        p = tmp_path / "v.yaml"
+        p.write_text("")
+        assert _load_validations_config(p) == {}
+
+    def test_parses_mapping(self, tmp_path):
+        p = tmp_path / "v.yaml"
+        p.write_text(
+            textwrap.dedent(
+                """
+                staging.bcb-sgs:
+                  - rule: calendar-completeness
+                    group_column: symbol
+                    series:
+                      CDI: {calendar: ANBIMA}
+                """
+            )
+        )
+        cfg = _load_validations_config(p)
+        assert "staging.bcb-sgs" in cfg
+        assert cfg["staging.bcb-sgs"][0]["rule"] == "calendar-completeness"
+
+    def test_non_mapping_root_raises(self, tmp_path):
+        p = tmp_path / "v.yaml"
+        p.write_text("- just\n- a\n- list\n")
+        with pytest.raises(ValueError):
+            _load_validations_config(p)
+
+    def test_unparseable_yaml_raises(self, tmp_path):
+        p = tmp_path / "v.yaml"
+        p.write_text("a: [1, 2\n")  # broken
+        with pytest.raises(yaml.YAMLError):
+            _load_validations_config(p)
+
+
+class TestReadSeriesDates:
+    def test_absent_dataset_returns_empty(self):
+        man = CacheManager()
+        missing = Path(man.db_path("staging/does-not-exist"))
+        assert _read_series_dates(missing, "refdate", "symbol", "CDI") == set()
+
+    def test_reads_grouped_series(self):
+        d = [date(2020, 1, 2), date(2020, 1, 3)]
+        ds_dir = _write_series_parquet("staging/read-grouped", "CDI", d)
+        _write_series_parquet("staging/read-grouped", "SELIC", [date(2020, 6, 1)])
+        got = _read_series_dates(ds_dir, "refdate", "symbol", "CDI")
+        assert got == set(d)
+
+    def test_reads_single_series(self):
+        d = [date(2020, 1, 2), date(2020, 1, 3)]
+        ds_dir = _write_series_parquet("staging/read-single", None, d)
+        got = _read_series_dates(ds_dir, "refdate", None, None)
+        assert got == set(d)
+
+    def test_absent_group_value_returns_empty(self):
+        ds_dir = _write_series_parquet("staging/read-nofoo", "CDI", [date(2020, 1, 2)])
+        assert _read_series_dates(ds_dir, "refdate", "symbol", "FOO") == set()
+
+
+class TestCalendarCompletenessGaps:
+    def test_complete_series_no_gaps(self):
+        cal = Calendar.load("ANBIMA")
+        days = [
+            d.date() if hasattr(d, "date") else d
+            for d in cal.seq(date(2020, 1, 2), date(2020, 3, 31))
+        ]
+        assert _calendar_completeness_gaps(set(days), "ANBIMA", None, None) == []
+
+    def test_missing_business_day_detected(self):
+        cal = Calendar.load("ANBIMA")
+        days = [
+            d.date() if hasattr(d, "date") else d
+            for d in cal.seq(date(2020, 1, 2), date(2020, 3, 31))
+        ]
+        hole = days[10]
+        present = set(days) - {hole}
+        missing = _calendar_completeness_gaps(present, "ANBIMA", None, None)
+        assert missing == [hole]
+
+    def test_weekend_not_required(self):
+        # only business days present; a Saturday inside the range is not a gap
+        cal = Calendar.load("ANBIMA")
+        days = [
+            d.date() if hasattr(d, "date") else d
+            for d in cal.seq(date(2020, 1, 2), date(2020, 1, 31))
+        ]
+        assert _calendar_completeness_gaps(set(days), "ANBIMA", None, None) == []
+
+    def test_explicit_start_extends_window(self):
+        cal = Calendar.load("ANBIMA")
+        days = [
+            d.date() if hasattr(d, "date") else d
+            for d in cal.seq(date(2020, 6, 1), date(2020, 6, 30))
+        ]
+        missing = _calendar_completeness_gaps(set(days), "ANBIMA", "2020-05-01", None)
+        # every business day in May is missing
+        may = [
+            d.date() if hasattr(d, "date") else d
+            for d in cal.seq(date(2020, 5, 1), date(2020, 5, 29))
+        ]
+        assert set(may).issubset(set(missing))
+
+    def test_unknown_calendar_raises(self):
+        with pytest.raises(Exception):  # noqa: B017 - bizdays raises bare Exception
+            _calendar_completeness_gaps({date(2020, 1, 2)}, "NOPE", None, None)
+
+    def test_bad_start_raises(self):
+        with pytest.raises(ValueError):
+            _calendar_completeness_gaps(
+                {date(2020, 1, 2)}, "ANBIMA", "not-a-date", None
+            )
+
+
+class TestCheckCalendarCompleteness:
+    def test_complete_series_no_issue(self, tmp_path):
+        _full_anbima_series("staging/cc-ok", "CDI", date(2020, 1, 2), date(2020, 3, 31))
+        cfg = _write_validations(
+            tmp_path,
+            """
+            staging.cc-ok:
+              - rule: calendar-completeness
+                group_column: symbol
+                series:
+                  CDI: {calendar: ANBIMA}
+            """,
+        )
+        assert check_calendar_completeness(cfg) == []
+
+    def test_business_day_hole_reported(self, tmp_path):
+        days = _full_anbima_series(
+            "staging/cc-hole", "CDI", date(2020, 1, 2), date(2020, 3, 31)
+        )
+        # rewrite CDI without one business day
+        _write_series_parquet("staging/cc-hole", "CDI", days[:10] + days[11:])
+        cfg = _write_validations(
+            tmp_path,
+            """
+            staging.cc-hole:
+              - rule: calendar-completeness
+                group_column: symbol
+                series:
+                  CDI: {calendar: ANBIMA}
+            """,
+        )
+        issues = check_calendar_completeness(cfg)
+        assert len(issues) == 1
+        assert issues[0].code == "calendar-completeness"
+        assert issues[0].severity == "error"
+        assert str(days[10]) in issues[0].details
+
+    def test_unlisted_series_ignored(self, tmp_path):
+        _full_anbima_series(
+            "staging/cc-unlisted", "CDI", date(2020, 1, 2), date(2020, 1, 31)
+        )
+        # SELIC has a big hole but is not listed -> ignored
+        _write_series_parquet("staging/cc-unlisted", "SELIC", [date(2020, 1, 2)])
+        cfg = _write_validations(
+            tmp_path,
+            """
+            staging.cc-unlisted:
+              - rule: calendar-completeness
+                group_column: symbol
+                series:
+                  CDI: {calendar: ANBIMA}
+            """,
+        )
+        assert check_calendar_completeness(cfg) == []
+
+    def test_absent_dataset_skipped(self, tmp_path):
+        cfg = _write_validations(
+            tmp_path,
+            """
+            staging.cc-absent:
+              - rule: calendar-completeness
+                group_column: symbol
+                series:
+                  CDI: {calendar: ANBIMA}
+            """,
+        )
+        assert check_calendar_completeness(cfg) == []
+
+    def test_single_series_shape(self, tmp_path):
+        cal = Calendar.load("ANBIMA")
+        days = [
+            d.date() if hasattr(d, "date") else d
+            for d in cal.seq(date(2020, 1, 2), date(2020, 1, 31))
+        ]
+        _write_series_parquet("staging/cc-single", None, days[:5] + days[6:])
+        cfg = _write_validations(
+            tmp_path,
+            """
+            staging.cc-single:
+              - rule: calendar-completeness
+                calendar: ANBIMA
+            """,
+        )
+        issues = check_calendar_completeness(cfg)
+        assert len(issues) == 1
+        assert str(days[5]) in issues[0].details
+
+    def test_unknown_calendar_is_error(self, tmp_path):
+        _full_anbima_series(
+            "staging/cc-badcal", "CDI", date(2020, 1, 2), date(2020, 1, 31)
+        )
+        cfg = _write_validations(
+            tmp_path,
+            """
+            staging.cc-badcal:
+              - rule: calendar-completeness
+                group_column: symbol
+                series:
+                  CDI: {calendar: NOPE}
+            """,
+        )
+        issues = check_calendar_completeness(cfg)
+        assert len(issues) == 1
+        assert issues[0].code == "validation-config-error"
+        assert issues[0].severity == "error"
+
+    def test_unknown_rule_is_error(self, tmp_path):
+        cfg = _write_validations(
+            tmp_path,
+            """
+            staging.cc-badrule:
+              - rule: not-a-rule
+            """,
+        )
+        issues = check_calendar_completeness(cfg)
+        assert len(issues) == 1
+        assert issues[0].code == "validation-config-error"
+
+    def test_grouped_missing_series_is_error(self, tmp_path):
+        cfg = _write_validations(
+            tmp_path,
+            """
+            staging.cc-noseries:
+              - rule: calendar-completeness
+                group_column: symbol
+            """,
+        )
+        issues = check_calendar_completeness(cfg)
+        assert len(issues) == 1
+        assert issues[0].code == "validation-config-error"
+
+    def test_unparseable_config_is_error(self, tmp_path):
+        cfg = _write_validations(tmp_path, "a: [1, 2\n")
+        issues = check_calendar_completeness(cfg)
+        assert len(issues) == 1
+        assert issues[0].code == "validation-config-error"
+
+
+class TestValidationsCategory:
+    def test_run_doctor_validations_category(self):
+        from brasa.engine.doctor import _CATEGORY_KEYS
+
+        assert "validations" in _CATEGORY_KEYS
+        assert _CATEGORY_KEYS["validations"] == ["calendar-completeness"]
+        report = run_doctor(categories=["validations"])
+        assert isinstance(report, DoctorReport)
+
+
+class TestShippedValidationsConfig:
+    def test_default_config_loads_and_covers_bcb_sgs(self):
+        cfg = _load_validations_config()  # default packaged path
+        assert "staging.bcb-sgs" in cfg
+        rule = cfg["staging.bcb-sgs"][0]
+        assert rule["rule"] == "calendar-completeness"
+        assert rule["group_column"] == "symbol"
+        assert "CDI" in rule["series"]
