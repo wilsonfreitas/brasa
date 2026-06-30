@@ -24,6 +24,8 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 # ---------------------------------------------------------------------------
 # Data types
 # ---------------------------------------------------------------------------
@@ -200,6 +202,140 @@ def _get_catalog_rows() -> list[dict[str, Any]]:
             return rows
         except sqlite3.OperationalError:
             return []
+
+
+def _load_validations_config(path: Path | None = None) -> dict[str, Any]:
+    """Load the validations config mapping (layer.dataset -> list of rules).
+
+    Args:
+        path: Optional explicit config path. Defaults to the packaged
+            ``brasa/files/validations.yaml``.
+
+    Returns:
+        Parsed mapping; ``{}`` when the file is absent or empty.
+
+    Raises:
+        ValueError: If the YAML root is not a mapping.
+        yaml.YAMLError: If the file cannot be parsed.
+    """
+    from .resources import package_path
+
+    cfg_path = Path(path) if path is not None else package_path("validations.yaml")
+    if not cfg_path.exists():
+        return {}
+    with cfg_path.open() as f:
+        data = yaml.safe_load(f)
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise ValueError(
+            "validations config root must be a mapping of "
+            "'layer.dataset' -> list of rules"
+        )
+    return data
+
+
+def _read_series_dates(
+    dataset_path: Path,
+    date_column: str,
+    group_column: str | None,
+    group_value: str | None,
+) -> set[date]:
+    """Return the distinct dates present for one series.
+
+    Args:
+        dataset_path: Absolute path to the dataset folder under db/.
+        date_column: Column holding the observation date.
+        group_column: Column separating series (e.g. ``symbol``); ``None``
+            for single-series datasets.
+        group_value: The series value to filter on when ``group_column`` is set.
+
+    Returns:
+        Set of distinct dates; empty when the dataset/series is absent or
+        unreadable.
+    """
+    import pyarrow.compute as pc
+    import pyarrow.dataset as ds
+
+    if not dataset_path.exists():
+        return set()
+    try:
+        dataset = ds.dataset(str(dataset_path), partitioning="hive")
+    except Exception:
+        return set()
+
+    if date_column not in dataset.schema.names:
+        return set()
+
+    filt = None
+    if group_column is not None:
+        if group_column not in dataset.schema.names:
+            return set()
+        filt = pc.field(group_column) == group_value
+
+    try:
+        table = dataset.to_table(columns=[date_column], filter=filt)
+    except Exception:
+        return set()
+
+    result: set[date] = set()
+    for v in table.column(date_column).to_pylist():
+        if v is None:
+            continue
+        result.add(v.date() if hasattr(v, "date") else v)
+    return result
+
+
+def _as_date(value: Any) -> date:
+    """Coerce a bizdays/datetime/date/ISO-string value to a ``date``."""
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value))
+
+
+def _calendar_completeness_gaps(
+    present_dates: set[date],
+    calendar_name: str,
+    start_cfg: str | None,
+    end_cfg: str | None,
+) -> list[date]:
+    """Return business days missing from a series, sorted ascending.
+
+    Args:
+        present_dates: Dates actually present for the series (non-empty).
+        calendar_name: bizdays calendar name (e.g. ``ANBIMA``).
+        start_cfg: Optional ISO start date; defaults to the first present date.
+        end_cfg: Optional ISO end date, or the keyword ``today``; defaults to
+            the last present date.
+
+    Returns:
+        Sorted list of business days in the window that have no observation.
+
+    Raises:
+        Exception: If the calendar name is unknown or start/end are malformed.
+    """
+    from bizdays import Calendar
+
+    cal = Calendar.load(calendar_name)
+
+    lower = _as_date(start_cfg) if start_cfg is not None else min(present_dates)
+    if end_cfg is None:
+        upper = max(present_dates)
+    elif str(end_cfg) == "today":
+        upper = date.today()
+    else:
+        upper = _as_date(end_cfg)
+
+    # Clamp to the calendar's coverage so bizdays.seq cannot raise out of range.
+    lower = max(lower, _as_date(cal.startdate))
+    upper = min(upper, _as_date(cal.enddate))
+    if lower > upper:
+        return []
+
+    biz = [_as_date(d) for d in cal.seq(lower, upper)]
+    return sorted(d for d in biz if d not in present_dates)
 
 
 # ---------------------------------------------------------------------------
@@ -952,6 +1088,143 @@ def check_date_gaps(  # noqa: PLR0912
 
 
 # ---------------------------------------------------------------------------
+# Category: Data Validation
+# ---------------------------------------------------------------------------
+
+
+def _validation_config_error(dataset_key: str, msg: str) -> Issue:
+    """Build a config-error Issue for a malformed validation entry."""
+    return Issue(
+        category="Data Validation",
+        code="validation-config-error",
+        severity="error",
+        description=f"Malformed validation config for {dataset_key}: {msg}",
+        details=[],
+        fixable=False,
+    )
+
+
+def _run_calendar_completeness_rule(
+    dataset_key: str, dataset_path: Path, rule: dict[str, Any]
+) -> list[Issue]:
+    """Evaluate a single calendar-completeness rule for one dataset."""
+    date_column = rule.get("date_column", "refdate")
+    group_column = rule.get("group_column")
+
+    if group_column is not None:
+        series = rule.get("series")
+        if not isinstance(series, dict) or not series:
+            return [
+                _validation_config_error(
+                    dataset_key,
+                    "grouped calendar-completeness requires a non-empty 'series' map",
+                )
+            ]
+        series_items: list[tuple[str | None, dict[str, Any]]] = [
+            (name, cfg if isinstance(cfg, dict) else {}) for name, cfg in series.items()
+        ]
+    else:
+        series_items = [(None, rule)]
+
+    issues: list[Issue] = []
+    for series_name, scfg in series_items:
+        calendar_name = scfg.get("calendar", "ANBIMA")
+        start_cfg = scfg.get("start")
+        end_cfg = scfg.get("end")
+        label = f"{dataset_key}/{series_name}" if series_name else dataset_key
+
+        present = _read_series_dates(
+            dataset_path, date_column, group_column, series_name
+        )
+        if not present:
+            continue  # absent dataset/series -> skip silently
+
+        try:
+            missing = _calendar_completeness_gaps(
+                present, calendar_name, start_cfg, end_cfg
+            )
+        except Exception as exc:
+            issues.append(
+                _validation_config_error(
+                    label, f"invalid calendar-completeness config ({exc})"
+                )
+            )
+            continue
+
+        if missing:
+            issues.append(
+                Issue(
+                    category="Data Validation",
+                    code="calendar-completeness",
+                    severity="error",
+                    description=(
+                        f"{label}: {len(missing)} missing {calendar_name} "
+                        f"business day(s) between {missing[0]} and {missing[-1]}"
+                    ),
+                    details=[str(d) for d in missing],
+                    fixable=False,
+                )
+            )
+    return issues
+
+
+def check_calendar_completeness(
+    validations_config: Path | None = None,
+) -> list[Issue]:
+    """Validate that configured series are complete against a business calendar.
+
+    Args:
+        validations_config: Optional explicit path to a validations YAML file.
+            Defaults to the packaged ``brasa/files/validations.yaml``.
+
+    Returns:
+        List of issues (gaps and config errors). Never raises.
+    """
+    from .cache import CacheManager
+
+    man = CacheManager()
+
+    try:
+        config = _load_validations_config(validations_config)
+    except Exception as exc:
+        return [
+            Issue(
+                category="Data Validation",
+                code="validation-config-error",
+                severity="error",
+                description=f"Cannot load validations config: {exc}",
+                details=[],
+                fixable=False,
+            )
+        ]
+
+    issues: list[Issue] = []
+    for dataset_key, rules in config.items():
+        if not isinstance(rules, list):
+            issues.append(_validation_config_error(dataset_key, "rules must be a list"))
+            continue
+        dataset_path = Path(man.db_path(dataset_key.replace(".", "/", 1)))
+        for rule in rules:
+            if not isinstance(rule, dict):
+                issues.append(
+                    _validation_config_error(dataset_key, "rule must be a mapping")
+                )
+                continue
+            rule_type = rule.get("rule")
+            if rule_type != "calendar-completeness":
+                issues.append(
+                    _validation_config_error(
+                        dataset_key, f"unknown validation rule '{rule_type}'"
+                    )
+                )
+                continue
+            issues.extend(
+                _run_calendar_completeness_rule(dataset_key, dataset_path, rule)
+            )
+    return issues
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
@@ -967,6 +1240,7 @@ _CATEGORY_KEYS = {
     "meta": ["unresolved-errors", "invalid-downloads"],
     "templates": ["stale-etl", "missing-etl-source"],
     "gaps": ["date-gaps"],
+    "validations": ["calendar-completeness"],
 }
 
 
@@ -1011,6 +1285,7 @@ def run_doctor(
         "stale-etl": lambda: check_stale_etl(template_filter),
         "missing-etl-source": lambda: check_missing_etl_source(template_filter),
         "date-gaps": lambda: check_date_gaps(since_days, template_filter),
+        "calendar-completeness": check_calendar_completeness,
     }
 
     for code, check_fn in check_map.items():
