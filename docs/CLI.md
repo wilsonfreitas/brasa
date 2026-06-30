@@ -545,7 +545,7 @@ brasa doctor [options]
 |------|-------------|
 | `--fix` | Apply all auto-fixable issues |
 | `--yes` | Skip confirmation prompt when using `--fix` |
-| `--category {raw,db,meta,templates,gaps}` | Run only specific check categories |
+| `--category {raw,db,meta,templates,gaps,validations}` | Run only specific check categories |
 | `--template TEMPLATE [...]` | Restrict gap/stale checks to specific templates |
 | `--since DAYS` | Look back N days for gap checks (default: 30) |
 
@@ -563,6 +563,9 @@ brasa doctor --category gaps --since 7
 
 # Check specific templates
 brasa doctor --template b3-cotahist-daily b3-bvbg087
+
+# Check declarative completeness rules (e.g. CDI in staging.bcb-sgs)
+brasa doctor --category validations
 ```
 
 ---
