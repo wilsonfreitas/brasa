@@ -9,7 +9,51 @@ staging.bcb-sgs:
     date_column: refdate
     group_column: symbol
     series:
-      CDI: {calendar: ANBIMA}
-      SELIC: {calendar: ANBIMA}
-      SETA: {calendar: ANBIMA}
+      CDI: { calendar: ANBIMA }
+      SELIC: { calendar: ANBIMA }
+      SETA: { calendar: ANBIMA }
       # IPCA / IGPM are monthly — deferred to v2 (see WIL-85).
+
+staging.bcb-currency:
+  - rule: calendar-completeness
+    date_column: refdate
+    group_column: symbol
+    series:
+      USD: { calendar: ANBIMA }
+      EUR: { calendar: ANBIMA }
+      JPY: { calendar: ANBIMA }
+      GBP: { calendar: ANBIMA }
+
+staging.b3-indexes-historical-prices:
+  - rule: calendar-completeness
+    date_column: refdate
+    group_column: symbol
+    series:
+      IBOV: { calendar: B3 }
+      IFIX: { calendar: B3 }
+      SMLL: { calendar: B3 }
+      ICON: { calendar: B3 }
+      IDIV: { calendar: B3 }
+
+staging.b3-cotahist:
+  - rule: calendar-completeness
+    date_column: refdate
+    group_column: symbol
+    series:
+      PIBB11: { calendar: B3 }
+      BOVA11: { calendar: B3 }
+      DIVO11: { calendar: B3 }
+      SMAL11: { calendar: B3 }
+      IVVB11: { calendar: B3 }
+      PETR4: { calendar: B3 }
+
+staging.b3-bvbg086:
+  - rule: calendar-completeness
+    date_column: refdate
+    group_column: symbol
+    series:
+      PETR4: { calendar: B3 }
+      VALE3: { calendar: B3 }
+      ITUB4: { calendar: B3 }
+      BBAS3: { calendar: B3 }
+      ABEV3: { calendar: B3 }
