@@ -13,12 +13,13 @@ This document provides comprehensive guidance on **pipeline-based templates** in
    - [Validation Rules by Type](#validation-rules-by-type)
 2. [Download & Read Templates (Single Dataset)](#download--read-templates-single-dataset)
 3. [Download & Read Templates (Multi-Dataset)](#download--read-templates-multi-dataset)
-4. [ETL Templates (Single Dataset)](#etl-templates-single-dataset)
-5. [Field Schema & Type System](#field-schema--type-system)
-6. [Pipeline Steps Reference](#pipeline-steps-reference)
-7. [Downloader Retry Policy](#downloader-retry-policy)
-8. [Common Pitfalls & Best Practices](#common-pitfalls--best-practices)
-9. [Architecture & Processing Flow](#architecture--processing-flow)
+4. [Importing Local Files (`importer:`)](#importing-local-files-importer)
+5. [ETL Templates (Single Dataset)](#etl-templates-single-dataset)
+6. [Field Schema & Type System](#field-schema--type-system)
+7. [Pipeline Steps Reference](#pipeline-steps-reference)
+8. [Downloader Retry Policy](#downloader-retry-policy)
+9. [Common Pitfalls & Best Practices](#common-pitfalls--best-practices)
+10. [Architecture & Processing Flow](#architecture--processing-flow)
 
 ---
 
@@ -45,13 +46,15 @@ Brasa supports **four distinct template types** based on their purpose and outpu
 
 **Key distinction:** Templates using `fields:` produce **one dataset**. Templates using `datasets:` produce **multiple datasets** with independent schemas.
 
+**Acquisition alternative:** Anywhere `downloader:` appears above, an `importer:` block can be used instead — same field shape (`path`, `function`, `format`, `args`, `extra-key`, `validator`), but reads a local file instead of fetching over HTTP. The two are mutually exclusive within one template. See [Importing Local Files](#importing-local-files-importer).
+
 ### Validation Rules by Type
 
-- **Download & Read (Single):** Must have `downloader:`, `reader:`, `fields:`, `writer:` (optional layer)
-- **Download & Read (Multi):** Must have `downloader:`, `reader:`, `datasets:` (no top-level `fields:`)
+- **Download & Read (Single):** Must have `downloader:` or `importer:`, `reader:`, `fields:`, `writer:` (optional layer)
+- **Download & Read (Multi):** Must have `downloader:` or `importer:`, `reader:`, `datasets:` (no top-level `fields:`)
 - **ETL (Single):** Must have `etl:` with `load` step, `fields:`, `writer:` (required layer)
 - **ETL (Multi):** Must have `etl:`, `datasets:` (no top-level `fields:`)
-- **Mutual exclusivity:** Cannot have both `fields:` and `datasets:` in same template
+- **Mutual exclusivity:** Cannot have both `fields:` and `datasets:` in same template; cannot have both `downloader:` and `importer:` in same template (v1)
 - **Multi-dataset readers:** Must use `apply_fields_multi` step, not `apply_fields`
 
 ### Key Differences: Download/Read vs. ETL
@@ -793,6 +796,79 @@ The `tag:` property in fields enables extraction from hierarchical data:
 - **XML**: `tag: SctyInf/SctyId/TckrSymb` = XPath to extract field
 - **JSON**: `tag: "security.info.code"` = dot-notation path
 - Used by custom steps like `b3_read_bvbg087_xml` to map source paths to field names
+
+---
+
+## Importing Local Files (`importer:`)
+
+Every template above assumes bytes arrive over HTTP via `downloader:`. For files with **no download URL** — a vendor spreadsheet handed over once, files with a known naming convention on a shared drive, or backfilling a corrected file — brasa supports **importing local files** through the same engine.
+
+**Core model:** import replaces the acquisition step with "read a local file"; everything downstream (`reader:`, `datasets:`/`fields:`, `writer:`) is the template's, completely untouched. The validate → gzip → checksum-dedup → parse → store pipeline runs identically whether bytes came from HTTP or disk.
+
+### Two ways to use it
+
+1. **Import into any existing download template — no template changes.** Call `import_marketdata("some-download-template", path="/data/file.csv", refdate=...)` (or `brasa import some-download-template --path ...`). The template's `downloader:` config (`format`, `validator`, reader, writer, fields) is reused as-is; only the acquisition function is swapped to read `path` instead of fetching the URL. This is the backfill case — importing a corrected or manually-sourced file into a template that normally downloads.
+2. **A standalone template authored for import**, using `importer:` instead of `downloader:`:
+
+```yaml
+id: vendor-manual-upload
+description: Manually-provided vendor file, no download URL
+
+importer:
+  path: /data/{asset}/%Y-%m-%d.csv   # local analog of url; supports strftime + {kwarg}
+  function: brasa.downloaders.local_file_import   # optional; this is the default
+  format: csv
+  args:
+    asset: ~
+    refdate: ~
+
+reader:
+  pipeline:
+    - step: read_csv
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: input
+  partitioning: [refdate]
+
+fields:
+  - name: refdate
+    type: date
+  - name: asset
+    type: character
+  # ...
+```
+
+`importer:` parses into the **same internal object** as `downloader:` (a `MarketDataDownloader`), so it supports the same keys: `path` (the local analog of `url`), `function` (defaults to `brasa.downloaders.local_file_import` when omitted), `format`, `args`, `extra-key`, `validator`. A template may declare `downloader:` **or** `importer:`, never both.
+
+### Path pattern syntax
+
+`path` is rendered per call in two steps:
+
+1. `refdate.strftime(path)` — if a `refdate` kwarg is a `date`/`datetime`, strftime codes (`%Y`, `%m`, `%d`, ...) are substituted. Non-date placeholders like `{asset}` are left untouched by this step.
+2. `path.format(**other_kwargs)` — remaining (non-date) kwargs fill any `{name}` placeholders.
+
+This lets a single pattern combine both: `/data/{asset}/%Y-%m-%d.csv` resolves in one shot from `asset="PETR4", refdate=datetime(2026, 6, 20)` → `/data/PETR4/2026-06-20.csv`. A `{placeholder}` with no matching argument fails loudly (raises, does not silently pass through).
+
+`path` can always be overridden per call — via the `path=` kwarg on `import_marketdata()` or `--path` on the CLI — which takes precedence over the template's own `path:`. This is required (there is no default) for templates that only have a `downloader:` block.
+
+### Behavior notes
+
+- **Native format in, unwrapped identically.** The file is read in whatever format the template's `downloader:`/`importer:` `format:` expects (e.g. a `.zip` for a zip-source template) — the same unzip/decode/validate/checksum path used for downloads runs unmodified. A mismatch between the file's extension and `format:` only warns, never blocks.
+- **Copy, never move.** The source file on disk is read-only input; it is never moved or deleted. The gzipped copy inside the cache becomes the canonical artifact, so a failed or invalid import never destroys the user's only copy, and re-imports are always repeatable.
+- **Identity/dedup reuses existing mechanisms** — no new concept. Two cases:
+  - **Fixed path, run live each day:** use `extra-key: date` (labels the cache entry by run day).
+  - **Specific business dates / backfill:** pass a real `refdate` (or other) arg (labels the entry by data day). This is required for backfilling — `extra-key: date` would stamp every backfilled file with *today's* date and collapse them together.
+  - Identical bytes landing under a new label still raise `DuplicatedFolderException` (status `D`), exactly like a duplicate download.
+- **Missing file is an expected failure, not a crash** — reported as status `F` (like a 404), so a bulk backfill over a date range surfaces each missing date individually instead of aborting.
+- **Retries are always disabled** (`retry_attempts` forced to 0) — retrying a missing local file has no effect.
+- **Provenance** is recorded per entry in place of HTTP headers: `acquisition="import"`, `source_path`, `original_name`, `mtime`, `source_size`, `imported_at`.
+
+### Public API
+
+- `import_marketdata(template_name, force=False, **kwargs)` — `path` is passed as a kwarg. See [API_REFERENCE.md](API_REFERENCE.md#data-import).
+- `brasa import <template> --path PATH --arg KEY=VALUE [--force] [--calendar] [--report] [-v|-q]` — see [CLI.md](CLI.md#import).
 
 ---
 

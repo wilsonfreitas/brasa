@@ -32,6 +32,66 @@ download_marketdata("b3-indexes-theoretical-portfolio", index=["IBOV", "IFIX"])
 download_marketdata("b3-cotahist-daily", refdate=datetime(2024, 1, 2), reprocess=True)
 ```
 
+### Data Import
+
+#### `import_marketdata(template_name, force=False, verbosity=Verbosity.NORMAL, report_file=None, **kwargs)`
+
+Import local files into a template, reusing the entire download engine (validate → gzip → checksum dedup → read pipeline → write). Only the acquisition step changes: instead of fetching bytes over HTTP, `import_marketdata` reads them from a local file.
+
+Works in two modes:
+
+- **Backfill an existing download template.** Any template with a `downloader:` block can be imported into directly — pass `path` to point at the file on disk, plus whatever args the template's download function normally takes (e.g. `refdate`). No template changes required.
+- **Standalone import template.** A template written with an `importer:` block instead of `downloader:` (see [TEMPLATES.md](TEMPLATES.md#importing-local-files-importer)) carries its own default `path:` pattern, so `path` can be omitted at call time.
+
+**Parameters**:
+- `template_name` (str): Template ID to import into.
+- `force` (bool): If True, re-import even if a matching cache entry already exists. Default: False
+- `verbosity` (Verbosity): Output verbosity level (`QUIET`, `NORMAL`, `VERBOSE`). Default: `Verbosity.NORMAL`
+- `report_file` (str | Path | None): Optional path to save a report (`.json` or `.txt`).
+- `**kwargs`: Import arguments.
+  - `path` (str, optional): File path or pattern (e.g. `/data/%Y-%m-%d.csv`). Overrides the template's `path:` when given; required when the template has no `importer:` block. The pattern is rendered as `refdate.strftime(path)` (when a `refdate` kwarg is a `date`/`datetime`) followed by `path.format(**other_kwargs)`, so `{placeholder}` and strftime codes can be combined, e.g. `/data/{asset}/%Y-%m-%d.csv`.
+  - Remaining kwargs are template-specific arguments (e.g. `refdate`, `symbol`) — the same ones the template's `downloader:` normally expects. These also drive the cache identity (dedup/checksum), exactly like `download_marketdata`.
+
+**Returns**: `TaskReport` with one result per imported entry (`report.operation == "import"`).
+
+**Behavior notes**:
+- **Copy-only.** The source file is only ever read, never moved or deleted — the cache's gzipped copy becomes the canonical artifact.
+- **A missing source file is a normal, expected failure** (`DownloadException` → status `F`), not a crash — importing a date range with gaps reports each missing file individually instead of aborting.
+- **Retries are disabled** for imports (`retry_attempts` forced to `0`) — retrying a missing local file has no effect.
+- **Provenance** is recorded per entry (queryable via the cache metadata) instead of HTTP headers: `acquisition="import"`, `source_path`, `original_name`, `mtime`, `source_size`, `imported_at`.
+- Shared/cached templates are never mutated by an import call — the acquisition override is passed per-call, so later `download_marketdata` calls on the same template are unaffected.
+
+**Example**:
+```python
+from datetime import datetime
+from brasa import import_marketdata
+
+# Backfill a single date into a template that normally downloads via HTTP
+import_marketdata(
+    "b3-cotahist-daily",
+    path="/data/backfill/COTAHIST_D02012024.TXT",
+    refdate=datetime(2024, 1, 2),
+)
+
+# Bulk import: one file per business day, using a strftime pattern
+from brasa.util import DateRange
+
+period = DateRange(start=datetime(2026, 6, 1), end=datetime(2026, 6, 30), calendar="B3")
+import_marketdata(
+    "my-daily-template",
+    path="/data/prices/%Y-%m-%d.csv",
+    refdate=period,
+)
+
+# Standalone `importer:`-block template: path comes from the template itself
+import_marketdata("vendor-manual-upload", refdate=datetime(2026, 6, 20))
+
+# Force re-import even if already in cache
+import_marketdata("b3-cotahist-daily", path="/data/corrected/file.txt", refdate=datetime(2024, 1, 2), force=True)
+```
+
+See also: [`brasa import` CLI command](CLI.md#import) and the [`importer:` template block](TEMPLATES.md#importing-local-files-importer).
+
 ### Data Processing
 
 #### `process_marketdata(template_name, reprocess=False)`

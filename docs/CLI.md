@@ -20,6 +20,7 @@ brasa <command> [options]
 |-------|---------|---------|
 | Setup | `setup` | Initialize cache directories and metadata database |
 | Execution | `download` | Download raw market data files |
+| Execution | `import` | Import local files into a template (no download) |
 | Execution | `process` | Parse raw files into Parquet datasets |
 | Execution | `run` | Download + process with automatic dependency resolution |
 | Templates | `deps` | Show upstream/downstream dependencies |
@@ -157,6 +158,69 @@ During download, each file shows a single-character status:
 | `D` | Duplicated (same checksum) |
 | `I` | Invalid |
 | `C` | Corrupted |
+
+---
+
+### `import`
+
+Imports local files into a template, reusing the same validate → gzip → checksum-dedup → parse → store pipeline as `download` — only the acquisition step differs (read from disk instead of HTTP). Useful for one-off manual ingestion, backfilling from files handed over out-of-band, or any source with no download URL.
+
+```bash
+brasa import <template> [<template> ...] [options]
+```
+
+Works in two modes:
+
+- **Backfill an existing download template** — pass `--path` to point at the file on disk, plus the template's normal args (e.g. `refdate`). No template changes required.
+- **Standalone import template** — a template written with an `importer:` block (see [TEMPLATES.md](TEMPLATES.md#importing-local-files-importer)) carries its own default path pattern, so `--path` can be omitted unless you want to override it.
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--path PATH` | Local file path or pattern (e.g. `/data/%Y-%m-%d.csv`). Overrides the template's `path:`. Required if the template has no `importer:` block. |
+| `--arg KEY=VALUE` | Template arguments, repeatable — same `--arg` DSL as `download` (see above) |
+| `--calendar {B3,ANBIMA}` | Calendar for date range expansion (default: B3) |
+| `--force` | Re-import even if a matching entry already exists in cache |
+| `-v / --verbose` | Show each import task on its own line |
+| `-q / --quiet` | Only show summary if there are errors |
+| `--report FILE` | Save import report to file (.json or .txt) |
+
+The `--path` pattern supports strftime codes and `{name}` placeholders together, rendered as `refdate.strftime(path)` then `path.format(**other_args)` — so `/data/{asset}/%Y-%m-%d.csv` resolves in one shot from `--arg asset=PETR4 --arg refdate=@2026-06-20`.
+
+#### Use Cases
+
+**Backfill a single date into a template that normally downloads via HTTP:**
+
+```bash
+brasa import b3-cotahist-daily --path /data/backfill/COTAHIST_D02012024.TXT --arg refdate=2024-01-02
+```
+
+**Bulk import one file per business day using a date pattern:**
+
+```bash
+brasa import my-daily-template --path '/data/prices/%Y-%m-%d.csv' --arg refdate=@2026-06-01:2026-06-30
+```
+
+Each expanded date becomes its own cache entry; a date with no matching file is reported as `F` (Failed) rather than aborting the whole batch, so gaps in a backfill are easy to spot.
+
+**Import via a standalone `importer:`-block template (path comes from the template):**
+
+```bash
+brasa import vendor-manual-upload --arg refdate=2026-06-20
+```
+
+**Force re-import of a corrected file:**
+
+```bash
+brasa import b3-cotahist-daily --path /data/corrected/file.txt --arg refdate=2024-01-02 --force
+```
+
+**Notes:**
+
+- The source file is only ever **read**, never moved or deleted — the cache's gzipped copy is the canonical artifact, so re-imports are always repeatable.
+- Status codes are the same as `download` (see above); a missing source file reports as `F`, not a crash.
+- Retries are always disabled for imports — a missing local file won't be retried.
 
 ---
 
