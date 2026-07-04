@@ -17,47 +17,110 @@ uv run python -c "from brasa import create_all_views; create_all_views()"
 
 This only needs to be done once per Python process. If you open a new terminal or restart the kernel, run it again.
 
-If a query returns empty results but no error is raised, first verify your filter values by sampling the table without filters (for example, `SELECT DISTINCT symbol FROM "input.b3-cotahist-daily" LIMIT 20`) before assuming views are missing.
+If a query returns empty results but no error is raised, first verify your filter values by sampling the table without filters (for example, `SELECT DISTINCT symbol FROM "staging.b3-cotahist" LIMIT 20`) before assuming views are missing.
 
 ## Connecting to DuckDB
 
-The database file lives at `$BRASA_DATA_PATH/db/brasa.duckdb`. Always connect with `read_only=False` — DuckDB raises an error if you try to mix read-only and read-write connections in the same session, and brasa itself holds a write connection internally.
+Don't open the database file by hand. The `BrasaDB` class is the easy path: it owns a single shared connection to `brasa.duckdb` and exposes helper methods for running queries. Because every caller reuses that one connection — already opened with `read_only=False` and re-established automatically if it drops — you never construct the database path yourself, and you sidestep the error DuckDB raises when read-only and read-write connections are mixed in the same session (brasa holds a write connection internally).
 
-If `os.environ["BRASA_DATA_PATH"]` raises `KeyError`, inform the user that the environment variable is not set and ask them to set it to the directory where brasa data is stored before proceeding.
+The most convenient entry point is the module-level `sql()` helper, which delegates to `BrasaDB.query()`:
 
 ```bash
 uv run python -c "
-import duckdb, os
-con = duckdb.connect(os.path.join(os.environ['BRASA_DATA_PATH'], 'db', 'brasa.duckdb'), read_only=False)
-result = con.sql('''
+from brasa import sql
+print(sql('''
 <SQL QUERY HERE>
-''')
-print(result)
+''').df().to_string())
 "
 ```
 
-For queries that return many rows or wide tables, use `.df().to_string()` for full output:
+`sql()` returns a DuckDB relation. Call `.df()` for a pandas DataFrame — chain `.to_string()` so wide or long results print in full — or `.fetchall()` for a list of tuples.
 
-```bash
-uv run python -c "
-import duckdb, os
-con = duckdb.connect(os.path.join(os.environ['BRASA_DATA_PATH'], 'db', 'brasa.duckdb'), read_only=False)
-print(con.sql('''<SQL>''').df().to_string())
-"
-```
+The same functionality is available as methods on the class, which is handy when you want discovery and querying in one place:
+
+- `BrasaDB.query(sql)` — run a query (this is what `sql()` calls)
+- `BrasaDB.list_tables()` — list every `layer.dataset` view
+- `BrasaDB.create_all_views()` — (re)create all views; see Setup above
+- `BrasaDB.get_connection()` — the shared `duckdb.DuckDBPyConnection`, if you need raw access
+
+`BrasaDB` resolves the database path through brasa's `CacheManager`, so it honors the `BRASA_DATA_PATH` environment variable (defaulting to `.brasa-cache/`) without any manual path handling.
 
 ## Table Naming Convention
 
 Tables follow the pattern `"layer.dataset-name"` and **must be double-quoted** in SQL because they contain dots and hyphens:
 
 ```sql
-SELECT * FROM "input.b3-cotahist-daily" LIMIT 10
+SELECT * FROM "staging.b3-cotahist" LIMIT 10
 ```
 
-The three queryable layers are:
-- **input** — parsed raw data (e.g., daily stock prices, company info)
-- **staging** — transformed/enriched data (e.g., returns, index compositions)
-- **curated** — analytics-ready unified datasets (e.g., all returns, all prices)
+Datasets are organized in layers. **Default to the `staging` layer** — it holds the cleaned, enriched, analysis-ready tables intended for end users, and it's where you should look first:
+
+- **staging** — transformed and enriched data ready for analysis (prices, returns, index compositions, macro series, corporate events). **Start here.**
+- **curated** — a small set of fully unified, analytics-ready datasets built on top of staging (e.g., all returns, all prices).
+- **input** — raw parsed data. This is an internal ingestion layer, **not meant for end users**. Only reach for an `input.*` table when a dataset genuinely has no `staging` equivalent (e.g. some B3 registries, PTAX FX, intraday trades); otherwise the staging version is cleaner and is what you should use.
+
+## Choosing the right table
+
+Selection questions arrive as *information needs*, not table names. Match the need to the canonical table below, and heed the caveat — it's usually what makes the tempting alternative wrong. Prefer these over anything you'd find by keyword-matching a table name. For anything not listed, fall back to the Key Datasets Reference and the discovery queries. (This map mirrors the authoritative Status notes in [`docs/datasets.md`](../../../docs/datasets.md).)
+
+### Equity / ETF prices & trading activity
+
+- **Daily stock OHLC (unadjusted)** → `staging.b3-cotahist`. Longest history. Stock prices are **not adjusted** for corporate events.
+- **Adjusted stock OHLC** → ⚠️ **does not exist yet.** Don't invent a table. Adjusted *returns* exist (see below); an adjusted price series still has to be built.
+- **ETF OHLC** → `staging.b3-cotahist`. ETF close is fine unadjusted (most BR ETFs pay no dividends) **except `NDIV11`, `DIVD11`, `SPYI11`**.
+- **Equity-option OHLC** → `staging.b3-cotahist`. Longest history.
+- **Volume / nº de negócios / nº de trades (deepest history)** → `staging.b3-cotahist`.
+- **"What stocks/assets exist" (registry)** → `input.b3-bvbg028-equities`. Daily registry of everything listed (stocks, fractional…); also `market_capitalisation`.
+- **Which stocks trade on the spot market (non-fractional)** → `staging.b3-equities-spot-market`.
+
+### Returns
+
+- **Adjusted stock returns** → `staging.b3-equities-returns`. Built from `b3-bvbg086`'s daily `oscillation`; history **starts 2018**. Pre-2018 you only have unadjusted returns computed from `staging.b3-cotahist`.
+- **ETF returns** → `staging.b3-equities-etfs-returns`. Longer history — concatenates `b3-cotahist` (<2018) + `b3-bvbg086` (>2018).
+
+### Indexes
+
+- **What's in IBOV (membership)** → `staging.b3-indexes-composition` (no weights).
+- **Index weights — official quarterly target** → `staging.b3-indexes-theoretical-portfolio` (rebalance-date weights, valid for the quarter).
+- **Index weights — live/drifted as of a day** → `staging.b3-indexes-current-portfolio`.
+- **Index level over time** → `staging.b3-indexes-historical-prices`.
+
+### Futures
+
+- **Futures daily data (>2018)** — prices/OHLC, settlement, open interest, contract metadata → `staging.b3-futures`. It is `b3-bvbg086` + `b3-bvbg028-future_contracts` already joined and cleaned. **Settlement lives in `adjusted_quote`/`adjusted_tax`, not `settlement_value`.**
+- **Futures settlement pre-2018** → `input.b3-futures-settlement-prices` (frozen; incomplete — no maturity/OI; OK only for simple standardized contracts like DI1, DOL, DAP).
+- **Contract registry (maturity, multiplier)** → `staging.b3-futures-register`.
+- Avoid `staging.b3-futures-di1-consolidated` (**deprecated**) and `staging.b3-futures-settlement-prices` (**outdated, ships 2× duplicate rows**).
+
+### Interest-rate & inflation curves
+
+- **DI nominal curve at contract maturities (+ CDI overnight)** → `staging.b3-curves-di1`.
+- **DI nominal curve at standardized fixed-term vertices** (e.g. `DI1T252` = 252 business days) → `staging.b3-curves-di1-standard`.
+- **Returns of a fixed-tenor DI vertex** → `staging.b3-curves-di1-standard-returns`.
+- **Real-rate (inflation) curve** → `staging.b3-futures-dap` for now (standardized `b3-curves-dap*` are planned but **not yet in the DB**). The rate column is `adjusted_tax`.
+
+### Macro, indicators & FX
+
+- **Macro series (CDI, SELIC, IPCA, IGPM)** → `staging.bcb-sgs`. Other SGS series → `input.bcb-sgs` (by numeric `code`).
+- **Indicators to use with B3 contracts/pricing/curves** → `staging.b3-economic-indicators` (this is the pricing companion, *not* general macro).
+- **FX / PTAX** → `input.bcb-currency` (input-only; `currency` ∈ {USD, EUR, GBP, JPY, CHF, CAD, AUD}).
+
+### Corporate events
+
+- **All events for a stock (one place)** → `staging.brasa-corporate-events` (unified; `event_family` ∈ {CASH, STOCK, SUBSCRIPTION}).
+- **Cash dividends & JCP (with yield)** → `staging.b3-cash-dividends-events`; **split/bonus factors** → `staging.b3-stock-events`; **subscriptions** → `staging.b3-subscription-events`.
+
+### Company info, identity & sectors
+
+- **Company-level info** → `staging.brasa-companies`. **No `symbol` column — join via `code_cvm`.**
+- **Ticker ↔ company** → `staging.b3-companies-symbols`.
+- **Sector / industry classification** → `staging.brasa-industry-sectors` (best source; prefer over the sector columns on `brasa-companies`).
+
+### Funds, options, intraday
+
+- **Listed funds (ETF/FII)** → `staging.b3-listed-funds` (`fund_type` ∈ {ETF, FII, Fixed Income ETF}).
+- **Option theoretical price / implied vol** → `input.b3-equity-options`; **vol surface** → `input.b3-equities-volatility-surface` (both input-only).
+- **Intraday tick trades** → `input.b3-trades-intraday[-equities/-derivatives]` for deepest history; `staging.b3-trades-intraday` if its 2023+ coverage suffices.
 
 ## Discovery Workflow
 
@@ -75,13 +138,13 @@ ORDER BY table_name
 ### 2. Inspect a table's schema
 
 ```sql
-DESCRIBE "input.b3-cotahist-daily"
+DESCRIBE "staging.b3-cotahist"
 ```
 
 ### 3. Sample data
 
 ```sql
-SELECT * FROM "input.b3-cotahist-daily" LIMIT 5
+SELECT * FROM "staging.b3-cotahist" LIMIT 5
 ```
 
 ### 4. Check row counts and date ranges
@@ -91,36 +154,33 @@ SELECT
     COUNT(*) as rows,
     MIN(refdate) as first_date,
     MAX(refdate) as last_date
-FROM "input.b3-cotahist-daily"
+FROM "staging.b3-cotahist"
 ```
 
 ## Key Datasets Reference
 
-These are the most commonly used datasets, with their actual column names verified against the live database. This is a curated subset — for the **complete catalog of every view grouped by topic**, see [`docs/datasets.md`](../../../docs/datasets.md) in the repo, or run the discovery queries above to see every available table and its current schema. Column names are case-sensitive: some `input.b3-company-*` tables use camelCase (e.g. `issuingCompany`, `codeCVM`) while most processed tables use snake_case.
+These are the most commonly used datasets, with their actual column names verified against the live database. This is a curated subset — for the **complete catalog of every view grouped by topic**, see [`docs/datasets.md`](../../../docs/datasets.md) in the repo, or run the discovery queries above to see every available table and its current schema.
 
-### Prices & Trading (input layer)
+**Prefer `staging.*` tables** — they are the cleaned, user-facing datasets. The `input.*` tables listed below appear only where they expose data that has no `staging` equivalent (e.g. PTAX FX, intraday trades, options/volatility, some B3 registries); when a staging table covers the same data, use it instead. Column names are case-sensitive: the raw `input.b3-company-*` tables use camelCase (e.g. `issuingCompany`, `codeCVM`) while staging tables use snake_case.
 
-| Table | Description | Key Columns |
-|-------|-------------|-------------|
-| `input.b3-cotahist-daily` | Daily stock prices | refdate, symbol, open, high, low, average, close, volume |
-| `input.b3-cotahist-yearly` | Yearly historical stock prices | refdate, symbol, open, high, low, average, close, volume |
-| `input.b3-futures-settlement-prices` | Futures settlement prices | refdate, symbol, commodity, maturity_code, price, settlement_value, price_change |
-| `input.b3-bvbg028-equities` | Equities instrument registry (BVBG028) | refdate, symbol, isin, corporation_name, close, open, market_capitalisation |
-| `input.b3-bvbg028-future_contracts` | Future contracts registry (BVBG028) | refdate, symbol, maturity_date, contract_multiplier |
-| `input.b3-bvbg028-options_on_equities` | Options on equities registry (BVBG028) | refdate, symbol, exercise_price, option_type, maturity_date |
-| `input.b3-bvbg086` | Derivatives market data (settlement, OI) | refdate, symbol, settlement_value, open_interest, volume, close |
-
-### Indexes (input & staging layers)
+### Prices & Trading
 
 | Table | Description | Key Columns |
 |-------|-------------|-------------|
-| `input.b3-indexes-composition` | Index compositions (raw) | refdate, indexes, symbol, corporation_name |
-| `input.b3-indexes-theoretical-portfolio` | Theoretical portfolio weights | refdate, symbol, weight, index |
-| `input.b3-indexes-current-portfolio` | Current portfolio | refdate, symbol, weight, index |
-| `staging.b3-indexes-composition` | Index compositions (processed) | refdate, indexes, symbol, corporation_name, specification_code |
-| `staging.b3-indexes-historical-prices` | Historical index prices (processed, long) | refdate, symbol, value |
-| `staging.b3-indexes-theoretical-portfolio` | Theoretical portfolio (processed) | refdate, symbol, weight, index |
-| `staging.b3-indexes-current-portfolio` | Current portfolio (processed) | refdate, symbol, weight, index |
+| `staging.b3-cotahist` | Daily OHLC + volume for stocks / ETFs / options — deepest history; **unadjusted** | refdate, symbol, open, high, low, average, close, volume, trade_quantity, traded_contracts |
+| `staging.b3-equities-spot-market` | Stocks trading on the spot market (non-fractional) | refdate, symbol, isin, corporation_name, close, open |
+| `input.b3-bvbg028-equities` | Asset registry — "what stocks exist" (BVBG028) | refdate, symbol, isin, corporation_name, market_capitalisation |
+| `input.b3-bvbg028-options_on_equities` | Options-on-equities registry (strikes/maturities) | refdate, symbol, exercise_price, option_type, maturity_date |
+| `input.b3-bvbg086` | Market data for all B3 assets — has `oscillation`; **no `settlement_value`** | refdate, symbol, open, high, low, close, oscillation, open_interest, volume, adjusted_quote, adjusted_tax |
+
+### Indexes
+
+| Table | Description | Key Columns |
+|-------|-------------|-------------|
+| `staging.b3-indexes-composition` | Index compositions | refdate, indexes, symbol, corporation_name, specification_code |
+| `staging.b3-indexes-historical-prices` | Historical index prices (long) | refdate, symbol, value |
+| `staging.b3-indexes-theoretical-portfolio` | Theoretical portfolio weights | refdate, symbol, weight, index |
+| `staging.b3-indexes-current-portfolio` | Current portfolio weights | refdate, symbol, weight, index |
 
 ### Returns (staging layer)
 
@@ -137,8 +197,9 @@ These are the most commonly used datasets, with their actual column names verifi
 | `input.bcb-sgs` | Raw SGS series keyed by numeric `code` | refdate, code, value |
 | `input.bcb-currency` | PTAX FX rates — `currency` ∈ {USD, EUR, GBP, JPY, CHF, CAD, AUD} | refdate, currency, bid, ask, parity_bid, parity_ask |
 | `staging.b3-economic-indicators` | B3 economic indicators (grouped) | refdate, indicator_group, symbol, value |
-| `staging.b3-futures-di1-consolidated` | DI1 (interest-rate) futures, consolidated | refdate, symbol, maturity_code, price, settlement_value |
-| `staging.b3-futures-dap` | DAP (inflation) futures with implied tax | refdate, symbol, maturity_date, price, adjusted_tax, business_days |
+| `staging.b3-curves-di1` | DI nominal curve at contract maturities (+ CDI overnight) | refdate, symbol, maturity_date, business_days, adjusted_tax |
+| `staging.b3-curves-di1-standard` | DI nominal curve at standardized fixed-term vertices (e.g. `DI1T252`) | refdate, symbol, maturity_date, business_days, adjusted_tax |
+| `staging.b3-futures-dap` | Real-rate (inflation/DAP) curve — current source (`b3-curves-dap` not yet materialized) | refdate, symbol, maturity_date, adjusted_tax, business_days |
 | `input.anbima-index-imab` | ANBIMA IMA fixed-income index | refdate, index_name, index_number, duration_du, pmr |
 
 ### Corporate Events
@@ -172,21 +233,21 @@ These are the most commonly used datasets, with their actual column names verifi
 
 | Table | Description | Key Columns |
 |-------|-------------|-------------|
-| `staging.b3-cotahist` | Unified cotahist data | refdate, symbol, open, high, low, close, volume |
 | `staging.b3-equities-instrument-assets` | Instrument asset mapping | refdate, instrument_asset |
 | `staging.b3-equities-register` | Equities register | refdate, symbol, isin, corporation_name |
 | `staging.b3-equities-spot-market` | Spot market data | refdate, symbol, isin, corporation_name |
 
-### Futures & Options (staging / input)
+### Futures & Options
 
 | Table | Description | Key Columns |
 |-------|-------------|-------------|
-| `staging.b3-futures-settlement-prices` | Futures settlement prices (processed) | refdate, symbol, commodity, price, settlement_value |
-| `staging.b3-futures-register` | Futures register | refdate, symbol, maturity_date, contract_multiplier |
-| `input.b3-equity-options` | Equity option theoretical prices & vol | refdate, symbol, strike, maturity_date, volatility |
+| `staging.b3-futures` | **Futures daily data (>2018)** — OHLC, settlement (`adjusted_quote`/`adjusted_tax`), OI, contract meta | refdate, symbol, commodity, maturity_date, contract_multiplier, close, adjusted_quote, adjusted_tax, open_interest, volume |
+| `staging.b3-futures-register` | Futures contract registry (maturity, multiplier) | refdate, symbol, maturity_date, contract_multiplier |
+| `input.b3-futures-settlement-prices` | Settlement **pre-2018** tail (frozen, incomplete — simple standardized contracts only) | refdate, symbol, commodity, price, settlement_value |
+| `input.b3-equity-options` | Equity option theoretical prices & implied vol | refdate, symbol, strike, maturity_date, volatility |
 | `input.b3-equities-volatility-surface` | Equity volatility surface | refdate, underlying, delta, volatility, maturity_date |
 
-### Intraday Trades (input / staging layer)
+### Intraday Trades (input only — no staging equivalent)
 
 | Table | Description | Key Columns |
 |-------|-------------|-------------|
@@ -200,7 +261,7 @@ These are the most commonly used datasets, with their actual column names verifi
 
 ```sql
 SELECT refdate, symbol, close, volume
-FROM "input.b3-cotahist-daily"
+FROM "staging.b3-cotahist"
 WHERE symbol = 'PETR4'
   AND refdate >= '2024-01-01'
 ORDER BY refdate
@@ -210,7 +271,7 @@ ORDER BY refdate
 
 ```sql
 SELECT symbol, COUNT(*) as trading_days, AVG(close) as avg_price
-FROM "input.b3-cotahist-daily"
+FROM "staging.b3-cotahist"
 WHERE refdate >= '2024-01-01'
 GROUP BY symbol
 ORDER BY avg_price DESC
@@ -226,7 +287,7 @@ SELECT
     p.close,
     p.volume,
     r.log_return
-FROM "input.b3-cotahist-daily" p
+FROM "staging.b3-cotahist" p
 JOIN "staging.b3-equities-returns" r
     ON p.refdate = r.refdate AND p.symbol = r.symbol
 WHERE p.symbol = 'VALE3'
@@ -289,7 +350,7 @@ SELECT
     p.volume,
     r.log_return,
     ic.indexes
-FROM "input.b3-cotahist-daily" p
+FROM "staging.b3-cotahist" p
 LEFT JOIN "staging.b3-equities-returns" r
     ON p.refdate = r.refdate AND p.symbol = r.symbol
 LEFT JOIN "staging.b3-indexes-composition" ic
