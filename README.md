@@ -66,6 +66,30 @@ uv run python scripts/migrate_download_trials_status.py
 
 See [docs/USER_GUIDE.md](docs/USER_GUIDE.md#download-status-codes) for full details.
 
+### Import Local Files (`import_marketdata` / `brasa import`)
+
+Files with no download URL — a one-off vendor file, a manually-provided upload,
+or a corrected file for backfill — can now be imported using the same
+validate → gzip → checksum-dedup → parse → store engine as `download`. Only
+the acquisition step changes: bytes are read from disk instead of HTTP.
+
+```bash
+# Backfill a single date into a template that normally downloads via HTTP
+brasa import b3-cotahist-daily --path /data/backfill/COTAHIST_D02012024.TXT --arg refdate=2024-01-02
+
+# Bulk import one file per business day using a date pattern
+brasa import my-daily-template --path '/data/prices/%Y-%m-%d.csv' --arg refdate=@2026-06-01:2026-06-30
+```
+
+```python
+from brasa import import_marketdata
+
+import_marketdata("b3-cotahist-daily", path="/data/backfill/COTAHIST_D02012024.TXT", refdate="2024-01-02")
+```
+
+See [docs/CLI.md](docs/CLI.md#import), [docs/API_REFERENCE.md](docs/API_REFERENCE.md#data-import),
+and [docs/TEMPLATES.md](docs/TEMPLATES.md#importing-local-files-importer) for full details.
+
 ## Publishing to PyPI
 
 brasa is built with [hatchling](https://hatch.pypa.io/) and published manually.

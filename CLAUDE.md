@@ -63,10 +63,15 @@ YAML Template → Download → Cache (raw/) → Parse/Read → Parquet (db/) →
 
 Exports are in `brasa/__init__.py` (`__all__`). Core workflow:
 ```python
-from brasa import download_marketdata, process_marketdata, process_etl, get_marketdata
+from brasa import download_marketdata, import_marketdata, process_marketdata, process_etl, get_marketdata
 
 # Download for a specific refdate (kwargs forwarded to the template's downloader)
 download_marketdata("b3-bvbg028", refdate="2026-04-23")
+
+# Import a local file into a template instead of downloading it (no download URL,
+# manual/vendor file, or backfill of a corrected file). Works on any download
+# template via `path=`, or on a standalone `importer:`-block template.
+import_marketdata("b3-bvbg028", path="/data/backfill/file.zip", refdate="2026-04-23")
 
 # Process all downloaded (unprocessed) entries for a template
 process_marketdata("b3-bvbg028")
@@ -77,6 +82,8 @@ process_marketdata("b3-bvbg028", reprocess=True)
 # Process a single cache entry by its meta_id
 process_marketdata("b3-bvbg028", meta_id="<id>")
 ```
+
+See [TEMPLATES.md](docs/TEMPLATES.md#importing-local-files-importer) and [CLI.md](docs/CLI.md#import) for the `importer:` template block and `brasa import` CLI command.
 
 `process_marketdata` does **not** accept `refdate` — it operates on already-downloaded cache entries.
 To target a specific date, use `meta_id` (look up the id via `CacheManager()`).
