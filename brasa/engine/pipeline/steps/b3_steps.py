@@ -122,25 +122,65 @@ class B3ReadBVBG086XmlStep(PipelineStep):
         None (uses field tags from context.fields)
     """
 
-    def execute(self, _data: Any, context: PipelineContext) -> pd.DataFrame:
-        filepath = context.downloaded_file
-        logger.debug(f"Reading BVBG086 XML file: {filepath}")
+    NS_052 = "urn:bvmf.052.01.xsd"
+    NS_217 = "urn:bvmf.217.01.xsd"
 
-        # Parse the gzipped XML
-        with gzip.open(filepath) as f:
-            tree = etree.parse(f)
+    def _parse_candidate(self, filepath: str):
+        """Try to parse one downloaded file as a BVBG086 XML message.
+
+        Some B3 BVBG086 zip bundles pack the same message twice — once as a
+        flat XML entry and once as a redundant zip-compressed duplicate that
+        `unzip_recursive` (a general zip-of-zips limitation) may leave
+        un-extracted. Those leftovers are not valid XML; skip them here
+        instead of crashing the whole pipeline.
+
+        Returns:
+            (creation_datetime_str, exchange_element) tuple, or None if the
+            file is not a parseable BVBG086 XML message.
+        """
+        ns_bvmf052 = {None: self.NS_052}
+        try:
+            with gzip.open(filepath) as f:
+                tree = etree.parse(f)
+        except etree.XMLSyntaxError:
+            logger.debug("Skipping non-XML downloaded file: %s", filepath)
+            return None
 
         exchange = tree.getroot()[0][0]
-        ns_bvmf052 = {None: "urn:bvmf.052.01.xsd"}
-
-        # Extract creation date from BizGrpDtls
-        td_xpath = etree.ETXPath("//{urn:bvmf.052.01.xsd}BizGrpDtls")
+        td_xpath = etree.ETXPath(f"//{{{self.NS_052}}}BizGrpDtls")
         td = td_xpath(exchange)
         if len(td) == 0:
-            logger.error("Invalid XML: tag BizGrpDtls not found")
-            raise ValueError("Invalid XML: tag BizGrpDtls not found")
+            logger.debug("Skipping file with no BizGrpDtls tag: %s", filepath)
+            return None
 
-        creation_date = td[0].find("CreDtAndTm", ns_bvmf052).text[:10]
+        creation_date = td[0].find("CreDtAndTm", ns_bvmf052).text
+        return creation_date, exchange
+
+    def execute(self, _data: Any, context: PipelineContext) -> pd.DataFrame:
+        candidates = []
+        for filepath in context.all_downloaded_files:
+            parsed = self._parse_candidate(filepath)
+            if parsed is not None:
+                candidates.append((filepath, *parsed))
+
+        if not candidates:
+            raise ValueError(
+                "No parseable BVBG086 XML message found in downloaded files"
+            )
+
+        if len(candidates) > 1:
+            # A day can carry more than one BVBG086 message (e.g. an initial
+            # publication plus a later corrected/final retransmission). Keep
+            # only the most recent one; earlier messages for the same day are
+            # superseded, not incremental, so they should not be merged in.
+            logger.info(
+                "Found %d BVBG086 messages for this entry, using the most "
+                "recent by creation timestamp: %s",
+                len(candidates),
+                sorted(c[1] for c in candidates),
+            )
+        filepath, creation_date, exchange = max(candidates, key=lambda c: c[1])
+        logger.debug(f"Reading BVBG086 XML file: {filepath}")
         logger.debug(f"Creation date extracted: {creation_date}")
 
         # Find all price report nodes
@@ -535,3 +575,86 @@ class B3AddColumnsFromJsonFieldsStep(PipelineStep):
             data[store_as] = json_data_copy
 
         return data
+
+
+@StepRegistry.register("b3_read_bdin_fwf")
+class B3ReadBdinFwfStep(PipelineStep):
+    """Read a B3 BDIN multi-record fixed-width file into multiple DataFrames.
+
+    A BDIN file interleaves several record types on fixed-length lines, each
+    identified by a 2-character record-type code in its first field (e.g. ``00``
+    header, ``01`` indexes, ``02`` stocks, ..., ``99`` trailer). This step
+    dispatches lines to one DataFrame per configured dataset: it keeps the lines
+    whose leading code matches the dataset's ``tag`` and slices columns from that
+    dataset's field widths (fields without a ``width`` attribute are skipped for
+    slicing). It returns ``Dict[str, DataFrame]`` keyed by the dataset output
+    names, ready for ``apply_fields_multi``.
+
+    The pregão date from the Header record (type ``00``, positions 31-38,
+    ``AAAAMMDD``) is injected as a raw ``refdate`` string into every dataset, so
+    all outputs share a common partitioning key once typed by the fields.
+
+    Parameters:
+        header_code: Record-type code of the header line (default: ``'00'``).
+        refdate_start: 1-based start position of the pregão date (default: 31).
+        refdate_width: Width of the pregão date field (default: 8).
+    """
+
+    def _read_lines(self, filepath: str, encoding: str) -> list[str]:
+        """Read the file (plain or gzip) and split it into lines."""
+        from pathlib import Path
+
+        if str(filepath).endswith(".gz"):
+            with gzip.open(filepath, "rt", encoding=encoding) as f:
+                text = f.read()
+        else:
+            with Path(filepath).open(encoding=encoding) as f:
+                text = f.read()
+        return text.splitlines()
+
+    def _extract_refdate(
+        self, lines: list[str], header_code: str, start: int, width: int
+    ) -> str:
+        """Extract the raw pregão date string from the header record."""
+        for line in lines:
+            if line[: len(header_code)] == header_code:
+                return line[start - 1 : start - 1 + width].strip()
+        return ""
+
+    def execute(self, _data: Any, context: PipelineContext) -> dict[str, pd.DataFrame]:
+        header_code = self.get_param("header_code", "00")
+        refdate_start = self.get_param("refdate_start", 31)
+        refdate_width = self.get_param("refdate_width", 8)
+
+        filepath = context.downloaded_file
+        logger.debug("Reading BDIN file: %s", filepath)
+        lines = self._read_lines(filepath, context.encoding)
+
+        refdate = self._extract_refdate(
+            lines, header_code, refdate_start, refdate_width
+        )
+
+        datasets = context.datasets or {}
+        result: dict[str, pd.DataFrame] = {}
+        for name, cfg in datasets.items():
+            code = cfg.tag
+            colspecs: list[tuple[int, int]] = []
+            names: list[str] = []
+            position = 0
+            for field in cfg.fields:
+                width = field.get_attribute("width")
+                if width is None:
+                    # Injected/derived column (e.g. refdate) — not sliced here.
+                    continue
+                colspecs.append((position, position + width))
+                names.append(field.name)
+                position += width
+
+            matched = [line for line in lines if line[: len(code)] == code]
+            rows = [[line[s:e].strip() for (s, e) in colspecs] for line in matched]
+            df = pd.DataFrame(rows, columns=names)
+            df["refdate"] = refdate
+            result[name] = df
+            logger.debug("BDIN dataset '%s' (code %s): %d rows", name, code, len(df))
+
+        return result
