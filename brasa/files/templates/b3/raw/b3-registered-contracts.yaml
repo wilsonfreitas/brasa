@@ -1,0 +1,162 @@
+# Migrated from legacy template templates/legacy/CONTRCAD.yaml
+# B3/BM&F registered derivatives contracts (CONTRCAD.TXT), fixed-width, 193 chars/record.
+# Layout: data/CONTRCAD.pdf ("Mercado de Derivativos - Contratos Cadastrados").
+# Downloader/importer intentionally omitted — to be added later.
+id: b3-registered-contracts
+description: Mercado de Derivativos - Contratos Cadastrados
+
+importer:
+  path: tmp/ContratosCadastrados/CC%y%m%d.ex_
+  format: zip
+  args:
+    refdate: ~
+
+reader:
+  encoding: latin1
+  locale: en
+  pipeline:
+    - step: read_fwf
+      dtype: str
+    - step: apply_fields
+      errors: coerce
+    # preco_exercicio and variacao_minima carry an implied number of decimal
+    # places given per row by num_casas_decimais (layout pos. 85). apply_fields
+    # parses them as raw integers; scale them here.
+    - step: exec_code
+      code: |
+        casas = data["num_casas_decimais"].astype("float64")
+        for col in ("preco_exercicio", "variacao_minima"):
+            data[col] = data[col].astype("float64") / (10.0 ** casas)
+        result = data
+
+writer:
+  layer: input
+  partitioning: [data_referencia]
+
+fields:
+  - name: id_transacao
+    description: "Identificação da transação"
+    type: integer
+    width: 6
+  - name: compl_transacao
+    description: "Complemento da transação (fixo 001)"
+    type: integer
+    width: 3
+  - name: tipo_registro
+    description: "Tipo de registro (fixo 01)"
+    type: integer
+    width: 2
+  - name: data_referencia
+    description: "Data de referência"
+    type: date(format='%Y%m%d')
+    width: 8
+  - name: cod_mercadoria
+    description: "Código da mercadoria"
+    type: character
+    width: 3
+  - name: tipo_mercado
+    description: "Tipo de mercado: 1=disponível, 2=futuro, 3=opção sobre disponível, 4=opção sobre futuro, 5=termo"
+    type: character
+    width: 1
+  - name: serie
+    description: "Série (opções) / vencimento (futuro)"
+    type: character
+    width: 4
+  - name: tipo_opcao
+    description: "Indicador de tipo de opção: C (compra/call), V (venda/put)"
+    type: character
+    width: 1
+  - name: tipo_exercicio
+    description: "Tipo/estilo de exercício da opção: A (americana), E (européia)"
+    type: character
+    width: 1
+  - name: data_vencimento
+    description: "Data de vencimento do contrato"
+    type: date(format='%Y%m%d')
+    width: 8
+  - name: data_inicio_negociacao
+    description: "Data de início de negociação"
+    type: date(format='%Y%m%d')
+    width: 8
+  - name: data_inicio_exercicio
+    description: "Data de início de exercício"
+    type: date(format='%Y%m%d')
+    width: 8
+  - name: data_limite_negociacao
+    description: "Data-limite de negociação"
+    type: date(format='%Y%m%d')
+    width: 8
+  - name: data_limite_abertura_posicoes
+    description: "Data-limite de abertura de posições"
+    type: date(format='%Y%m%d')
+    width: 8
+  - name: preco_exercicio
+    description: "Preço de exercício (opções)"
+    # dynamic decimals (num_casas_decimais) applied in exec_code step
+    type: numeric
+    width: 15
+  - name: num_casas_decimais
+    description: "Número de casas decimais dos campos preco_exercicio e variacao_minima"
+    type: integer
+    width: 1
+  - name: cod_viva_voz
+    description: "Código de negociação viva-voz"
+    type: character
+    width: 20
+  - name: cod_gts
+    description: "Código de negociação GTS"
+    type: character
+    width: 20
+  - name: cod_isin
+    description: "Código ISIN"
+    type: character
+    width: 12
+  - name: contr_objeto_vencimento
+    description: "Contrato objeto (no vencimento)"
+    type: character
+    width: 4
+  - name: tipo_cotacao
+    description: "Tipo de cotação: 1=preço, 2=taxa"
+    type: character
+    width: 1
+  - name: tipo_mercadoria
+    description: "Tipo de mercadoria: 1=financeiro, 2=agropecuário, 3=energia"
+    type: character
+    width: 1
+  - name: variacao_minima
+    description: "Variação mínima de apregoação"
+    # dynamic decimals (num_casas_decimais) applied in exec_code step
+    type: numeric
+    width: 15
+  - name: indicador_opcao_ajuste
+    description: "Indicador de opção com ajuste (S/N)"
+    type: character
+    width: 1
+  - name: indicador_mercadoria_internacional
+    description: "Indicador de mercadoria internacional (S/N)"
+    type: character
+    width: 1
+  - name: cod_moeda
+    description: "Código da moeda: 1=dólar (USD), 2=reais (BRL)"
+    type: character
+    width: 2
+  - name: indicador_operacao_estruturada
+    description: "Indicador de operação estruturada (S/N)"
+    type: character
+    width: 1
+  - name: num_dias_saques
+    description: "Quantidade de dias saques até o vencimento"
+    type: integer
+    width: 5
+  - name: num_dias_corridos
+    description: "Quantidade de dias corridos até o vencimento"
+    type: integer
+    width: 5
+  - name: num_dias_uteis
+    description: "Quantidade de dias úteis até o vencimento"
+    type: integer
+    width: 5
+  - name: descricao_mercadoria
+    description: "Descrição da mercadoria"
+    type: character
+    width: 15
