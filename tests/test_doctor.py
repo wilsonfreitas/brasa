@@ -593,24 +593,34 @@ class TestReadSeriesDates:
     def test_absent_dataset_returns_empty(self):
         man = CacheManager()
         missing = Path(man.db_path("staging/does-not-exist"))
-        assert _read_series_dates(missing, "refdate", "symbol", "CDI") == set()
+        assert (
+            _read_series_dates(
+                "staging.does-not-exist", missing, "refdate", "symbol", "CDI"
+            )
+            == set()
+        )
 
     def test_reads_grouped_series(self):
         d = [date(2020, 1, 2), date(2020, 1, 3)]
         ds_dir = _write_series_parquet("staging/read-grouped", "CDI", d)
         _write_series_parquet("staging/read-grouped", "SELIC", [date(2020, 6, 1)])
-        got = _read_series_dates(ds_dir, "refdate", "symbol", "CDI")
+        got = _read_series_dates(
+            "staging.read-grouped", ds_dir, "refdate", "symbol", "CDI"
+        )
         assert got == set(d)
 
     def test_reads_single_series(self):
         d = [date(2020, 1, 2), date(2020, 1, 3)]
         ds_dir = _write_series_parquet("staging/read-single", None, d)
-        got = _read_series_dates(ds_dir, "refdate", None, None)
+        got = _read_series_dates("staging.read-single", ds_dir, "refdate", None, None)
         assert got == set(d)
 
     def test_absent_group_value_returns_empty(self):
         ds_dir = _write_series_parquet("staging/read-nofoo", "CDI", [date(2020, 1, 2)])
-        assert _read_series_dates(ds_dir, "refdate", "symbol", "FOO") == set()
+        assert (
+            _read_series_dates("staging.read-nofoo", ds_dir, "refdate", "symbol", "FOO")
+            == set()
+        )
 
 
 class TestCalendarCompletenessGaps:

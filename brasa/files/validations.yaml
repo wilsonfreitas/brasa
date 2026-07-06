@@ -47,7 +47,18 @@ staging.b3-cotahist:
       IVVB11: { calendar: B3 }
       PETR4: { calendar: B3 }
 
-staging.b3-bvbg086:
+input.b3-bvbg086:
+  - rule: calendar-completeness
+    date_column: refdate
+    group_column: symbol
+    series:
+      PETR4: { calendar: B3 }
+      VALE3: { calendar: B3 }
+      ITUB4: { calendar: B3 }
+      BBAS3: { calendar: B3 }
+      ABEV3: { calendar: B3 }
+
+staging.b3-equities-returns:
   - rule: calendar-completeness
     date_column: refdate
     group_column: symbol

@@ -235,7 +235,42 @@ def _load_validations_config(path: Path | None = None) -> dict[str, Any]:
     return data
 
 
+def _resolve_series_dataset(
+    dataset_key: str,
+    dataset_path: Path,
+    date_column: str,
+    group_column: str | None,
+) -> Any | None:
+    """Open ``dataset_path`` typed via the template/catalog schema when possible.
+
+    Falls back to naive Hive partition discovery (partition columns typed as
+    strings) when there's no template/catalog schema covering the columns
+    this rule needs, e.g. ad hoc datasets with no registered template.
+    """
+    import pyarrow.dataset as ds
+
+    from brasa.queries import get_dataset
+
+    layer, _, name = dataset_key.partition(".")
+    try:
+        dataset = get_dataset(name, layer=layer)
+    except Exception:
+        dataset = None
+
+    columns_covered = dataset is not None and date_column in dataset.schema.names
+    if columns_covered and group_column is not None:
+        columns_covered = group_column in dataset.schema.names
+    if columns_covered:
+        return dataset
+
+    try:
+        return ds.dataset(str(dataset_path), partitioning="hive")
+    except Exception:
+        return None
+
+
 def _read_series_dates(
+    dataset_key: str,
     dataset_path: Path,
     date_column: str,
     group_column: str | None,
@@ -244,6 +279,10 @@ def _read_series_dates(
     """Return the distinct dates present for one series.
 
     Args:
+        dataset_key: ``"layer.dataset"`` key (e.g. ``"input.b3-bvbg086"``),
+            used to look up the template/catalog schema so partition columns
+            (e.g. a Hive-partitioned ``refdate``) are typed correctly instead
+            of being inferred as plain strings.
         dataset_path: Absolute path to the dataset folder under db/.
         date_column: Column holding the observation date.
         group_column: Column separating series (e.g. ``symbol``); ``None``
@@ -255,16 +294,14 @@ def _read_series_dates(
         unreadable.
     """
     import pyarrow.compute as pc
-    import pyarrow.dataset as ds
 
     if not dataset_path.exists():
         return set()
-    try:
-        dataset = ds.dataset(str(dataset_path), partitioning="hive")
-    except Exception:
-        return set()
 
-    if date_column not in dataset.schema.names:
+    dataset = _resolve_series_dataset(
+        dataset_key, dataset_path, date_column, group_column
+    )
+    if dataset is None or date_column not in dataset.schema.names:
         return set()
 
     filt = None
@@ -282,7 +319,12 @@ def _read_series_dates(
     for v in table.column(date_column).to_pylist():
         if v is None:
             continue
-        result.add(v.date() if hasattr(v, "date") else v)
+        if isinstance(v, str):
+            result.add(date.fromisoformat(v))
+        elif hasattr(v, "date"):
+            result.add(v.date())
+        else:
+            result.add(v)
     return result
 
 
@@ -1134,7 +1176,7 @@ def _run_calendar_completeness_rule(
         label = f"{dataset_key}/{series_name}" if series_name else dataset_key
 
         present = _read_series_dates(
-            dataset_path, date_column, group_column, series_name
+            dataset_key, dataset_path, date_column, group_column, series_name
         )
         if not present:
             continue  # absent dataset/series -> skip silently
