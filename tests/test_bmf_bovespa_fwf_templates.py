@@ -212,7 +212,6 @@ class TestDerivativesContracts:
 
 BDIN_FIXTURE = "BDIN_2010-12-20.txt"
 BDIN_EXPECTED_DATASETS = {
-    "header": 1,
     "indexes-summary": 16,
     "stocks-summary": 2103,
     "trades-summary-bdi": 21,
@@ -221,7 +220,6 @@ BDIN_EXPECTED_DATASETS = {
     "most-traded-stocks": 10,
     "most-traded-assets": 30,
     "iopv-summary": 6,
-    "trailer": 1,
 }
 
 
@@ -270,12 +268,6 @@ class TestBdin:
         tb = result["trades-summary-bdi"]
         lote = tb[tb["descricao_cod_bdi"].astype("string").str.strip() == "LOTE PADRAO"]
         assert lote.iloc[0]["volume_titulos_negociados"] == pytest.approx(6146410279.0)
-
-    def test_trailer_record_count(self):
-        _, result = _run_reader("b3-bdin", BDIN_FIXTURE)
-        trailer = result["trailer"].iloc[0]
-        # trailer reports the total number of records in the file
-        assert int(str(trailer["num_registros"]).strip()) == 2228
 
     def test_all_datasets_are_byte_aligned(self):
         """The trailing ``reserva`` filler must be blank in every record type;

@@ -140,3 +140,4 @@ legacy/
 # Generated skill lockfile and script outputs
 skills-lock.json
 scripts/out/
+tmp/
