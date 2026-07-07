@@ -214,7 +214,52 @@ class B3ReadBVBG086XmlStep(PipelineStep):
             instruments.append(data)
 
         logger.info(f"Parsed {len(instruments)} instruments from BVBG086")
-        return pd.DataFrame(instruments)
+        df = pd.DataFrame(instruments)
+        return self._drop_cross_day_spillover(df, tags, creation_date)
+
+    @staticmethod
+    def _drop_cross_day_spillover(
+        df: pd.DataFrame, tags: dict[str, str], creation_date: str
+    ) -> pd.DataFrame:
+        """Keep only rows for the message's own trading day.
+
+        A daily BVBG086 message carries the pregão's bulk (``TradDt`` equal to
+        the message ``CreDtAndTm`` date) plus a handful of next-day
+        pre-registered contracts (``TradDt`` = D+1). Since partitions are
+        written with ``delete_matching``, those spillover rows would clobber
+        the neighbouring day's own full partition when files are processed out
+        of order. Drop them here so each message writes exactly its own
+        ``refdate`` partition.
+
+        The trading-day column is discovered by its XML tag (``TradDt/Dt``)
+        rather than a hard-coded name, so templates that map no such field are
+        left untouched. As a safety net, if no row matches the creation date
+        (e.g. a retransmission created on a later date than the pregão it
+        reports), all rows are kept rather than dropping everything.
+        """
+        refdate_field = next(
+            (name for name, tag in tags.items() if tag == "TradDt/Dt"), None
+        )
+        if not refdate_field or refdate_field not in df.columns or df.empty:
+            return df
+
+        target_date = creation_date[:10]
+        matching = df[df[refdate_field] == target_date]
+        if matching.empty:
+            logger.warning(
+                "No BVBG086 rows match creation date %s; keeping all %d rows",
+                target_date,
+                len(df),
+            )
+            return df
+        if len(matching) < len(df):
+            logger.info(
+                "Dropped %d cross-day spillover row(s); kept %d for %s",
+                len(df) - len(matching),
+                len(matching),
+                target_date,
+            )
+        return matching.reset_index(drop=True)
 
 
 @StepRegistry.register("b3_read_bvbg028_xml")

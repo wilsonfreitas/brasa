@@ -30,6 +30,8 @@ XML_TEMPLATE = """<?xml version="1.0" encoding="utf-8"?><Document xmlns="urn:bvm
 
 PRICRPT_TEMPLATE = """<PricRpt><SctyId><TckrSymb>{symbol}</TckrSymb></SctyId><FinInstrmAttrbts><LastPric>{price}</LastPric></FinInstrmAttrbts></PricRpt>"""
 
+PRICRPT_WITH_DATE = """<PricRpt><SctyId><TckrSymb>{symbol}</TckrSymb></SctyId><TradDt><Dt>{tradedt}</Dt></TradDt><FinInstrmAttrbts><LastPric>{price}</LastPric></FinInstrmAttrbts></PricRpt>"""
+
 
 def _write_gzip_xml(path, content: str) -> str:
     with gzip.open(path, "wb") as f:
@@ -64,13 +66,40 @@ def _fields():
     return fs
 
 
-def _context(all_files):
+def _fields_with_refdate():
+    fs = Fieldset()
+    fs.add_fields(
+        Field(
+            name="refdate",
+            description="Trade date",
+            type_definition="character",
+            tag="TradDt/Dt",
+        ),
+        Field(
+            name="symbol",
+            description="Symbol",
+            type_definition="character",
+            tag="SctyId/TckrSymb",
+        ),
+        Field(
+            name="close",
+            description="Close price",
+            type_definition="numeric",
+            tag="FinInstrmAttrbts/LastPric",
+        ),
+    )
+    return fs
+
+
+def _context(all_files, fields=None):
+    _f = fields if fields is not None else _fields()
+
     class Ctx(PipelineContext):
         @property
         def all_downloaded_files(self):
             return all_files
 
-    return Ctx(meta=None, reader_config={}, fields=_fields(), template_id="test")
+    return Ctx(meta=None, reader_config={}, fields=_f, template_id="test")
 
 
 class TestBVBG086Reader:
@@ -131,3 +160,62 @@ class TestBVBG086Reader:
         step = B3ReadBVBG086XmlStep({"step": "b3_read_bvbg086_xml"})
         with pytest.raises(ValueError, match="No parseable BVBG086"):
             step.execute(None, _context([garbage]))
+
+
+class TestBVBG086CrossDaySpillover:
+    """A daily BVBG086 message carries the pregão's bulk (TradDt == creation
+    date) plus a handful of next-day pre-registered contracts (TradDt == D+1).
+    Because partitions are written with delete_matching, those spillover rows
+    would clobber the neighbouring day's own full partition. The reader must
+    keep only rows for the message's own trading day (its CreDtAndTm date).
+    """
+
+    def test_drops_cross_day_spillover_rows(self, tmp_path):
+        pricrpts = (
+            PRICRPT_WITH_DATE.format(symbol="PETR4", tradedt="2016-10-05", price="15.1")
+            + PRICRPT_WITH_DATE.format(
+                symbol="VALE3", tradedt="2016-10-05", price="20.0"
+            )
+            # next-day spillover — must be dropped
+            + PRICRPT_WITH_DATE.format(
+                symbol="BGIV16", tradedt="2016-10-06", price="150.0"
+            )
+        )
+        xml = XML_TEMPLATE.format(creation_dt="2016-10-05T19:25:14", pricrpts=pricrpts)
+        path = _write_gzip_xml(tmp_path / "msg.xml.gz", xml)
+
+        step = B3ReadBVBG086XmlStep({"step": "b3_read_bvbg086_xml"})
+        df = step.execute(None, _context([path], fields=_fields_with_refdate()))
+
+        assert set(df["symbol"]) == {"PETR4", "VALE3"}
+        assert set(df["refdate"]) == {"2016-10-05"}
+
+    def test_keeps_all_when_no_row_matches_creation_date(self, tmp_path):
+        """Safety net: a retransmission created on a later date than the pregão
+        it reports must not have every row filtered away."""
+        pricrpts = PRICRPT_WITH_DATE.format(
+            symbol="PETR4", tradedt="2016-10-05", price="15.1"
+        ) + PRICRPT_WITH_DATE.format(symbol="VALE3", tradedt="2016-10-05", price="20.0")
+        # creation date is the day AFTER the reported trading day
+        xml = XML_TEMPLATE.format(creation_dt="2016-10-06T08:00:00", pricrpts=pricrpts)
+        path = _write_gzip_xml(tmp_path / "msg.xml.gz", xml)
+
+        step = B3ReadBVBG086XmlStep({"step": "b3_read_bvbg086_xml"})
+        df = step.execute(None, _context([path], fields=_fields_with_refdate()))
+
+        assert set(df["symbol"]) == {"PETR4", "VALE3"}
+
+    def test_no_refdate_field_keeps_all_rows(self, tmp_path):
+        """When the template maps no TradDt/Dt field, no spillover filtering
+        applies and all parsed rows are returned unchanged."""
+        xml = XML_TEMPLATE.format(
+            creation_dt="2016-10-05T19:25:14",
+            pricrpts=PRICRPT_TEMPLATE.format(symbol="PETR4", price="30.5"),
+        )
+        path = _write_gzip_xml(tmp_path / "msg.xml.gz", xml)
+
+        step = B3ReadBVBG086XmlStep({"step": "b3_read_bvbg086_xml"})
+        df = step.execute(None, _context([path]))
+
+        assert len(df) == 1
+        assert df.iloc[0]["symbol"] == "PETR4"
