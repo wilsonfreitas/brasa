@@ -7,6 +7,7 @@ etl:
         - input.b3-bvbg086
         - staging.b3-equities-spot-market
         - staging.b3-cotahist
+        - input.b3-bdin-stocks-summary
       query: |+
         -- B3 Equities Returns dataset
         -- Includes: shares (security_category=11), BDRs (1), units (13)
@@ -56,10 +57,36 @@ etl:
               LN(1 + (COALESCE(t.oscillation, 0) / 100)) AS log_return
           FROM 'input.b3-bvbg086' t
           INNER JOIN equity_symbols s USING (symbol)
+        ),
+        bdin_20160229_returns as (
+            -- 2016-02-29 is a whole-market gap in bvbg086 (0 rows at the source),
+            -- so it is missing from bvbg86_returns while 2016-03-01's native
+            -- oscillation already bridges 2016-02-29 -> 2016-03-01. We fill just
+            -- that single day from BDIN's round-lot spot rows (cod_bdi = 2),
+            -- using its native daily oscillation `oscilacao_preco` -- the simple
+            -- return, analogous to bvbg086's `oscillation`. The magnitude is
+            -- unsigned; `sinal_oscilacao_preco` carries the sign ('+'/'-'/'=').
+            -- Rows that did not trade carry sinal '/' with preco_ult = 0 and are
+            -- dropped (no defined return), mirroring the days_count guard above.
+            SELECT
+                b.refdate,
+                b.cod_negociacao AS symbol,
+                (CASE WHEN b.sinal_oscilacao_preco = '-' THEN -1 ELSE 1 END
+                    * COALESCE(b.oscilacao_preco, 0) / 100) AS pct_return,
+                LN(1 + (CASE WHEN b.sinal_oscilacao_preco = '-' THEN -1 ELSE 1 END
+                    * COALESCE(b.oscilacao_preco, 0) / 100)) AS log_return
+            FROM 'input.b3-bdin-stocks-summary' b
+            INNER JOIN equity_symbols s ON b.cod_negociacao = s.symbol
+            WHERE b.refdate = '2016-02-29'
+              AND b.cod_bdi = 2                              -- LOTE PADRAO / VISTA
+              AND b.sinal_oscilacao_preco IN ('+', '-', '=')  -- exclude '/' (no trade)
+              AND b.preco_ult > 0
         )
         SELECT * from cotahist_20210610_returns
         UNION ALL
         SELECT * FROM bvbg86_returns
+        UNION ALL
+        SELECT * FROM bdin_20160229_returns
         order by refdate, symbol
 
     - step: apply_fields
