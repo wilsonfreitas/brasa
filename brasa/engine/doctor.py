@@ -204,29 +204,28 @@ def _get_catalog_rows() -> list[dict[str, Any]]:
             return []
 
 
-def _load_validations_config(path: Path | None = None) -> dict[str, Any]:
+def _load_validations_config(path: Path) -> dict[str, Any]:
     """Load the validations config mapping (layer.dataset -> list of rules).
 
     Args:
-        path: Optional explicit config path. Defaults to the packaged
-            ``brasa/files/validations.yaml``.
+        path: Path to a validations YAML file. Required — there is no
+            packaged default.
 
     Returns:
-        Parsed mapping; ``{}`` when the file is absent or empty.
+        Parsed mapping of ``"layer.dataset"`` to a list of rules.
 
     Raises:
-        ValueError: If the YAML root is not a mapping.
+        FileNotFoundError: If ``path`` does not exist.
+        ValueError: If the file is empty or its YAML root is not a mapping.
         yaml.YAMLError: If the file cannot be parsed.
     """
-    from .resources import package_path
-
-    cfg_path = Path(path) if path is not None else package_path("validations.yaml")
+    cfg_path = Path(path)
     if not cfg_path.exists():
-        return {}
+        raise FileNotFoundError(f"validations file not found: {cfg_path}")
     with cfg_path.open() as f:
         data = yaml.safe_load(f)
     if data is None:
-        return {}
+        raise ValueError(f"validations file is empty: {cfg_path}")
     if not isinstance(data, dict):
         raise ValueError(
             "validations config root must be a mapping of "
@@ -1211,13 +1210,13 @@ def _run_calendar_completeness_rule(
 
 
 def check_calendar_completeness(
-    validations_config: Path | None = None,
+    validations_config: Path,
 ) -> list[Issue]:
     """Validate that configured series are complete against a business calendar.
 
     Args:
-        validations_config: Optional explicit path to a validations YAML file.
-            Defaults to the packaged ``brasa/files/validations.yaml``.
+        validations_config: Path to the validations YAML file. Required;
+            ``run_doctor`` guarantees a non-None path before calling.
 
     Returns:
         List of issues (gaps and config errors). Never raises.
@@ -1290,19 +1289,28 @@ def run_doctor(
     categories: list[str] | None = None,
     template_filter: list[str] | None = None,
     since_days: int = 30,
+    validations_config: Path | None = None,
 ) -> DoctorReport:
     """Run all (or selected) diagnostic checks and return a DoctorReport.
 
     Args:
         categories: Optional list of category keys to restrict checks.
-            Valid values: "raw", "db", "meta", "templates", "gaps".
-            If None, all checks are run.
+            Valid values: "raw", "db", "meta", "templates", "gaps",
+            "validations". If None, all checks are run.
         template_filter: Restrict date-gap and stale-etl checks to these
             template IDs.
         since_days: For date-gap checks, only look back this many days.
+        validations_config: Path to a validations YAML file. Required for the
+            "validations" category. If None and "validations" is explicitly
+            requested, a ValueError is raised; if None during a broad run, the
+            validation checks are skipped with an informational note.
 
     Returns:
         DoctorReport aggregating all issues found.
+
+    Raises:
+        ValueError: If "validations" is explicitly requested without
+            validations_config.
     """
     report = DoctorReport()
 
@@ -1313,6 +1321,27 @@ def run_doctor(
             active_codes.update(_CATEGORY_KEYS.get(cat_key, []))
     else:
         active_codes = {code for codes in _CATEGORY_KEYS.values() for code in codes}
+
+    # Validations require an explicit spec file (WIL-91). With no file, an
+    # explicit `--category validations` is a usage error, while a broad run
+    # skips the validation checks with an informational note. Generic over the
+    # whole validations category so future rule types inherit this policy.
+    validation_codes = set(_CATEGORY_KEYS["validations"])
+    explicit_validations = categories is not None and "validations" in categories
+    if validations_config is None and (active_codes & validation_codes):
+        if explicit_validations:
+            raise ValueError("the 'validations' category requires --validations-file")
+        active_codes -= validation_codes
+        report.issues.append(
+            Issue(
+                category="Data Validation",
+                code="validations-skipped",
+                severity="info",
+                description="validations skipped: no --validations-file provided",
+                details=[],
+                fixable=False,
+            )
+        )
 
     check_map: dict[str, Callable[[], list[Issue]]] = {
         "orphan-raw": check_orphan_raw,
@@ -1327,8 +1356,11 @@ def run_doctor(
         "stale-etl": lambda: check_stale_etl(template_filter),
         "missing-etl-source": lambda: check_missing_etl_source(template_filter),
         "date-gaps": lambda: check_date_gaps(since_days, template_filter),
-        "calendar-completeness": check_calendar_completeness,
     }
+    if validations_config is not None:
+        check_map["calendar-completeness"] = lambda: check_calendar_completeness(
+            validations_config
+        )
 
     for code, check_fn in check_map.items():
         if code not in active_codes:
