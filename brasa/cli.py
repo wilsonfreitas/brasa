@@ -550,6 +550,11 @@ parser_doctor.add_argument(
     metavar="DAYS",
     help="for date-gap checks, look back this many days (default: 30)",
 )
+parser_doctor.add_argument(
+    "--validations-file",
+    metavar="FILE",
+    help="path to a validations YAML file (required for the 'validations' category)",
+)
 
 parser_cache = subparsers.add_parser(
     "cache",
@@ -1343,12 +1348,19 @@ def main() -> None:  # noqa: PLR0912, PLR0915
         since_days = getattr(args, "since", 30)
         do_fix = getattr(args, "fix", False)
         skip_confirm = getattr(args, "yes", False)
+        validations_file = getattr(args, "validations_file", None)
+        validations_config = Path(validations_file) if validations_file else None
 
-        report = run_doctor(
-            categories=categories,
-            template_filter=template_filter,
-            since_days=since_days,
-        )
+        try:
+            report = run_doctor(
+                categories=categories,
+                template_filter=template_filter,
+                since_days=since_days,
+                validations_config=validations_config,
+            )
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(2)
 
         _print_doctor_report(report)
 

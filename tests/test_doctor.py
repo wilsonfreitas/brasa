@@ -551,13 +551,15 @@ def _full_anbima_series(dataset_rel, symbol, start, end):
 
 
 class TestLoadValidationsConfig:
-    def test_missing_file_returns_empty(self, tmp_path):
-        assert _load_validations_config(tmp_path / "nope.yaml") == {}
+    def test_missing_file_raises(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            _load_validations_config(tmp_path / "nope.yaml")
 
-    def test_empty_file_returns_empty(self, tmp_path):
+    def test_empty_file_raises(self, tmp_path):
         p = tmp_path / "v.yaml"
         p.write_text("")
-        assert _load_validations_config(p) == {}
+        with pytest.raises(ValueError):
+            _load_validations_config(p)
 
     def test_parses_mapping(self, tmp_path):
         p = tmp_path / "v.yaml"
@@ -816,20 +818,43 @@ class TestCheckCalendarCompleteness:
 
 
 class TestValidationsCategory:
-    def test_run_doctor_validations_category(self):
+    def test_category_keys(self):
         from brasa.engine.doctor import _CATEGORY_KEYS
 
-        assert "validations" in _CATEGORY_KEYS
         assert _CATEGORY_KEYS["validations"] == ["calendar-completeness"]
-        report = run_doctor(categories=["validations"])
+
+    def test_explicit_validations_without_file_raises(self):
+        with pytest.raises(ValueError):
+            run_doctor(categories=["validations"])
+
+    def test_mixed_explicit_validations_without_file_raises(self):
+        with pytest.raises(ValueError):
+            run_doctor(categories=["validations", "meta"], validations_config=None)
+
+    def test_bare_run_skips_validations_with_note(self):
+        report = run_doctor()
+        codes = {i.code for i in report.issues}
+        assert "validations-skipped" in codes
+
+    def test_validations_with_file_runs(self, tmp_path):
+        cfg = _write_validations(
+            tmp_path,
+            """
+            staging.bcb-sgs:
+              - rule: calendar-completeness
+                group_column: symbol
+                series:
+                  CDI: {calendar: ANBIMA}
+            """,
+        )
+        report = run_doctor(categories=["validations"], validations_config=cfg)
         assert isinstance(report, DoctorReport)
 
-
-class TestShippedValidationsConfig:
-    def test_default_config_loads_and_covers_bcb_sgs(self):
-        cfg = _load_validations_config()  # default packaged path
-        assert "staging.bcb-sgs" in cfg
-        rule = cfg["staging.bcb-sgs"][0]
-        assert rule["rule"] == "calendar-completeness"
-        assert rule["group_column"] == "symbol"
-        assert "CDI" in rule["series"]
+    def test_bad_file_produces_config_error_finding(self, tmp_path):
+        # A supplied-but-unreadable file surfaces as an exit-1 finding
+        # (validation-config-error), not a usage error and not a crash.
+        report = run_doctor(
+            categories=["validations"], validations_config=tmp_path / "nope.yaml"
+        )
+        error = next(i for i in report.issues if i.code == "validation-config-error")
+        assert error.severity == "error"
