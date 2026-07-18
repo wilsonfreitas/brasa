@@ -78,6 +78,24 @@ rule-level → series inheritance.
 A full, working example lives at
 [`docs/examples/validations.yaml`](examples/validations.yaml).
 
+### Rule: `no-unexpected-observations`
+
+The inverse of `calendar-completeness`: it flags rows that fall on a
+**non-business day** (weekend or holiday) of the configured `calendar`. Same
+config shape as `calendar-completeness` (`date_column`, `group_column`,
+`series`, per-series `calendar`). Daily-only: series with `frequency: monthly`
+or `frequency: quarterly` are skipped. Findings are `error` severity and
+read-only (no auto-fix). Dates outside the calendar's coverage are skipped.
+
+```yaml
+input.b3-bvbg086:
+  - rule: no-unexpected-observations
+    date_column: refdate
+    group_column: symbol
+    series:
+      PETR4: { calendar: B3 }
+```
+
 ## Roadmap
 
 Additional rule types — monthly/quarterly frequency completeness, non-business-day
