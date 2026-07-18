@@ -651,6 +651,23 @@ brasa doctor --template b3-cotahist-daily b3-bvbg087
 brasa doctor --category validations
 ```
 
+#### Downloads category — refdate coverage
+
+Verify that every business day was actually **downloaded** for templates that
+download per `refdate` (reads the cache metadata, not `db/`):
+
+```bash
+brasa doctor --category downloads --template b3-trades-intraday --calendar B3
+```
+
+- Requires `--template` (one or more); without it the category is silent.
+- `--calendar` selects the business calendar (default `B3`), applied to every
+  named template.
+- Reports, per template: missing business days in the observed range
+  (`error`), downloaded dates that are not business days of the calendar
+  (`info`, helps spot a wrong `--calendar`), or a `warning` when a template has
+  no downloaded refdates in the metadata.
+
 ---
 
 ## Common Workflows
