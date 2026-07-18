@@ -28,6 +28,7 @@ from brasa.engine.doctor import (
     _read_series_dates,
     check_corrupted_parquet,
     check_date_gaps,
+    check_download_refdate_gaps,
     check_empty_parquet,
     check_invalid_downloads,
     check_missing_db,
@@ -57,6 +58,7 @@ def _insert_meta(
     is_processed: bool = False,
     processing_errors: str = "",
     is_invalid_download: str = "0",
+    download_args: str = "{}",
 ):
     """Insert a row directly into cache_metadata for testing."""
     with closing(_meta_conn()) as conn, conn:
@@ -72,7 +74,7 @@ def _insert_meta(
                 download_checksum,
                 datetime.now().isoformat(),
                 "{}",
-                "{}",
+                download_args,
                 template,
                 json.dumps(downloaded_files or []),
                 json.dumps(is_processed),
@@ -1323,3 +1325,101 @@ class TestNoDuplicatesRule:
             """,
         )
         assert [i for i in report.issues if i.code == "validation-config-error"]
+
+
+class TestDownloadRefdateGaps:
+    def _seed(self, template, days, invalid=False):
+        for i, d in enumerate(days):
+            _insert_meta(
+                f"{template}-{i}-{'x' if invalid else 'o'}",
+                template,
+                download_checksum=f"{template}{i}{'x' if invalid else 'o'}",
+                download_args=json.dumps({"refdate": f"{d.isoformat()}T00:00:00"}),
+                is_invalid_download="1" if invalid else "0",
+            )
+
+    def test_interior_gap_is_error(self):
+        cal = Calendar.load("B3")
+        days = [
+            d.date() if hasattr(d, "date") else d
+            for d in cal.seq("2024-01-02", "2024-01-31")
+        ]
+        present = days[:5] + days[10:]  # remove a run of 5 business days
+        self._seed("dl-gap", present)
+        issues = check_download_refdate_gaps(["dl-gap"], "B3")
+        gaps = [i for i in issues if i.code == "download-refdate-gaps"]
+        assert len(gaps) == 1
+        assert gaps[0].severity == "error"
+        assert str(days[5]) in gaps[0].details
+        assert str(days[9]) in gaps[0].details
+
+    def test_complete_coverage_no_issue(self):
+        cal = Calendar.load("B3")
+        days = [
+            d.date() if hasattr(d, "date") else d
+            for d in cal.seq("2024-02-01", "2024-02-29")
+        ]
+        self._seed("dl-ok", days)
+        issues = check_download_refdate_gaps(["dl-ok"], "B3")
+        assert not [i for i in issues if i.code == "download-refdate-gaps"]
+
+    def test_out_of_calendar_date_is_info(self):
+        # 2024-03-02 is a Saturday -> not a B3 business day.
+        days = [date(2024, 3, 1), date(2024, 3, 2), date(2024, 3, 4)]
+        self._seed("dl-extra", days)
+        issues = check_download_refdate_gaps(["dl-extra"], "B3")
+        extra = [i for i in issues if i.code == "download-refdate-extra"]
+        assert len(extra) == 1
+        assert extra[0].severity == "info"
+        assert "2024-03-02" in extra[0].details
+
+    def test_template_without_refdate_rows_is_warning(self):
+        _insert_meta("dl-none-0", "dl-none", download_checksum="dlnone0")
+        issues = check_download_refdate_gaps(["dl-none"], "B3")
+        warn = [i for i in issues if i.code == "download-refdate-missing-template"]
+        assert len(warn) == 1
+        assert warn[0].severity == "warning"
+
+    def test_invalid_downloads_ignored(self):
+        cal = Calendar.load("B3")
+        days = [
+            d.date() if hasattr(d, "date") else d
+            for d in cal.seq("2024-04-01", "2024-04-30")
+        ]
+        # seed every business day as valid EXCEPT days[3]
+        self._seed("dl-inv", days[:3] + days[4:])
+        # days[3] exists ONLY as an invalid download row
+        self._seed("dl-inv", [days[3]], invalid=True)
+        issues = check_download_refdate_gaps(["dl-inv"], "B3")
+        gaps = [i for i in issues if i.code == "download-refdate-gaps"]
+        # invalid row must NOT count as coverage -> days[3] is a gap
+        assert len(gaps) == 1
+        assert str(days[3]) in gaps[0].details
+
+    def test_no_template_filter_yields_nothing(self):
+        assert check_download_refdate_gaps(None, "B3") == []
+        assert check_download_refdate_gaps([], "B3") == []
+
+    def test_integration_via_run_doctor(self):
+        cal = Calendar.load("B3")
+        days = [
+            d.date() if hasattr(d, "date") else d
+            for d in cal.seq("2024-05-02", "2024-05-31")
+        ]
+        self._seed("dl-int", days[:5] + days[10:])
+        report = run_doctor(
+            categories=["downloads"], template_filter=["dl-int"], calendar_name="B3"
+        )
+        assert [i for i in report.issues if i.code == "download-refdate-gaps"]
+        # no template filter -> this category is silent
+        report2 = run_doctor(categories=["downloads"], calendar_name="B3")
+        assert not [
+            i
+            for i in report2.issues
+            if i.code
+            in {
+                "download-refdate-gaps",
+                "download-refdate-extra",
+                "download-refdate-missing-template",
+            }
+        ]
