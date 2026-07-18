@@ -69,3 +69,12 @@ staging.b3-equities-returns:
       ITUB4: { calendar: B3 }
       BBAS3: { calendar: B3 }
       ABEV3: { calendar: B3 }
+
+# Inverse check: flag rows landing on non-business days.
+input.b3-bvbg086-nonbiz:
+  - rule: no-unexpected-observations
+    date_column: refdate
+    group_column: symbol
+    series:
+      PETR4: { calendar: B3 }
+      VALE3: { calendar: B3 }

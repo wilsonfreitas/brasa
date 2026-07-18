@@ -26,7 +26,6 @@ from brasa.engine.doctor import (
     _calendar_completeness_gaps,
     _load_validations_config,
     _read_series_dates,
-    check_calendar_completeness,
     check_corrupted_parquet,
     check_date_gaps,
     check_empty_parquet,
@@ -36,6 +35,7 @@ from brasa.engine.doctor import (
     check_orphan_db,
     check_orphan_raw,
     check_unresolved_errors,
+    check_validations,
     run_doctor,
 )
 
@@ -692,7 +692,7 @@ class TestCheckCalendarCompleteness:
                   CDI: {calendar: ANBIMA}
             """,
         )
-        assert check_calendar_completeness(cfg) == []
+        assert check_validations(cfg) == []
 
     def test_business_day_hole_reported(self, tmp_path):
         days = _full_anbima_series(
@@ -710,7 +710,7 @@ class TestCheckCalendarCompleteness:
                   CDI: {calendar: ANBIMA}
             """,
         )
-        issues = check_calendar_completeness(cfg)
+        issues = check_validations(cfg)
         assert len(issues) == 1
         assert issues[0].code == "calendar-completeness"
         assert issues[0].severity == "error"
@@ -732,7 +732,7 @@ class TestCheckCalendarCompleteness:
                   CDI: {calendar: ANBIMA}
             """,
         )
-        assert check_calendar_completeness(cfg) == []
+        assert check_validations(cfg) == []
 
     def test_absent_dataset_skipped(self, tmp_path):
         cfg = _write_validations(
@@ -745,7 +745,7 @@ class TestCheckCalendarCompleteness:
                   CDI: {calendar: ANBIMA}
             """,
         )
-        assert check_calendar_completeness(cfg) == []
+        assert check_validations(cfg) == []
 
     def test_single_series_shape(self, tmp_path):
         cal = Calendar.load("ANBIMA")
@@ -762,7 +762,7 @@ class TestCheckCalendarCompleteness:
                 calendar: ANBIMA
             """,
         )
-        issues = check_calendar_completeness(cfg)
+        issues = check_validations(cfg)
         assert len(issues) == 1
         assert str(days[5]) in issues[0].details
 
@@ -780,7 +780,7 @@ class TestCheckCalendarCompleteness:
                   CDI: {calendar: NOPE}
             """,
         )
-        issues = check_calendar_completeness(cfg)
+        issues = check_validations(cfg)
         assert len(issues) == 1
         assert issues[0].code == "validation-config-error"
         assert issues[0].severity == "error"
@@ -793,7 +793,7 @@ class TestCheckCalendarCompleteness:
               - rule: not-a-rule
             """,
         )
-        issues = check_calendar_completeness(cfg)
+        issues = check_validations(cfg)
         assert len(issues) == 1
         assert issues[0].code == "validation-config-error"
 
@@ -806,13 +806,13 @@ class TestCheckCalendarCompleteness:
                 group_column: symbol
             """,
         )
-        issues = check_calendar_completeness(cfg)
+        issues = check_validations(cfg)
         assert len(issues) == 1
         assert issues[0].code == "validation-config-error"
 
     def test_unparseable_config_is_error(self, tmp_path):
         cfg = _write_validations(tmp_path, "a: [1, 2\n")
-        issues = check_calendar_completeness(cfg)
+        issues = check_validations(cfg)
         assert len(issues) == 1
         assert issues[0].code == "validation-config-error"
 
@@ -821,7 +821,7 @@ class TestValidationsCategory:
     def test_category_keys(self):
         from brasa.engine.doctor import _CATEGORY_KEYS
 
-        assert _CATEGORY_KEYS["validations"] == ["calendar-completeness"]
+        assert _CATEGORY_KEYS["validations"] == ["validations"]
 
     def test_explicit_validations_without_file_raises(self):
         with pytest.raises(ValueError):
@@ -999,3 +999,95 @@ class TestFrequencyCompleteness:
         assert any("BAD" in e.description for e in errs)
         # IPCA still evaluated (complete -> no calendar-completeness issue)
         assert not [i for i in report.issues if i.code == "calendar-completeness"]
+
+
+class TestUnexpectedObservations:
+    def test_helper_flags_weekend_and_holiday(self):
+        from brasa.engine.doctor import _unexpected_observations
+
+        # 2021-01-01 is a holiday; 2021-01-02 is a Saturday; 2021-01-04 a Monday.
+        present = {date(2021, 1, 1), date(2021, 1, 2), date(2021, 1, 4)}
+        flagged = _unexpected_observations(present, "B3")
+        assert date(2021, 1, 1) in flagged
+        assert date(2021, 1, 2) in flagged
+        assert date(2021, 1, 4) not in flagged
+
+    def test_helper_skips_out_of_coverage_dates(self):
+        from bizdays import Calendar
+
+        from brasa.engine.doctor import _as_date, _unexpected_observations
+
+        cal = Calendar.load("B3")
+        start = _as_date(cal.startdate)
+        before = start.replace(year=start.year - 5)
+        present = {before}  # out of coverage -> undeterminable -> not flagged
+        assert _unexpected_observations(present, "B3") == []
+
+    def test_rule_reports_saturday_row(self, tmp_path):
+        _write_series_parquet(
+            "staging/nb-check",
+            "PETR4",
+            [date(2021, 1, 4), date(2021, 1, 2)],  # Mon + Sat
+        )
+        cfg = _write_validations(
+            tmp_path,
+            """
+            staging.nb-check:
+              - rule: no-unexpected-observations
+                group_column: symbol
+                series:
+                  PETR4: {calendar: B3}
+            """,
+        )
+        report = run_doctor(categories=["validations"], validations_config=cfg)
+        found = [i for i in report.issues if i.code == "no-unexpected-observations"]
+        assert len(found) == 1
+        assert found[0].severity == "error"
+        assert "2021-01-02" in found[0].details
+
+    def test_rule_clean_series_no_issue(self, tmp_path):
+        _write_series_parquet(
+            "staging/nb-clean", "PETR4", [date(2021, 1, 4), date(2021, 1, 5)]
+        )
+        cfg = _write_validations(
+            tmp_path,
+            """
+            staging.nb-clean:
+              - rule: no-unexpected-observations
+                group_column: symbol
+                series:
+                  PETR4: {calendar: B3}
+            """,
+        )
+        report = run_doctor(categories=["validations"], validations_config=cfg)
+        assert not [i for i in report.issues if i.code == "no-unexpected-observations"]
+
+    def test_rule_skips_non_daily_frequency(self, tmp_path):
+        _write_series_parquet(
+            "staging/nb-monthly",
+            "IPCA",
+            [date(2021, 1, 2)],  # Saturday
+        )
+        cfg = _write_validations(
+            tmp_path,
+            """
+            staging.nb-monthly:
+              - rule: no-unexpected-observations
+                group_column: symbol
+                series:
+                  IPCA: {calendar: B3, frequency: monthly}
+            """,
+        )
+        report = run_doctor(categories=["validations"], validations_config=cfg)
+        assert not [i for i in report.issues if i.code == "no-unexpected-observations"]
+
+    def test_unknown_rule_type_is_config_error(self, tmp_path):
+        cfg = _write_validations(
+            tmp_path,
+            """
+            staging.whatever:
+              - rule: no-such-rule
+            """,
+        )
+        report = run_doctor(categories=["validations"], validations_config=cfg)
+        assert [i for i in report.issues if i.code == "validation-config-error"]

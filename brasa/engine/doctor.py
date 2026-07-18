@@ -435,6 +435,35 @@ def _period_completeness_gaps(
     return [label(i) for i in range(lower, upper + 1) if i not in present_idx]
 
 
+def _unexpected_observations(
+    present_dates: set[date], calendar_name: str
+) -> list[date]:
+    """Return present dates that fall on non-business days, sorted ascending.
+
+    The inverse of ``_calendar_completeness_gaps``: it flags rows on weekends
+    or holidays. Dates outside the calendar's coverage are undeterminable and
+    skipped (never flagged), which also guards ``isbizday`` against raising.
+
+    Args:
+        present_dates: Dates actually present for the series (non-empty).
+        calendar_name: bizdays calendar name (e.g. ``B3``).
+
+    Returns:
+        Sorted list of present dates the calendar marks as non-business days.
+
+    Raises:
+        Exception: If the calendar name is unknown.
+    """
+    from bizdays import Calendar
+
+    cal = Calendar.load(calendar_name)
+    lower = _as_date(cal.startdate)
+    upper = _as_date(cal.enddate)
+    return sorted(
+        d for d in present_dates if lower <= d <= upper and not cal.isbizday(d)
+    )
+
+
 # ---------------------------------------------------------------------------
 # Category: Raw Files
 # ---------------------------------------------------------------------------
@@ -1201,6 +1230,35 @@ def _validation_config_error(dataset_key: str, msg: str) -> Issue:
     )
 
 
+def _expand_series_items(
+    dataset_key: str, rule: dict[str, Any]
+) -> tuple[list[tuple[str | None, dict[str, Any]]] | None, Issue | None]:
+    """Expand a validation rule into ``(series_name, series_cfg)`` items.
+
+    Grouped rules (``group_column`` set) draw one item per entry in the
+    ``series:`` map; single-series rules yield one ``(None, rule)`` item.
+
+    Args:
+        dataset_key: ``"layer.dataset"`` key, used only for error messages.
+        rule: The rule mapping from the validations config.
+
+    Returns:
+        ``(series_items, None)`` on success, or ``(None, error_issue)`` when a
+        grouped rule is missing a non-empty ``series:`` map.
+    """
+    group_column = rule.get("group_column")
+    if group_column is not None:
+        series = rule.get("series")
+        if not isinstance(series, dict) or not series:
+            return None, _validation_config_error(
+                dataset_key, "grouped rule requires a non-empty 'series' map"
+            )
+        return [
+            (name, cfg if isinstance(cfg, dict) else {}) for name, cfg in series.items()
+        ], None
+    return [(None, rule)], None
+
+
 def _run_calendar_completeness_rule(
     dataset_key: str, dataset_path: Path, rule: dict[str, Any]
 ) -> list[Issue]:
@@ -1208,20 +1266,9 @@ def _run_calendar_completeness_rule(
     date_column = rule.get("date_column", "refdate")
     group_column = rule.get("group_column")
 
-    if group_column is not None:
-        series = rule.get("series")
-        if not isinstance(series, dict) or not series:
-            return [
-                _validation_config_error(
-                    dataset_key,
-                    "grouped calendar-completeness requires a non-empty 'series' map",
-                )
-            ]
-        series_items: list[tuple[str | None, dict[str, Any]]] = [
-            (name, cfg if isinstance(cfg, dict) else {}) for name, cfg in series.items()
-        ]
-    else:
-        series_items = [(None, rule)]
+    series_items, err = _expand_series_items(dataset_key, rule)
+    if err is not None:
+        return [err]
 
     issues: list[Issue] = []
     for series_name, scfg in series_items:
@@ -1289,17 +1336,72 @@ def _run_calendar_completeness_rule(
     return issues
 
 
-def check_calendar_completeness(
+def _run_no_unexpected_observations_rule(
+    dataset_key: str, dataset_path: Path, rule: dict[str, Any]
+) -> list[Issue]:
+    """Evaluate a single no-unexpected-observations rule for one dataset."""
+    date_column = rule.get("date_column", "refdate")
+    group_column = rule.get("group_column")
+
+    series_items, err = _expand_series_items(dataset_key, rule)
+    if err is not None:
+        return [err]
+
+    issues: list[Issue] = []
+    for series_name, scfg in series_items:
+        if scfg.get("frequency", "daily") != "daily":
+            continue  # non-daily series: rule is meaningless -> skip silently
+        calendar_name = scfg.get("calendar", "ANBIMA")
+        label = f"{dataset_key}/{series_name}" if series_name else dataset_key
+
+        present = _read_series_dates(
+            dataset_key, dataset_path, date_column, group_column, series_name
+        )
+        if not present:
+            continue  # absent dataset/series -> skip silently
+
+        try:
+            unexpected = _unexpected_observations(present, calendar_name)
+        except Exception as exc:
+            issues.append(
+                _validation_config_error(
+                    label, f"invalid no-unexpected-observations config ({exc})"
+                )
+            )
+            continue
+
+        if unexpected:
+            issues.append(
+                Issue(
+                    category="Data Validation",
+                    code="no-unexpected-observations",
+                    severity="error",
+                    description=(
+                        f"{label}: {len(unexpected)} observation(s) on non-business "
+                        f"days ({calendar_name}) between "
+                        f"{unexpected[0]} and {unexpected[-1]}"
+                    ),
+                    details=[str(d) for d in unexpected],
+                    fixable=False,
+                )
+            )
+    return issues
+
+
+def check_validations(
     validations_config: Path,
 ) -> list[Issue]:
-    """Validate that configured series are complete against a business calendar.
+    """Run all configured validation rules against the stored datasets.
+
+    Loads the validations spec and dispatches each rule by its ``rule:``
+    discriminator (``calendar-completeness``, ``no-unexpected-observations``).
 
     Args:
         validations_config: Path to the validations YAML file. Required;
             ``run_doctor`` guarantees a non-None path before calling.
 
     Returns:
-        List of issues (gaps and config errors). Never raises.
+        List of issues (findings and config errors). Never raises.
     """
     from .cache import CacheManager
 
@@ -1332,16 +1434,22 @@ def check_calendar_completeness(
                 )
                 continue
             rule_type = rule.get("rule")
-            if rule_type != "calendar-completeness":
+            if rule_type == "calendar-completeness":
+                issues.extend(
+                    _run_calendar_completeness_rule(dataset_key, dataset_path, rule)
+                )
+            elif rule_type == "no-unexpected-observations":
+                issues.extend(
+                    _run_no_unexpected_observations_rule(
+                        dataset_key, dataset_path, rule
+                    )
+                )
+            else:
                 issues.append(
                     _validation_config_error(
                         dataset_key, f"unknown validation rule '{rule_type}'"
                     )
                 )
-                continue
-            issues.extend(
-                _run_calendar_completeness_rule(dataset_key, dataset_path, rule)
-            )
     return issues
 
 
@@ -1361,7 +1469,7 @@ _CATEGORY_KEYS = {
     "meta": ["unresolved-errors", "invalid-downloads"],
     "templates": ["stale-etl", "missing-etl-source"],
     "gaps": ["date-gaps"],
-    "validations": ["calendar-completeness"],
+    "validations": ["validations"],
 }
 
 
@@ -1438,9 +1546,7 @@ def run_doctor(
         "date-gaps": lambda: check_date_gaps(since_days, template_filter),
     }
     if validations_config is not None:
-        check_map["calendar-completeness"] = lambda: check_calendar_completeness(
-            validations_config
-        )
+        check_map["validations"] = lambda: check_validations(validations_config)
 
     for code, check_fn in check_map.items():
         if code not in active_codes:
