@@ -1648,6 +1648,114 @@ def check_validations(
     return issues
 
 
+def check_download_refdate_gaps(
+    template_filter: list[str] | None, calendar_name: str
+) -> list[Issue]:
+    """Verify downloaded refdate coverage for named templates (from meta).
+
+    Reads ``cache_metadata`` for each template in ``template_filter``, collects
+    the ``refdate`` values from ``download_args`` (skipping invalid downloads),
+    and compares the observed min->max window against the given business
+    calendar. Silent when no ``template_filter`` is given.
+
+    Args:
+        template_filter: Templates to check. ``None``/empty yields no issues.
+        calendar_name: bizdays calendar name (e.g. ``B3``).
+
+    Returns:
+        Up to two issues per template: a ``download-refdate-gaps`` error and a
+        ``download-refdate-extra`` info; or a single
+        ``download-refdate-missing-template`` warning. Never fixable.
+    """
+    if not template_filter:
+        return []
+
+    from bizdays import Calendar
+
+    placeholders = ",".join("?" * len(template_filter))
+    with closing(_get_meta_connection()) as conn, conn:
+        c = conn.cursor()
+        c.execute(
+            "SELECT template, download_args, is_invalid_download "
+            f"FROM cache_metadata WHERE template IN ({placeholders})",
+            template_filter,
+        )
+        rows = c.fetchall()
+
+    present: dict[str, set[date]] = {t: set() for t in template_filter}
+    for template, download_args, is_invalid in rows:
+        if is_invalid == "1":
+            continue
+        try:
+            args = json.loads(download_args or "{}")
+        except (json.JSONDecodeError, TypeError):
+            continue
+        refdate_raw = args.get("refdate") if isinstance(args, dict) else None
+        if not refdate_raw:
+            continue
+        try:
+            present[template].add(datetime.fromisoformat(str(refdate_raw)).date())
+        except ValueError:
+            continue
+
+    cal = Calendar.load(calendar_name)
+    cov_lo = _as_date(cal.startdate)
+    cov_hi = _as_date(cal.enddate)
+
+    issues: list[Issue] = []
+    for template in template_filter:
+        dates = present[template]
+        if not dates:
+            issues.append(
+                Issue(
+                    category="Downloads",
+                    code="download-refdate-missing-template",
+                    severity="warning",
+                    description=(
+                        f"{template}: no downloaded refdates found in metadata"
+                    ),
+                    details=[],
+                    fixable=False,
+                )
+            )
+            continue
+
+        missing = _calendar_completeness_gaps(dates, calendar_name, None, None)
+        if missing:
+            issues.append(
+                Issue(
+                    category="Downloads",
+                    code="download-refdate-gaps",
+                    severity="error",
+                    description=(
+                        f"{template}: {len(missing)} missing {calendar_name} "
+                        f"business day(s) between {missing[0]} and {missing[-1]}"
+                    ),
+                    details=[str(d) for d in missing],
+                    fixable=False,
+                )
+            )
+
+        extra = sorted(
+            d for d in dates if cov_lo <= d <= cov_hi and not cal.isbizday(d)
+        )
+        if extra:
+            issues.append(
+                Issue(
+                    category="Downloads",
+                    code="download-refdate-extra",
+                    severity="info",
+                    description=(
+                        f"{template}: {len(extra)} downloaded date(s) not on the "
+                        f"{calendar_name} calendar between {extra[0]} and {extra[-1]}"
+                    ),
+                    details=[str(d) for d in extra],
+                    fixable=False,
+                )
+            )
+    return issues
+
+
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
@@ -1665,6 +1773,7 @@ _CATEGORY_KEYS = {
     "templates": ["stale-etl", "missing-etl-source"],
     "gaps": ["date-gaps"],
     "validations": ["validations"],
+    "downloads": ["download-refdate-gaps"],
 }
 
 
@@ -1673,13 +1782,14 @@ def run_doctor(
     template_filter: list[str] | None = None,
     since_days: int = 30,
     validations_config: Path | None = None,
+    calendar_name: str = "B3",
 ) -> DoctorReport:
     """Run all (or selected) diagnostic checks and return a DoctorReport.
 
     Args:
         categories: Optional list of category keys to restrict checks.
             Valid values: "raw", "db", "meta", "templates", "gaps",
-            "validations". If None, all checks are run.
+            "validations", "downloads". If None, all checks are run.
         template_filter: Restrict date-gap and stale-etl checks to these
             template IDs.
         since_days: For date-gap checks, only look back this many days.
@@ -1687,6 +1797,8 @@ def run_doctor(
             "validations" category. If None and "validations" is explicitly
             requested, a ValueError is raised; if None during a broad run, the
             validation checks are skipped with an informational note.
+        calendar_name: Business calendar for the downloads category's
+            refdate-coverage check (default "B3").
 
     Returns:
         DoctorReport aggregating all issues found.
@@ -1739,6 +1851,9 @@ def run_doctor(
         "stale-etl": lambda: check_stale_etl(template_filter),
         "missing-etl-source": lambda: check_missing_etl_source(template_filter),
         "date-gaps": lambda: check_date_gaps(since_days, template_filter),
+        "download-refdate-gaps": lambda: check_download_refdate_gaps(
+            template_filter, calendar_name
+        ),
     }
     if validations_config is not None:
         check_map["validations"] = lambda: check_validations(validations_config)

@@ -281,3 +281,34 @@ class TestListTemplatesCommand:
         assert "b3-futures" in out
         assert "shadows bundled" in out
         assert "bundled" in out  # at least one purely-bundled template
+
+
+class TestDoctorDownloadsCategory:
+    def test_calendar_option_parses(self):
+        from brasa import cli
+
+        args = cli.parser.parse_args(
+            [
+                "doctor",
+                "--category",
+                "downloads",
+                "--template",
+                "t1",
+                "--calendar",
+                "ANBIMA",
+            ]
+        )
+        assert args.calendar == "ANBIMA"
+        assert args.category == ["downloads"]
+
+    def test_calendar_defaults_b3(self):
+        from brasa import cli
+
+        args = cli.parser.parse_args(["doctor"])
+        assert args.calendar == "B3"
+
+    def test_downloads_is_a_valid_category(self):
+        from brasa import cli
+
+        args = cli.parser.parse_args(["doctor", "--category", "downloads"])
+        assert args.category == ["downloads"]
