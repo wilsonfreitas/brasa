@@ -1118,3 +1118,92 @@ class TestReadColumns:
         ds_dir = _write_series_parquet("staging/rc-missing", None, [date(2021, 1, 4)])
         with pytest.raises(KeyError):
             _read_columns("staging.rc-missing", ds_dir, ["nope"])
+
+
+class TestValueRangeRule:
+    def _run(self, tmp_path, body):
+        cfg = _write_validations(tmp_path, body)
+        return run_doctor(categories=["validations"], validations_config=cfg)
+
+    def test_below_min_flagged(self, tmp_path):
+        man = CacheManager()
+        ds_dir = Path(man.db_path("staging/vr-neg"))
+        ds_dir.mkdir(parents=True, exist_ok=True)
+        table = pa.table({"refdate": [date(2021, 1, 4)], "close": [-5.0]})
+        pq.write_table(table, ds_dir / "part-0.parquet")
+        report = self._run(
+            tmp_path,
+            """
+            staging.vr-neg:
+              - rule: value-range
+                column: close
+                min: 0
+            """,
+        )
+        found = [i for i in report.issues if i.code == "value-range"]
+        assert len(found) == 1
+        assert found[0].severity == "error"
+        assert "-5.0" in found[0].details
+
+    def test_in_range_no_issue(self, tmp_path):
+        man = CacheManager()
+        ds_dir = Path(man.db_path("staging/vr-ok"))
+        ds_dir.mkdir(parents=True, exist_ok=True)
+        table = pa.table({"refdate": [date(2021, 1, 4)], "close": [3.0]})
+        pq.write_table(table, ds_dir / "part-0.parquet")
+        report = self._run(
+            tmp_path,
+            """
+            staging.vr-ok:
+              - rule: value-range
+                column: close
+                min: 0
+                max: 10
+            """,
+        )
+        assert not [i for i in report.issues if i.code == "value-range"]
+
+    def test_nulls_skipped(self, tmp_path):
+        man = CacheManager()
+        ds_dir = Path(man.db_path("staging/vr-null"))
+        ds_dir.mkdir(parents=True, exist_ok=True)
+        table = pa.table({"refdate": [date(2021, 1, 4)], "close": [None]})
+        pq.write_table(table, ds_dir / "part-0.parquet")
+        report = self._run(
+            tmp_path,
+            """
+            staging.vr-null:
+              - rule: value-range
+                column: close
+                min: 0
+            """,
+        )
+        assert not [i for i in report.issues if i.code == "value-range"]
+
+    def test_no_bounds_is_config_error(self, tmp_path):
+        report = self._run(
+            tmp_path,
+            """
+            staging.vr-x:
+              - rule: value-range
+                column: close
+            """,
+        )
+        assert [i for i in report.issues if i.code == "validation-config-error"]
+
+    def test_absent_column_is_config_error(self, tmp_path):
+        man = CacheManager()
+        ds_dir = Path(man.db_path("staging/vr-nocol"))
+        ds_dir.mkdir(parents=True, exist_ok=True)
+        table = pa.table({"refdate": [date(2021, 1, 4)], "close": [1.0]})
+        pq.write_table(table, ds_dir / "part-0.parquet")
+        report = self._run(
+            tmp_path,
+            """
+            staging.vr-nocol:
+              - rule: value-range
+                column: missing
+                min: 0
+            """,
+        )
+        assert [i for i in report.issues if i.code == "validation-config-error"]

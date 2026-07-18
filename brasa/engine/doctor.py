@@ -1423,6 +1423,76 @@ def _run_no_unexpected_observations_rule(
     return issues
 
 
+def _run_value_range_rule(  # noqa: PLR0911
+    dataset_key: str, dataset_path: Path, rule: dict[str, Any]
+) -> list[Issue]:
+    """Evaluate a value-range rule: a numeric column within [min, max]."""
+    import pyarrow as pa
+    import pyarrow.compute as pc
+
+    column = rule.get("column")
+    if not isinstance(column, str) or not column:
+        return [
+            _validation_config_error(dataset_key, "value-range requires a 'column'")
+        ]
+    min_v = rule.get("min")
+    max_v = rule.get("max")
+    if min_v is None and max_v is None:
+        return [
+            _validation_config_error(
+                dataset_key, "value-range requires 'min' and/or 'max'"
+            )
+        ]
+
+    try:
+        table = _read_columns(dataset_key, dataset_path, [column])
+    except KeyError as exc:
+        return [_validation_config_error(dataset_key, str(exc))]
+    if table is None:
+        return []
+
+    col = table.column(column)
+    if not (pa.types.is_floating(col.type) or pa.types.is_integer(col.type)):
+        return [
+            _validation_config_error(
+                dataset_key, f"value-range column '{column}' is not numeric"
+            )
+        ]
+
+    valid = pc.is_valid(col)
+    below = pc.less(col, min_v) if min_v is not None else None
+    above = pc.greater(col, max_v) if max_v is not None else None
+    if below is not None and above is not None:
+        out_of_range = pc.or_(below, above)
+    elif below is not None:
+        out_of_range = below
+    else:
+        out_of_range = above
+
+    offending = col.filter(pc.and_(valid, out_of_range))
+    n = len(offending)
+    if n == 0:
+        return []
+
+    valid_vals = col.filter(valid)
+    obs_min = pc.min(valid_vals).as_py()
+    obs_max = pc.max(valid_vals).as_py()
+    sample = [str(v) for v in offending.slice(0, 20).to_pylist()]
+    return [
+        Issue(
+            category="Data Validation",
+            code="value-range",
+            severity="error",
+            description=(
+                f"{dataset_key}: {n} row(s) with {column} outside "
+                f"[{min_v}, {max_v}] (observed [{obs_min}, {obs_max}])"
+            ),
+            details=sample,
+            fixable=False,
+        )
+    ]
+
+
 def check_validations(
     validations_config: Path,
 ) -> list[Issue]:
@@ -1479,6 +1549,8 @@ def check_validations(
                         dataset_key, dataset_path, rule
                     )
                 )
+            elif rule_type == "value-range":
+                issues.extend(_run_value_range_rule(dataset_key, dataset_path, rule))
             else:
                 issues.append(
                     _validation_config_error(
