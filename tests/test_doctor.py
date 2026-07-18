@@ -26,7 +26,6 @@ from brasa.engine.doctor import (
     _calendar_completeness_gaps,
     _load_validations_config,
     _read_series_dates,
-    check_calendar_completeness,
     check_corrupted_parquet,
     check_date_gaps,
     check_empty_parquet,
@@ -36,6 +35,7 @@ from brasa.engine.doctor import (
     check_orphan_db,
     check_orphan_raw,
     check_unresolved_errors,
+    check_validations,
     run_doctor,
 )
 
@@ -692,7 +692,7 @@ class TestCheckCalendarCompleteness:
                   CDI: {calendar: ANBIMA}
             """,
         )
-        assert check_calendar_completeness(cfg) == []
+        assert check_validations(cfg) == []
 
     def test_business_day_hole_reported(self, tmp_path):
         days = _full_anbima_series(
@@ -710,7 +710,7 @@ class TestCheckCalendarCompleteness:
                   CDI: {calendar: ANBIMA}
             """,
         )
-        issues = check_calendar_completeness(cfg)
+        issues = check_validations(cfg)
         assert len(issues) == 1
         assert issues[0].code == "calendar-completeness"
         assert issues[0].severity == "error"
@@ -732,7 +732,7 @@ class TestCheckCalendarCompleteness:
                   CDI: {calendar: ANBIMA}
             """,
         )
-        assert check_calendar_completeness(cfg) == []
+        assert check_validations(cfg) == []
 
     def test_absent_dataset_skipped(self, tmp_path):
         cfg = _write_validations(
@@ -745,7 +745,7 @@ class TestCheckCalendarCompleteness:
                   CDI: {calendar: ANBIMA}
             """,
         )
-        assert check_calendar_completeness(cfg) == []
+        assert check_validations(cfg) == []
 
     def test_single_series_shape(self, tmp_path):
         cal = Calendar.load("ANBIMA")
@@ -762,7 +762,7 @@ class TestCheckCalendarCompleteness:
                 calendar: ANBIMA
             """,
         )
-        issues = check_calendar_completeness(cfg)
+        issues = check_validations(cfg)
         assert len(issues) == 1
         assert str(days[5]) in issues[0].details
 
@@ -780,7 +780,7 @@ class TestCheckCalendarCompleteness:
                   CDI: {calendar: NOPE}
             """,
         )
-        issues = check_calendar_completeness(cfg)
+        issues = check_validations(cfg)
         assert len(issues) == 1
         assert issues[0].code == "validation-config-error"
         assert issues[0].severity == "error"
@@ -793,7 +793,7 @@ class TestCheckCalendarCompleteness:
               - rule: not-a-rule
             """,
         )
-        issues = check_calendar_completeness(cfg)
+        issues = check_validations(cfg)
         assert len(issues) == 1
         assert issues[0].code == "validation-config-error"
 
@@ -806,13 +806,13 @@ class TestCheckCalendarCompleteness:
                 group_column: symbol
             """,
         )
-        issues = check_calendar_completeness(cfg)
+        issues = check_validations(cfg)
         assert len(issues) == 1
         assert issues[0].code == "validation-config-error"
 
     def test_unparseable_config_is_error(self, tmp_path):
         cfg = _write_validations(tmp_path, "a: [1, 2\n")
-        issues = check_calendar_completeness(cfg)
+        issues = check_validations(cfg)
         assert len(issues) == 1
         assert issues[0].code == "validation-config-error"
 
@@ -821,7 +821,7 @@ class TestValidationsCategory:
     def test_category_keys(self):
         from brasa.engine.doctor import _CATEGORY_KEYS
 
-        assert _CATEGORY_KEYS["validations"] == ["calendar-completeness"]
+        assert _CATEGORY_KEYS["validations"] == ["validations"]
 
     def test_explicit_validations_without_file_raises(self):
         with pytest.raises(ValueError):

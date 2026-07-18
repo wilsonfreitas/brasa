@@ -1289,17 +1289,20 @@ def _run_calendar_completeness_rule(
     return issues
 
 
-def check_calendar_completeness(
+def check_validations(
     validations_config: Path,
 ) -> list[Issue]:
-    """Validate that configured series are complete against a business calendar.
+    """Run all configured validation rules against the stored datasets.
+
+    Loads the validations spec and dispatches each rule by its ``rule:``
+    discriminator (``calendar-completeness``, ``no-unexpected-observations``).
 
     Args:
         validations_config: Path to the validations YAML file. Required;
             ``run_doctor`` guarantees a non-None path before calling.
 
     Returns:
-        List of issues (gaps and config errors). Never raises.
+        List of issues (findings and config errors). Never raises.
     """
     from .cache import CacheManager
 
@@ -1361,7 +1364,7 @@ _CATEGORY_KEYS = {
     "meta": ["unresolved-errors", "invalid-downloads"],
     "templates": ["stale-etl", "missing-etl-source"],
     "gaps": ["date-gaps"],
-    "validations": ["calendar-completeness"],
+    "validations": ["validations"],
 }
 
 
@@ -1438,9 +1441,7 @@ def run_doctor(
         "date-gaps": lambda: check_date_gaps(since_days, template_filter),
     }
     if validations_config is not None:
-        check_map["calendar-completeness"] = lambda: check_calendar_completeness(
-            validations_config
-        )
+        check_map["validations"] = lambda: check_validations(validations_config)
 
     for code, check_fn in check_map.items():
         if code not in active_codes:
