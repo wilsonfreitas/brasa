@@ -912,3 +912,90 @@ class TestPeriodCompletenessGaps:
 
         with pytest.raises(ValueError):
             _period_completeness_gaps({date(2024, 1, 1)}, "weekly", None, None)
+
+
+class TestFrequencyCompleteness:
+    def _run(self, tmp_path, body):
+        cfg = _write_validations(tmp_path, body)
+        report = run_doctor(categories=["validations"], validations_config=cfg)
+        return report
+
+    def test_monthly_series_complete_no_issue(self, tmp_path):
+        _write_series_parquet(
+            "staging/macro-monthly",
+            "IPCA",
+            [date(2024, 1, 1), date(2024, 2, 1), date(2024, 3, 1)],
+        )
+        report = self._run(
+            tmp_path,
+            """
+            staging.macro-monthly:
+              - rule: calendar-completeness
+                group_column: symbol
+                series:
+                  IPCA: {frequency: monthly}
+            """,
+        )
+        assert not [i for i in report.issues if i.code == "calendar-completeness"]
+
+    def test_monthly_series_missing_month_reported(self, tmp_path):
+        _write_series_parquet(
+            "staging/macro-monthly",
+            "IPCA",
+            [date(2024, 1, 1), date(2024, 3, 1)],  # Feb missing
+        )
+        report = self._run(
+            tmp_path,
+            """
+            staging.macro-monthly:
+              - rule: calendar-completeness
+                group_column: symbol
+                series:
+                  IPCA: {frequency: monthly}
+            """,
+        )
+        found = [i for i in report.issues if i.code == "calendar-completeness"]
+        assert len(found) == 1
+        assert found[0].details == ["2024-02"]
+        assert "month(s)" in found[0].description
+
+    def test_quarterly_missing_quarter_reported(self, tmp_path):
+        _write_series_parquet(
+            "staging/macro-quarterly",
+            None,
+            [date(2024, 1, 1), date(2024, 12, 1)],  # Q1 + Q4; Q2, Q3 missing
+        )
+        report = self._run(
+            tmp_path,
+            """
+            staging.macro-quarterly:
+              - rule: calendar-completeness
+                date_column: refdate
+                frequency: quarterly
+            """,
+        )
+        found = [i for i in report.issues if i.code == "calendar-completeness"]
+        assert len(found) == 1
+        assert found[0].details == ["2024-Q2", "2024-Q3"]
+        assert "quarter(s)" in found[0].description
+
+    def test_unknown_frequency_is_config_error_siblings_run(self, tmp_path):
+        _write_series_parquet("staging/macro-monthly", "BAD", [date(2024, 1, 1)])
+        _write_series_parquet(
+            "staging/macro-monthly", "IPCA", [date(2024, 1, 1), date(2024, 2, 1)]
+        )
+        report = self._run(
+            tmp_path,
+            """
+            staging.macro-monthly:
+              - rule: calendar-completeness
+                group_column: symbol
+                series:
+                  BAD: {frequency: weekly}
+                  IPCA: {frequency: monthly}
+            """,
+        )
+        errs = [i for i in report.issues if i.code == "validation-config-error"]
+        assert any("BAD" in e.description for e in errs)
+        # IPCA still evaluated (complete -> no calendar-completeness issue)
+        assert not [i for i in report.issues if i.code == "calendar-completeness"]

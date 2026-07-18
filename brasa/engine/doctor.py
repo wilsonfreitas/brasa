@@ -1228,7 +1228,18 @@ def _run_calendar_completeness_rule(
         calendar_name = scfg.get("calendar", "ANBIMA")
         start_cfg = scfg.get("start")
         end_cfg = scfg.get("end")
+        frequency = scfg.get("frequency", "daily")
         label = f"{dataset_key}/{series_name}" if series_name else dataset_key
+
+        if frequency not in ("daily", "monthly", "quarterly"):
+            issues.append(
+                _validation_config_error(
+                    label,
+                    f"unknown frequency '{frequency}' "
+                    "(expected daily, monthly, or quarterly)",
+                )
+            )
+            continue
 
         present = _read_series_dates(
             dataset_key, dataset_path, date_column, group_column, series_name
@@ -1236,10 +1247,23 @@ def _run_calendar_completeness_rule(
         if not present:
             continue  # absent dataset/series -> skip silently
 
+        missing: list[Any]
         try:
-            missing = _calendar_completeness_gaps(
-                present, calendar_name, start_cfg, end_cfg
-            )
+            if frequency == "daily":
+                missing = _calendar_completeness_gaps(
+                    present, calendar_name, start_cfg, end_cfg
+                )
+                noun = f"{calendar_name} business day"
+            elif frequency == "monthly":
+                missing = _period_completeness_gaps(
+                    present, "monthly", start_cfg, end_cfg
+                )
+                noun = "month"
+            else:  # quarterly
+                missing = _period_completeness_gaps(
+                    present, "quarterly", start_cfg, end_cfg
+                )
+                noun = "quarter"
         except Exception as exc:
             issues.append(
                 _validation_config_error(
@@ -1255,8 +1279,8 @@ def _run_calendar_completeness_rule(
                     code="calendar-completeness",
                     severity="error",
                     description=(
-                        f"{label}: {len(missing)} missing {calendar_name} "
-                        f"business day(s) between {missing[0]} and {missing[-1]}"
+                        f"{label}: {len(missing)} missing {noun}(s) "
+                        f"between {missing[0]} and {missing[-1]}"
                     ),
                     details=[str(d) for d in missing],
                     fixable=False,
