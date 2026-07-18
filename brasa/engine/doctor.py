@@ -435,6 +435,35 @@ def _period_completeness_gaps(
     return [label(i) for i in range(lower, upper + 1) if i not in present_idx]
 
 
+def _unexpected_observations(
+    present_dates: set[date], calendar_name: str
+) -> list[date]:
+    """Return present dates that fall on non-business days, sorted ascending.
+
+    The inverse of ``_calendar_completeness_gaps``: it flags rows on weekends
+    or holidays. Dates outside the calendar's coverage are undeterminable and
+    skipped (never flagged), which also guards ``isbizday`` against raising.
+
+    Args:
+        present_dates: Dates actually present for the series (non-empty).
+        calendar_name: bizdays calendar name (e.g. ``B3``).
+
+    Returns:
+        Sorted list of present dates the calendar marks as non-business days.
+
+    Raises:
+        Exception: If the calendar name is unknown.
+    """
+    from bizdays import Calendar
+
+    cal = Calendar.load(calendar_name)
+    lower = _as_date(cal.startdate)
+    upper = _as_date(cal.enddate)
+    return sorted(
+        d for d in present_dates if lower <= d <= upper and not cal.isbizday(d)
+    )
+
+
 # ---------------------------------------------------------------------------
 # Category: Raw Files
 # ---------------------------------------------------------------------------
@@ -1307,6 +1336,58 @@ def _run_calendar_completeness_rule(
     return issues
 
 
+def _run_no_unexpected_observations_rule(
+    dataset_key: str, dataset_path: Path, rule: dict[str, Any]
+) -> list[Issue]:
+    """Evaluate a single no-unexpected-observations rule for one dataset."""
+    date_column = rule.get("date_column", "refdate")
+    group_column = rule.get("group_column")
+
+    series_items, err = _expand_series_items(dataset_key, rule)
+    if err is not None:
+        return [err]
+
+    issues: list[Issue] = []
+    for series_name, scfg in series_items:
+        if scfg.get("frequency", "daily") != "daily":
+            continue  # non-daily series: rule is meaningless -> skip silently
+        calendar_name = scfg.get("calendar", "ANBIMA")
+        label = f"{dataset_key}/{series_name}" if series_name else dataset_key
+
+        present = _read_series_dates(
+            dataset_key, dataset_path, date_column, group_column, series_name
+        )
+        if not present:
+            continue  # absent dataset/series -> skip silently
+
+        try:
+            unexpected = _unexpected_observations(present, calendar_name)
+        except Exception as exc:
+            issues.append(
+                _validation_config_error(
+                    label, f"invalid no-unexpected-observations config ({exc})"
+                )
+            )
+            continue
+
+        if unexpected:
+            issues.append(
+                Issue(
+                    category="Data Validation",
+                    code="no-unexpected-observations",
+                    severity="error",
+                    description=(
+                        f"{label}: {len(unexpected)} observation(s) on non-business "
+                        f"days ({calendar_name}) between "
+                        f"{unexpected[0]} and {unexpected[-1]}"
+                    ),
+                    details=[str(d) for d in unexpected],
+                    fixable=False,
+                )
+            )
+    return issues
+
+
 def check_validations(
     validations_config: Path,
 ) -> list[Issue]:
@@ -1353,16 +1434,22 @@ def check_validations(
                 )
                 continue
             rule_type = rule.get("rule")
-            if rule_type != "calendar-completeness":
+            if rule_type == "calendar-completeness":
+                issues.extend(
+                    _run_calendar_completeness_rule(dataset_key, dataset_path, rule)
+                )
+            elif rule_type == "no-unexpected-observations":
+                issues.extend(
+                    _run_no_unexpected_observations_rule(
+                        dataset_key, dataset_path, rule
+                    )
+                )
+            else:
                 issues.append(
                     _validation_config_error(
                         dataset_key, f"unknown validation rule '{rule_type}'"
                     )
                 )
-                continue
-            issues.extend(
-                _run_calendar_completeness_rule(dataset_key, dataset_path, rule)
-            )
     return issues
 
 
