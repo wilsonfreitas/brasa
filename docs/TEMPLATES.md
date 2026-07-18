@@ -1616,4 +1616,31 @@ reader:
 
 ---
 
+## User-defined templates (`BRASA_TEMPLATE_PATH`)
+
+By default brasa discovers only the templates bundled inside the package. Set
+`BRASA_TEMPLATE_PATH` to add your own template directories:
+
+```bash
+export BRASA_TEMPLATE_PATH="$HOME/my-templates:/opt/team/templates"
+```
+
+- Entries are separated by the OS path separator (`:` on Linux/macOS) and
+  searched **in order, before** the bundled templates. `~` and `$VARS` are
+  expanded; non-existent directories are skipped silently.
+- Each directory is scanned recursively for `*.yaml` (paths containing a
+  `legacy` component are ignored, as for bundled templates).
+- A template's filename stem must equal its `id:` (same rule as bundled
+  templates).
+- **Name collisions:** the first root to define a name wins, so a user template
+  overrides a bundled one with the same name (useful for forking/patching a
+  bundled template).
+- All template kinds are supported (download, import, and `etl.pipeline`), and
+  user templates participate in dependency resolution — a user ETL template may
+  depend on a bundled dataset.
+
+Run `brasa list-templates` to see every template and its source.
+
+---
+
 **Last updated:** January 30, 2025
