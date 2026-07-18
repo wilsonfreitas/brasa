@@ -1493,6 +1493,43 @@ def _run_value_range_rule(  # noqa: PLR0911
     ]
 
 
+def _run_not_null_rule(
+    dataset_key: str, dataset_path: Path, rule: dict[str, Any]
+) -> list[Issue]:
+    """Evaluate a not-null rule: configured columns must have no nulls."""
+    columns = rule.get("columns")
+    if not isinstance(columns, list) or not columns:
+        return [
+            _validation_config_error(
+                dataset_key, "not-null requires a non-empty 'columns' list"
+            )
+        ]
+
+    try:
+        table = _read_columns(dataset_key, dataset_path, columns)
+    except KeyError as exc:
+        return [_validation_config_error(dataset_key, str(exc))]
+    if table is None:
+        return []
+
+    violating = [(c, table.column(c).null_count) for c in columns]
+    violating = [(c, n) for c, n in violating if n > 0]
+    if not violating:
+        return []
+    return [
+        Issue(
+            category="Data Validation",
+            code="not-null",
+            severity="error",
+            description=(
+                f"{dataset_key}: null values in {len(violating)} required column(s)"
+            ),
+            details=[f"{c}: {n} null(s)" for c, n in violating],
+            fixable=False,
+        )
+    ]
+
+
 def check_validations(
     validations_config: Path,
 ) -> list[Issue]:
@@ -1551,6 +1588,8 @@ def check_validations(
                 )
             elif rule_type == "value-range":
                 issues.extend(_run_value_range_rule(dataset_key, dataset_path, rule))
+            elif rule_type == "not-null":
+                issues.extend(_run_not_null_rule(dataset_key, dataset_path, rule))
             else:
                 issues.append(
                     _validation_config_error(

@@ -1207,3 +1207,59 @@ class TestValueRangeRule:
             """,
         )
         assert [i for i in report.issues if i.code == "validation-config-error"]
+
+
+class TestNotNullRule:
+    def _run(self, tmp_path, body):
+        cfg = _write_validations(tmp_path, body)
+        return run_doctor(categories=["validations"], validations_config=cfg)
+
+    def _write(self, rel, cols):
+        man = CacheManager()
+        ds_dir = Path(man.db_path(rel))
+        ds_dir.mkdir(parents=True, exist_ok=True)
+        pq.write_table(pa.table(cols), ds_dir / "part-0.parquet")
+        return ds_dir
+
+    def test_nulls_reported_aggregated(self, tmp_path):
+        self._write(
+            "staging/nn-bad",
+            {"refdate": [date(2021, 1, 4), date(2021, 1, 5)], "close": [1.0, None]},
+        )
+        report = self._run(
+            tmp_path,
+            """
+            staging.nn-bad:
+              - rule: not-null
+                columns: [refdate, close]
+            """,
+        )
+        found = [i for i in report.issues if i.code == "not-null"]
+        assert len(found) == 1
+        assert found[0].details == ["close: 1 null(s)"]
+
+    def test_no_nulls_no_issue(self, tmp_path):
+        self._write(
+            "staging/nn-ok",
+            {"refdate": [date(2021, 1, 4)], "close": [1.0]},
+        )
+        report = self._run(
+            tmp_path,
+            """
+            staging.nn-ok:
+              - rule: not-null
+                columns: [refdate, close]
+            """,
+        )
+        assert not [i for i in report.issues if i.code == "not-null"]
+
+    def test_empty_columns_is_config_error(self, tmp_path):
+        report = self._run(
+            tmp_path,
+            """
+            staging.nn-x:
+              - rule: not-null
+                columns: []
+            """,
+        )
+        assert [i for i in report.issues if i.code == "validation-config-error"]
