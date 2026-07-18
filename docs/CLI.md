@@ -404,6 +404,25 @@ $ brasa map
 
 ---
 
+### `list-templates`
+
+List all discovered templates and where each comes from — `bundled`, or a user
+directory from `BRASA_TEMPLATE_PATH`. User templates that override a bundled
+name are marked `*shadows bundled`.
+
+```bash
+brasa list-templates
+```
+
+```
+NAME              SOURCE
+b3-futures        bundled
+my-custom-etl     /home/me/my-templates (user)
+b3-cotahist       /home/me/my-templates (user) *shadows bundled
+```
+
+---
+
 ## Datasets
 
 ### `head`

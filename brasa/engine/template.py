@@ -7,8 +7,9 @@ that define how to download, read, and write market data from various sources.
 from __future__ import annotations
 
 import logging
+import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any, ClassVar
@@ -706,25 +707,96 @@ class MarketDataTemplate:
 _template_cache: dict[str, MarketDataTemplate] = {}
 
 
-def _get_templates_dir() -> Path:
-    """Get the path to the bundled templates directory.
+def _get_template_roots() -> list[Path]:
+    """Return the ordered template search roots.
+
+    ``BRASA_TEMPLATE_PATH`` entries (split on ``os.pathsep``, in listed order)
+    come first; the bundled package templates directory comes last. Entries are
+    expanded (``~`` and ``$VARS``), non-existent directories are skipped, and
+    roots are de-duplicated by resolved absolute path (first occurrence wins).
 
     Returns:
-        Path to the templates directory inside the brasa package.
+        Existing directories to scan, in priority order.
     """
-    return package_path("templates")
+    raw = os.environ.get("BRASA_TEMPLATE_PATH", "")
+    entries = [e for e in raw.split(os.pathsep) if e]
+    entries.append(str(package_path("templates")))
+
+    roots: list[Path] = []
+    seen: set[Path] = set()
+    for entry in entries:
+        path = Path(os.path.expandvars(entry)).expanduser()
+        if not path.is_dir():
+            continue
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        roots.append(path)
+    return roots
+
+
+@dataclass(frozen=True)
+class TemplateEntry:
+    """A discovered template and where it came from.
+
+    Attributes:
+        name: The template name (YAML file stem).
+        path: The winning YAML file that will be loaded for this name.
+        source: The root directory the winner came from.
+        shadows: True when a lower-priority root also defines this name
+            (display-only; never affects which file loads).
+    """
+
+    name: str
+    path: Path
+    source: Path
+    shadows: bool
+
+
+def _discover_templates() -> dict[str, TemplateEntry]:
+    """Discover templates across all roots, first root wins.
+
+    Each root is scanned recursively for ``*.yaml`` (excluding any path with a
+    ``legacy`` component). The first root to define a given name wins; a
+    later root defining the same name flips the winner's ``shadows`` to True.
+
+    Returns:
+        Mapping of template name to its winning :class:`TemplateEntry`.
+    """
+    winners: dict[str, TemplateEntry] = {}
+    for root in _get_template_roots():
+        for f in root.rglob("*.yaml"):
+            if "legacy" in f.parts:
+                continue
+            name = f.stem
+            existing = winners.get(name)
+            if existing is None:
+                winners[name] = TemplateEntry(
+                    name=name, path=f, source=root, shadows=False
+                )
+            elif existing.source != root and not existing.shadows:
+                winners[name] = replace(existing, shadows=True)
+    return winners
 
 
 def list_templates() -> list[str]:
     """List all available template names.
 
     Returns:
-        Sorted list of template names (without .yaml extension).
+        Sorted list of template names (without .yaml extension), discovered
+        across ``BRASA_TEMPLATE_PATH`` roots and the bundled package.
     """
-    templates_dir = _get_templates_dir()
-    return sorted(
-        f.stem for f in templates_dir.rglob("*.yaml") if "legacy" not in f.parts
-    )
+    return sorted(_discover_templates())
+
+
+def list_template_sources() -> list[TemplateEntry]:
+    """Return discovered template entries, sorted by name.
+
+    Returns:
+        One :class:`TemplateEntry` per template name, for provenance display.
+    """
+    return [entry for _, entry in sorted(_discover_templates().items())]
 
 
 def clear_template_cache() -> None:
@@ -747,14 +819,12 @@ def reload_template(template_name: str) -> MarketDataTemplate:
     Raises:
         ValueError: If the template is not found or has ID mismatch.
     """
-    # Remove from cache if present
     _template_cache.pop(template_name, None)
-    # Load fresh
     return retrieve_template(template_name)
 
 
 def retrieve_template(template_name: str) -> MarketDataTemplate:
-    """Load a template by name from the templates directory.
+    """Load a template by name from the discovered template roots.
 
     Templates are cached after first load. Use reload_template() to force
     a fresh load, or clear_template_cache() to clear all cached templates.
@@ -769,18 +839,11 @@ def retrieve_template(template_name: str) -> MarketDataTemplate:
         ValueError: If the template is not found or if the template ID
             does not match the filename.
     """
-    # Return cached template if available
     if template_name in _template_cache:
         return _template_cache[template_name]
 
-    templates_dir = _get_templates_dir()
-    matches = [
-        f
-        for f in templates_dir.rglob(f"{template_name}.yaml")
-        if "legacy" not in f.parts
-    ]
-
-    if not matches:
+    entry = _discover_templates().get(template_name)
+    if entry is None:
         available = list_templates()
         available_str = ", ".join(available[:10])
         if len(available) > 10:
@@ -790,9 +853,7 @@ def retrieve_template(template_name: str) -> MarketDataTemplate:
             f"Available templates: {available_str}"
         )
 
-    template_path = matches[0]
-
-    template = MarketDataTemplate(template_path)
+    template = MarketDataTemplate(entry.path)
 
     # Validate that template ID matches filename
     if template.id != template_name:
@@ -801,6 +862,5 @@ def retrieve_template(template_name: str) -> MarketDataTemplate:
             f"The template ID must match the filename."
         )
 
-    # Cache the template
     _template_cache[template_name] = template
     return template

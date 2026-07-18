@@ -467,6 +467,11 @@ parser_list_unprocessed.add_argument(
     help="output format (default: table)",
 )
 
+parser_list_templates = subparsers.add_parser(
+    "list-templates",
+    help="list available templates and their source (bundled or user path)",
+)
+
 parser_graph = subparsers.add_parser(
     "graph", help="export or render the dependency graph"
 )
@@ -1257,6 +1262,26 @@ def main() -> None:  # noqa: PLR0912, PLR0915
             print("-" * (name_width + 13))
             total = sum(r["count"] for r in results)
             print(f"{'Total':<{name_width}}  {total:>11}")
+
+    elif args.command == "list-templates":
+        from .engine.resources import package_path
+        from .engine.template import list_template_sources
+
+        bundled_root = package_path("templates").resolve()
+        entries = list_template_sources()
+        if not entries:
+            print("No templates found.")
+        else:
+            name_width = max(len("NAME"), *(len(e.name) for e in entries))
+            print(f"{'NAME':<{name_width}}  SOURCE")
+            for e in entries:
+                if e.source.resolve() == bundled_root:
+                    source = "bundled"
+                else:
+                    source = f"{e.source} (user)"
+                if e.shadows:
+                    source += " *shadows bundled"
+                print(f"{e.name:<{name_width}}  {source}")
 
     elif args.command == "graph":
         from .engine.dependency_graph import TemplateDependencyGraph

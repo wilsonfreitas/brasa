@@ -4,7 +4,7 @@ from pathlib import Path
 
 import brasa
 from brasa.engine.resources import package_path
-from brasa.engine.template import _get_templates_dir, list_templates
+from brasa.engine.template import list_templates
 
 
 def _brasa_root() -> Path:
@@ -18,7 +18,7 @@ def test_package_path_is_under_brasa_package():
 
 
 def test_templates_dir_under_package_with_yaml():
-    tdir = _get_templates_dir()
+    tdir = package_path("templates")
     assert tdir.exists()
     assert _brasa_root() in tdir.resolve().parents
     assert any(tdir.rglob("*.yaml"))
