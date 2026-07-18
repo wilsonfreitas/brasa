@@ -1530,6 +1530,53 @@ def _run_not_null_rule(
     ]
 
 
+def _run_no_duplicates_rule(
+    dataset_key: str, dataset_path: Path, rule: dict[str, Any]
+) -> list[Issue]:
+    """Evaluate a no-duplicates rule: no duplicate rows for the key columns."""
+    import pyarrow.compute as pc
+
+    key = rule.get("key")
+    if not isinstance(key, list) or not key:
+        return [
+            _validation_config_error(
+                dataset_key, "no-duplicates requires a non-empty 'key' list"
+            )
+        ]
+
+    try:
+        table = _read_columns(dataset_key, dataset_path, key)
+    except KeyError as exc:
+        return [_validation_config_error(dataset_key, str(exc))]
+    if table is None:
+        return []
+
+    grouped = table.group_by(key).aggregate([([], "count_all")])
+    dup = grouped.filter(pc.greater(grouped.column("count_all"), 1))
+    n_dup_keys = dup.num_rows
+    if n_dup_keys == 0:
+        return []
+
+    excess = pc.sum(dup.column("count_all")).as_py() - n_dup_keys
+    details = []
+    for row in dup.slice(0, 20).to_pylist():
+        keyvals = ", ".join(str(row[k]) for k in key)
+        details.append(f"({keyvals}): {row['count_all']} rows")
+    return [
+        Issue(
+            category="Data Validation",
+            code="no-duplicates",
+            severity="error",
+            description=(
+                f"{dataset_key}: {n_dup_keys} duplicated key(s) on "
+                f"[{', '.join(key)}] ({excess} excess row(s))"
+            ),
+            details=details,
+            fixable=False,
+        )
+    ]
+
+
 def check_validations(
     validations_config: Path,
 ) -> list[Issue]:
@@ -1590,6 +1637,8 @@ def check_validations(
                 issues.extend(_run_value_range_rule(dataset_key, dataset_path, rule))
             elif rule_type == "not-null":
                 issues.extend(_run_not_null_rule(dataset_key, dataset_path, rule))
+            elif rule_type == "no-duplicates":
+                issues.extend(_run_no_duplicates_rule(dataset_key, dataset_path, rule))
             else:
                 issues.append(
                     _validation_config_error(

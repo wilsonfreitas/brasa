@@ -1263,3 +1263,63 @@ class TestNotNullRule:
             """,
         )
         assert [i for i in report.issues if i.code == "validation-config-error"]
+
+
+class TestNoDuplicatesRule:
+    def _run(self, tmp_path, body):
+        cfg = _write_validations(tmp_path, body)
+        return run_doctor(categories=["validations"], validations_config=cfg)
+
+    def _write(self, rel, cols):
+        man = CacheManager()
+        ds_dir = Path(man.db_path(rel))
+        ds_dir.mkdir(parents=True, exist_ok=True)
+        pq.write_table(pa.table(cols), ds_dir / "part-0.parquet")
+        return ds_dir
+
+    def test_duplicates_reported(self, tmp_path):
+        self._write(
+            "staging/dup-bad",
+            {
+                "refdate": [date(2021, 1, 4), date(2021, 1, 4), date(2021, 1, 5)],
+                "symbol": ["A", "A", "B"],
+            },
+        )
+        report = self._run(
+            tmp_path,
+            """
+            staging.dup-bad:
+              - rule: no-duplicates
+                key: [refdate, symbol]
+            """,
+        )
+        found = [i for i in report.issues if i.code == "no-duplicates"]
+        assert len(found) == 1
+        assert "1 duplicated key(s)" in found[0].description
+        assert "1 excess row(s)" in found[0].description
+
+    def test_unique_no_issue(self, tmp_path):
+        self._write(
+            "staging/dup-ok",
+            {"refdate": [date(2021, 1, 4), date(2021, 1, 5)], "symbol": ["A", "B"]},
+        )
+        report = self._run(
+            tmp_path,
+            """
+            staging.dup-ok:
+              - rule: no-duplicates
+                key: [refdate, symbol]
+            """,
+        )
+        assert not [i for i in report.issues if i.code == "no-duplicates"]
+
+    def test_empty_key_is_config_error(self, tmp_path):
+        report = self._run(
+            tmp_path,
+            """
+            staging.dup-x:
+              - rule: no-duplicates
+                key: []
+            """,
+        )
+        assert [i for i in report.issues if i.code == "validation-config-error"]
