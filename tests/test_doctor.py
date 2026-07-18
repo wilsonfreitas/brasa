@@ -1091,3 +1091,235 @@ class TestUnexpectedObservations:
         )
         report = run_doctor(categories=["validations"], validations_config=cfg)
         assert [i for i in report.issues if i.code == "validation-config-error"]
+
+
+class TestReadColumns:
+    def test_absent_dataset_returns_none(self):
+        from brasa.engine.doctor import _read_columns
+
+        man = CacheManager()
+        path = Path(man.db_path("staging/does-not-exist"))
+        assert _read_columns("staging.does-not-exist", path, ["refdate"]) is None
+
+    def test_reads_requested_columns(self):
+        from brasa.engine.doctor import _read_columns
+
+        ds_dir = _write_series_parquet(
+            "staging/rc-basic", None, [date(2021, 1, 4), date(2021, 1, 5)]
+        )
+        table = _read_columns("staging.rc-basic", ds_dir, ["refdate", "value"])
+        assert table is not None
+        assert set(table.column_names) == {"refdate", "value"}
+        assert table.num_rows == 2
+
+    def test_missing_column_raises_keyerror(self):
+        from brasa.engine.doctor import _read_columns
+
+        ds_dir = _write_series_parquet("staging/rc-missing", None, [date(2021, 1, 4)])
+        with pytest.raises(KeyError):
+            _read_columns("staging.rc-missing", ds_dir, ["nope"])
+
+
+class TestValueRangeRule:
+    def _run(self, tmp_path, body):
+        cfg = _write_validations(tmp_path, body)
+        return run_doctor(categories=["validations"], validations_config=cfg)
+
+    def test_below_min_flagged(self, tmp_path):
+        man = CacheManager()
+        ds_dir = Path(man.db_path("staging/vr-neg"))
+        ds_dir.mkdir(parents=True, exist_ok=True)
+        table = pa.table({"refdate": [date(2021, 1, 4)], "close": [-5.0]})
+        pq.write_table(table, ds_dir / "part-0.parquet")
+        report = self._run(
+            tmp_path,
+            """
+            staging.vr-neg:
+              - rule: value-range
+                column: close
+                min: 0
+            """,
+        )
+        found = [i for i in report.issues if i.code == "value-range"]
+        assert len(found) == 1
+        assert found[0].severity == "error"
+        assert "-5.0" in found[0].details
+
+    def test_in_range_no_issue(self, tmp_path):
+        man = CacheManager()
+        ds_dir = Path(man.db_path("staging/vr-ok"))
+        ds_dir.mkdir(parents=True, exist_ok=True)
+        table = pa.table({"refdate": [date(2021, 1, 4)], "close": [3.0]})
+        pq.write_table(table, ds_dir / "part-0.parquet")
+        report = self._run(
+            tmp_path,
+            """
+            staging.vr-ok:
+              - rule: value-range
+                column: close
+                min: 0
+                max: 10
+            """,
+        )
+        assert not [i for i in report.issues if i.code == "value-range"]
+
+    def test_nulls_skipped(self, tmp_path):
+        man = CacheManager()
+        ds_dir = Path(man.db_path("staging/vr-null"))
+        ds_dir.mkdir(parents=True, exist_ok=True)
+        table = pa.table({"refdate": [date(2021, 1, 4)], "close": [None]})
+        pq.write_table(table, ds_dir / "part-0.parquet")
+        report = self._run(
+            tmp_path,
+            """
+            staging.vr-null:
+              - rule: value-range
+                column: close
+                min: 0
+            """,
+        )
+        assert not [i for i in report.issues if i.code == "value-range"]
+
+    def test_no_bounds_is_config_error(self, tmp_path):
+        report = self._run(
+            tmp_path,
+            """
+            staging.vr-x:
+              - rule: value-range
+                column: close
+            """,
+        )
+        assert [i for i in report.issues if i.code == "validation-config-error"]
+
+    def test_absent_column_is_config_error(self, tmp_path):
+        man = CacheManager()
+        ds_dir = Path(man.db_path("staging/vr-nocol"))
+        ds_dir.mkdir(parents=True, exist_ok=True)
+        table = pa.table({"refdate": [date(2021, 1, 4)], "close": [1.0]})
+        pq.write_table(table, ds_dir / "part-0.parquet")
+        report = self._run(
+            tmp_path,
+            """
+            staging.vr-nocol:
+              - rule: value-range
+                column: missing
+                min: 0
+            """,
+        )
+        assert [i for i in report.issues if i.code == "validation-config-error"]
+
+
+class TestNotNullRule:
+    def _run(self, tmp_path, body):
+        cfg = _write_validations(tmp_path, body)
+        return run_doctor(categories=["validations"], validations_config=cfg)
+
+    def _write(self, rel, cols):
+        man = CacheManager()
+        ds_dir = Path(man.db_path(rel))
+        ds_dir.mkdir(parents=True, exist_ok=True)
+        pq.write_table(pa.table(cols), ds_dir / "part-0.parquet")
+        return ds_dir
+
+    def test_nulls_reported_aggregated(self, tmp_path):
+        self._write(
+            "staging/nn-bad",
+            {"refdate": [date(2021, 1, 4), date(2021, 1, 5)], "close": [1.0, None]},
+        )
+        report = self._run(
+            tmp_path,
+            """
+            staging.nn-bad:
+              - rule: not-null
+                columns: [refdate, close]
+            """,
+        )
+        found = [i for i in report.issues if i.code == "not-null"]
+        assert len(found) == 1
+        assert found[0].details == ["close: 1 null(s)"]
+
+    def test_no_nulls_no_issue(self, tmp_path):
+        self._write(
+            "staging/nn-ok",
+            {"refdate": [date(2021, 1, 4)], "close": [1.0]},
+        )
+        report = self._run(
+            tmp_path,
+            """
+            staging.nn-ok:
+              - rule: not-null
+                columns: [refdate, close]
+            """,
+        )
+        assert not [i for i in report.issues if i.code == "not-null"]
+
+    def test_empty_columns_is_config_error(self, tmp_path):
+        report = self._run(
+            tmp_path,
+            """
+            staging.nn-x:
+              - rule: not-null
+                columns: []
+            """,
+        )
+        assert [i for i in report.issues if i.code == "validation-config-error"]
+
+
+class TestNoDuplicatesRule:
+    def _run(self, tmp_path, body):
+        cfg = _write_validations(tmp_path, body)
+        return run_doctor(categories=["validations"], validations_config=cfg)
+
+    def _write(self, rel, cols):
+        man = CacheManager()
+        ds_dir = Path(man.db_path(rel))
+        ds_dir.mkdir(parents=True, exist_ok=True)
+        pq.write_table(pa.table(cols), ds_dir / "part-0.parquet")
+        return ds_dir
+
+    def test_duplicates_reported(self, tmp_path):
+        self._write(
+            "staging/dup-bad",
+            {
+                "refdate": [date(2021, 1, 4), date(2021, 1, 4), date(2021, 1, 5)],
+                "symbol": ["A", "A", "B"],
+            },
+        )
+        report = self._run(
+            tmp_path,
+            """
+            staging.dup-bad:
+              - rule: no-duplicates
+                key: [refdate, symbol]
+            """,
+        )
+        found = [i for i in report.issues if i.code == "no-duplicates"]
+        assert len(found) == 1
+        assert "1 duplicated key(s)" in found[0].description
+        assert "1 excess row(s)" in found[0].description
+
+    def test_unique_no_issue(self, tmp_path):
+        self._write(
+            "staging/dup-ok",
+            {"refdate": [date(2021, 1, 4), date(2021, 1, 5)], "symbol": ["A", "B"]},
+        )
+        report = self._run(
+            tmp_path,
+            """
+            staging.dup-ok:
+              - rule: no-duplicates
+                key: [refdate, symbol]
+            """,
+        )
+        assert not [i for i in report.issues if i.code == "no-duplicates"]
+
+    def test_empty_key_is_config_error(self, tmp_path):
+        report = self._run(
+            tmp_path,
+            """
+            staging.dup-x:
+              - rule: no-duplicates
+                key: []
+            """,
+        )
+        assert [i for i in report.issues if i.code == "validation-config-error"]

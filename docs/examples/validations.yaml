@@ -78,3 +78,14 @@ input.b3-bvbg086-nonbiz:
     series:
       PETR4: { calendar: B3 }
       VALE3: { calendar: B3 }
+
+# Content rules (dataset-wide column checks).
+staging.b3-futures-settlement-prices:
+  - rule: no-duplicates          # this dataset is known to ship 2x rows
+    key: [refdate, symbol]
+staging.b3-cotahist-content:
+  - rule: value-range
+    column: close
+    min: 0
+  - rule: not-null
+    columns: [refdate, symbol, close]

@@ -327,6 +327,41 @@ def _read_series_dates(
     return result
 
 
+def _read_columns(
+    dataset_key: str, dataset_path: Path, columns: list[str]
+) -> Any | None:
+    """Read the requested columns from a dataset as a pyarrow Table.
+
+    Reuses the typed-schema resolution used by the calendar rules so
+    Hive-partitioned columns are typed correctly. Reads only the requested
+    columns.
+
+    Args:
+        dataset_key: ``"layer.dataset"`` key (for schema lookup).
+        dataset_path: Absolute path to the dataset folder under db/.
+        columns: Column names to read (non-empty).
+
+    Returns:
+        A pyarrow Table of ``columns``, or ``None`` when the dataset is absent.
+
+    Raises:
+        KeyError: If any requested column is not present in the schema.
+    """
+    if not dataset_path.exists():
+        return None
+    dataset = _resolve_series_dataset(dataset_key, dataset_path, columns[0], None)
+    if dataset is None:
+        return None
+    schema_names = set(dataset.schema.names)
+    missing = [c for c in columns if c not in schema_names]
+    if missing:
+        raise KeyError(f"column(s) not found: {', '.join(missing)}")
+    try:
+        return dataset.to_table(columns=columns)
+    except Exception:
+        return None
+
+
 def _as_date(value: Any) -> date:
     """Coerce a bizdays/datetime/date/ISO-string value to a ``date``."""
     if isinstance(value, datetime):
@@ -1388,6 +1423,160 @@ def _run_no_unexpected_observations_rule(
     return issues
 
 
+def _run_value_range_rule(  # noqa: PLR0911
+    dataset_key: str, dataset_path: Path, rule: dict[str, Any]
+) -> list[Issue]:
+    """Evaluate a value-range rule: a numeric column within [min, max]."""
+    import pyarrow as pa
+    import pyarrow.compute as pc
+
+    column = rule.get("column")
+    if not isinstance(column, str) or not column:
+        return [
+            _validation_config_error(dataset_key, "value-range requires a 'column'")
+        ]
+    min_v = rule.get("min")
+    max_v = rule.get("max")
+    if min_v is None and max_v is None:
+        return [
+            _validation_config_error(
+                dataset_key, "value-range requires 'min' and/or 'max'"
+            )
+        ]
+
+    try:
+        table = _read_columns(dataset_key, dataset_path, [column])
+    except KeyError as exc:
+        return [_validation_config_error(dataset_key, str(exc))]
+    if table is None:
+        return []
+
+    col = table.column(column)
+    if not (pa.types.is_floating(col.type) or pa.types.is_integer(col.type)):
+        return [
+            _validation_config_error(
+                dataset_key, f"value-range column '{column}' is not numeric"
+            )
+        ]
+
+    valid = pc.is_valid(col)
+    below = pc.less(col, min_v) if min_v is not None else None
+    above = pc.greater(col, max_v) if max_v is not None else None
+    if below is not None and above is not None:
+        out_of_range = pc.or_(below, above)
+    elif below is not None:
+        out_of_range = below
+    else:
+        out_of_range = above
+
+    offending = col.filter(pc.and_(valid, out_of_range))
+    n = len(offending)
+    if n == 0:
+        return []
+
+    valid_vals = col.filter(valid)
+    obs_min = pc.min(valid_vals).as_py()
+    obs_max = pc.max(valid_vals).as_py()
+    sample = [str(v) for v in offending.slice(0, 20).to_pylist()]
+    return [
+        Issue(
+            category="Data Validation",
+            code="value-range",
+            severity="error",
+            description=(
+                f"{dataset_key}: {n} row(s) with {column} outside "
+                f"[{min_v}, {max_v}] (observed [{obs_min}, {obs_max}])"
+            ),
+            details=sample,
+            fixable=False,
+        )
+    ]
+
+
+def _run_not_null_rule(
+    dataset_key: str, dataset_path: Path, rule: dict[str, Any]
+) -> list[Issue]:
+    """Evaluate a not-null rule: configured columns must have no nulls."""
+    columns = rule.get("columns")
+    if not isinstance(columns, list) or not columns:
+        return [
+            _validation_config_error(
+                dataset_key, "not-null requires a non-empty 'columns' list"
+            )
+        ]
+
+    try:
+        table = _read_columns(dataset_key, dataset_path, columns)
+    except KeyError as exc:
+        return [_validation_config_error(dataset_key, str(exc))]
+    if table is None:
+        return []
+
+    violating = [(c, table.column(c).null_count) for c in columns]
+    violating = [(c, n) for c, n in violating if n > 0]
+    if not violating:
+        return []
+    return [
+        Issue(
+            category="Data Validation",
+            code="not-null",
+            severity="error",
+            description=(
+                f"{dataset_key}: null values in {len(violating)} required column(s)"
+            ),
+            details=[f"{c}: {n} null(s)" for c, n in violating],
+            fixable=False,
+        )
+    ]
+
+
+def _run_no_duplicates_rule(
+    dataset_key: str, dataset_path: Path, rule: dict[str, Any]
+) -> list[Issue]:
+    """Evaluate a no-duplicates rule: no duplicate rows for the key columns."""
+    import pyarrow.compute as pc
+
+    key = rule.get("key")
+    if not isinstance(key, list) or not key:
+        return [
+            _validation_config_error(
+                dataset_key, "no-duplicates requires a non-empty 'key' list"
+            )
+        ]
+
+    try:
+        table = _read_columns(dataset_key, dataset_path, key)
+    except KeyError as exc:
+        return [_validation_config_error(dataset_key, str(exc))]
+    if table is None:
+        return []
+
+    grouped = table.group_by(key).aggregate([([], "count_all")])
+    dup = grouped.filter(pc.greater(grouped.column("count_all"), 1))
+    n_dup_keys = dup.num_rows
+    if n_dup_keys == 0:
+        return []
+
+    excess = pc.sum(dup.column("count_all")).as_py() - n_dup_keys
+    details = []
+    for row in dup.slice(0, 20).to_pylist():
+        keyvals = ", ".join(str(row[k]) for k in key)
+        details.append(f"({keyvals}): {row['count_all']} rows")
+    return [
+        Issue(
+            category="Data Validation",
+            code="no-duplicates",
+            severity="error",
+            description=(
+                f"{dataset_key}: {n_dup_keys} duplicated key(s) on "
+                f"[{', '.join(key)}] ({excess} excess row(s))"
+            ),
+            details=details,
+            fixable=False,
+        )
+    ]
+
+
 def check_validations(
     validations_config: Path,
 ) -> list[Issue]:
@@ -1444,6 +1633,12 @@ def check_validations(
                         dataset_key, dataset_path, rule
                     )
                 )
+            elif rule_type == "value-range":
+                issues.extend(_run_value_range_rule(dataset_key, dataset_path, rule))
+            elif rule_type == "not-null":
+                issues.extend(_run_not_null_rule(dataset_key, dataset_path, rule))
+            elif rule_type == "no-duplicates":
+                issues.extend(_run_no_duplicates_rule(dataset_key, dataset_path, rule))
             else:
                 issues.append(
                     _validation_config_error(

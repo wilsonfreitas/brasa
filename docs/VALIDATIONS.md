@@ -96,6 +96,27 @@ input.b3-bvbg086:
       PETR4: { calendar: B3 }
 ```
 
+### Content rules (dataset-wide)
+
+These rules check columns across the whole dataset — no `series:` map. All are
+`error` severity and read-only.
+
+- `value-range` — a numeric `column` must lie within `[min, max]` (at least one
+  bound required; inclusive; nulls skipped).
+- `not-null` — every column in `columns` must have no null values.
+- `no-duplicates` — no duplicate rows for the `key` column set.
+
+```yaml
+staging.b3-cotahist:
+  - rule: value-range
+    column: close
+    min: 0
+  - rule: not-null
+    columns: [refdate, symbol, close]
+  - rule: no-duplicates
+    key: [refdate, symbol]
+```
+
 ## Roadmap
 
 Additional rule types — monthly/quarterly frequency completeness, non-business-day
