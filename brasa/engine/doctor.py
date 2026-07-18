@@ -1201,6 +1201,35 @@ def _validation_config_error(dataset_key: str, msg: str) -> Issue:
     )
 
 
+def _expand_series_items(
+    dataset_key: str, rule: dict[str, Any]
+) -> tuple[list[tuple[str | None, dict[str, Any]]] | None, Issue | None]:
+    """Expand a validation rule into ``(series_name, series_cfg)`` items.
+
+    Grouped rules (``group_column`` set) draw one item per entry in the
+    ``series:`` map; single-series rules yield one ``(None, rule)`` item.
+
+    Args:
+        dataset_key: ``"layer.dataset"`` key, used only for error messages.
+        rule: The rule mapping from the validations config.
+
+    Returns:
+        ``(series_items, None)`` on success, or ``(None, error_issue)`` when a
+        grouped rule is missing a non-empty ``series:`` map.
+    """
+    group_column = rule.get("group_column")
+    if group_column is not None:
+        series = rule.get("series")
+        if not isinstance(series, dict) or not series:
+            return None, _validation_config_error(
+                dataset_key, "grouped rule requires a non-empty 'series' map"
+            )
+        return [
+            (name, cfg if isinstance(cfg, dict) else {}) for name, cfg in series.items()
+        ], None
+    return [(None, rule)], None
+
+
 def _run_calendar_completeness_rule(
     dataset_key: str, dataset_path: Path, rule: dict[str, Any]
 ) -> list[Issue]:
@@ -1208,20 +1237,9 @@ def _run_calendar_completeness_rule(
     date_column = rule.get("date_column", "refdate")
     group_column = rule.get("group_column")
 
-    if group_column is not None:
-        series = rule.get("series")
-        if not isinstance(series, dict) or not series:
-            return [
-                _validation_config_error(
-                    dataset_key,
-                    "grouped calendar-completeness requires a non-empty 'series' map",
-                )
-            ]
-        series_items: list[tuple[str | None, dict[str, Any]]] = [
-            (name, cfg if isinstance(cfg, dict) else {}) for name, cfg in series.items()
-        ]
-    else:
-        series_items = [(None, rule)]
+    series_items, err = _expand_series_items(dataset_key, rule)
+    if err is not None:
+        return [err]
 
     issues: list[Issue] = []
     for series_name, scfg in series_items:
