@@ -12,7 +12,8 @@ staging.bcb-sgs:
       CDI: { calendar: ANBIMA }
       SELIC: { calendar: ANBIMA }
       SETA: { calendar: ANBIMA }
-      # IPCA / IGPM are monthly — deferred to v2 (see WIL-85).
+      IPCA: { frequency: monthly }
+      IGPM: { frequency: monthly }
 
 staging.bcb-currency:
   - rule: calendar-completeness

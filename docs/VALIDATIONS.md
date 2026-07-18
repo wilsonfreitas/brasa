@@ -62,6 +62,19 @@ Per-series (grouped) or rule-level (single-series) optional keys:
 - `start` — ISO date. Default: first observed date for the series.
 - `end` — ISO date, or `today`. Default: last observed date.
 
+Additionally, `calendar-completeness` supports a per-series `frequency`:
+
+- `frequency` — `daily` (default), `monthly`, or `quarterly`.
+  - `daily` checks business-day completeness against the bizdays `calendar`.
+  - `monthly` / `quarterly` are **calendar-agnostic** period-existence checks:
+    a period is "present" if it holds at least one observation. The `calendar`
+    field is ignored. Missing periods are reported as `YYYY-MM` (monthly) or
+    `YYYY-Qn` (quarterly).
+
+Like `calendar`/`start`/`end`, `frequency` is placed per-series in the grouped
+(`series:`) shape or rule-level in the single-series shape; there is no
+rule-level → series inheritance.
+
 A full, working example lives at
 [`docs/examples/validations.yaml`](examples/validations.yaml).
 
