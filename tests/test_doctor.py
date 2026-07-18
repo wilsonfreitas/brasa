@@ -858,3 +858,144 @@ class TestValidationsCategory:
         )
         error = next(i for i in report.issues if i.code == "validation-config-error")
         assert error.severity == "error"
+
+
+class TestPeriodCompletenessGaps:
+    def test_monthly_complete_no_gaps(self):
+        from brasa.engine.doctor import _period_completeness_gaps
+
+        present = {date(2024, 1, 15), date(2024, 2, 10), date(2024, 3, 5)}
+        assert _period_completeness_gaps(present, "monthly", None, None) == []
+
+    def test_monthly_one_missing_month(self):
+        from brasa.engine.doctor import _period_completeness_gaps
+
+        present = {date(2024, 1, 15), date(2024, 3, 5)}  # Feb missing
+        assert _period_completeness_gaps(present, "monthly", None, None) == ["2024-02"]
+
+    def test_monthly_year_boundary(self):
+        from brasa.engine.doctor import _period_completeness_gaps
+
+        present = {date(2023, 11, 2), date(2024, 2, 2)}  # Dec + Jan missing
+        assert _period_completeness_gaps(present, "monthly", None, None) == [
+            "2023-12",
+            "2024-01",
+        ]
+
+    def test_quarterly_missing_quarter(self):
+        from brasa.engine.doctor import _period_completeness_gaps
+
+        present = {date(2024, 1, 10), date(2024, 12, 10)}  # Q1 + Q4; Q2, Q3 missing
+        assert _period_completeness_gaps(present, "quarterly", None, None) == [
+            "2024-Q2",
+            "2024-Q3",
+        ]
+
+    def test_start_end_bucketed_from_mid_period(self):
+        from brasa.engine.doctor import _period_completeness_gaps
+
+        present = {date(2024, 2, 15)}
+        # start mid-Jan buckets to 2024-01; end mid-Mar buckets to 2024-03
+        assert _period_completeness_gaps(
+            present, "monthly", "2024-01-20", "2024-03-10"
+        ) == ["2024-01", "2024-03"]
+
+    def test_default_end_is_last_observed(self):
+        from brasa.engine.doctor import _period_completeness_gaps
+
+        present = {date(2024, 1, 15), date(2024, 2, 10)}
+        # no fabricated gap past the newest observation
+        assert _period_completeness_gaps(present, "monthly", None, None) == []
+
+    def test_unsupported_frequency_raises(self):
+        from brasa.engine.doctor import _period_completeness_gaps
+
+        with pytest.raises(ValueError):
+            _period_completeness_gaps({date(2024, 1, 1)}, "weekly", None, None)
+
+
+class TestFrequencyCompleteness:
+    def _run(self, tmp_path, body):
+        cfg = _write_validations(tmp_path, body)
+        report = run_doctor(categories=["validations"], validations_config=cfg)
+        return report
+
+    def test_monthly_series_complete_no_issue(self, tmp_path):
+        _write_series_parquet(
+            "staging/macro-monthly",
+            "IPCA",
+            [date(2024, 1, 1), date(2024, 2, 1), date(2024, 3, 1)],
+        )
+        report = self._run(
+            tmp_path,
+            """
+            staging.macro-monthly:
+              - rule: calendar-completeness
+                group_column: symbol
+                series:
+                  IPCA: {frequency: monthly}
+            """,
+        )
+        assert not [i for i in report.issues if i.code == "calendar-completeness"]
+
+    def test_monthly_series_missing_month_reported(self, tmp_path):
+        _write_series_parquet(
+            "staging/macro-monthly",
+            "IPCA",
+            [date(2024, 1, 1), date(2024, 3, 1)],  # Feb missing
+        )
+        report = self._run(
+            tmp_path,
+            """
+            staging.macro-monthly:
+              - rule: calendar-completeness
+                group_column: symbol
+                series:
+                  IPCA: {frequency: monthly}
+            """,
+        )
+        found = [i for i in report.issues if i.code == "calendar-completeness"]
+        assert len(found) == 1
+        assert found[0].details == ["2024-02"]
+        assert "month(s)" in found[0].description
+
+    def test_quarterly_missing_quarter_reported(self, tmp_path):
+        _write_series_parquet(
+            "staging/macro-quarterly",
+            None,
+            [date(2024, 1, 1), date(2024, 12, 1)],  # Q1 + Q4; Q2, Q3 missing
+        )
+        report = self._run(
+            tmp_path,
+            """
+            staging.macro-quarterly:
+              - rule: calendar-completeness
+                date_column: refdate
+                frequency: quarterly
+            """,
+        )
+        found = [i for i in report.issues if i.code == "calendar-completeness"]
+        assert len(found) == 1
+        assert found[0].details == ["2024-Q2", "2024-Q3"]
+        assert "quarter(s)" in found[0].description
+
+    def test_unknown_frequency_is_config_error_siblings_run(self, tmp_path):
+        _write_series_parquet("staging/macro-monthly", "BAD", [date(2024, 1, 1)])
+        _write_series_parquet(
+            "staging/macro-monthly", "IPCA", [date(2024, 1, 1), date(2024, 2, 1)]
+        )
+        report = self._run(
+            tmp_path,
+            """
+            staging.macro-monthly:
+              - rule: calendar-completeness
+                group_column: symbol
+                series:
+                  BAD: {frequency: weekly}
+                  IPCA: {frequency: monthly}
+            """,
+        )
+        errs = [i for i in report.issues if i.code == "validation-config-error"]
+        assert any("BAD" in e.description for e in errs)
+        # IPCA still evaluated (complete -> no calendar-completeness issue)
+        assert not [i for i in report.issues if i.code == "calendar-completeness"]

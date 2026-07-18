@@ -379,6 +379,62 @@ def _calendar_completeness_gaps(
     return sorted(d for d in biz if d not in present_dates)
 
 
+def _period_completeness_gaps(
+    present_dates: set[date],
+    frequency: str,
+    start_cfg: str | None,
+    end_cfg: str | None,
+) -> list[str]:
+    """Return missing calendar periods for a non-daily series, sorted ascending.
+
+    Calendar-agnostic: a period (month or quarter) is "present" if it holds at
+    least one observation. Weekends and holidays are irrelevant to "does this
+    period have data", so no bizdays calendar is consulted.
+
+    Args:
+        present_dates: Dates actually present for the series (non-empty).
+        frequency: Either ``"monthly"`` or ``"quarterly"``.
+        start_cfg: Optional ISO start date; defaults to the first present date.
+            Bucketed to its period.
+        end_cfg: Optional ISO end date, or the keyword ``today``; defaults to
+            the last present date. Bucketed to its period.
+
+    Returns:
+        Sorted list of period labels (``"YYYY-MM"`` monthly, ``"YYYY-Qn"``
+        quarterly) that have no observation.
+
+    Raises:
+        ValueError: If ``frequency`` is not ``"monthly"`` or ``"quarterly"``.
+        Exception: If ``start_cfg``/``end_cfg`` are malformed dates.
+    """
+    if frequency not in ("monthly", "quarterly"):
+        raise ValueError(f"unsupported frequency: {frequency}")
+
+    def index(d: date) -> int:
+        if frequency == "monthly":
+            return d.year * 12 + (d.month - 1)
+        return d.year * 4 + (d.month - 1) // 3
+
+    def label(i: int) -> str:
+        if frequency == "monthly":
+            return f"{i // 12:04d}-{i % 12 + 1:02d}"
+        return f"{i // 4:04d}-Q{i % 4 + 1}"
+
+    if start_cfg is not None:
+        lower = index(_as_date(start_cfg))
+    else:
+        lower = index(min(present_dates))
+    if end_cfg is None:
+        upper = index(max(present_dates))
+    elif str(end_cfg) == "today":
+        upper = index(date.today())
+    else:
+        upper = index(_as_date(end_cfg))
+
+    present_idx = {index(d) for d in present_dates}
+    return [label(i) for i in range(lower, upper + 1) if i not in present_idx]
+
+
 # ---------------------------------------------------------------------------
 # Category: Raw Files
 # ---------------------------------------------------------------------------
@@ -1172,7 +1228,18 @@ def _run_calendar_completeness_rule(
         calendar_name = scfg.get("calendar", "ANBIMA")
         start_cfg = scfg.get("start")
         end_cfg = scfg.get("end")
+        frequency = scfg.get("frequency", "daily")
         label = f"{dataset_key}/{series_name}" if series_name else dataset_key
+
+        if frequency not in ("daily", "monthly", "quarterly"):
+            issues.append(
+                _validation_config_error(
+                    label,
+                    f"unknown frequency '{frequency}' "
+                    "(expected daily, monthly, or quarterly)",
+                )
+            )
+            continue
 
         present = _read_series_dates(
             dataset_key, dataset_path, date_column, group_column, series_name
@@ -1180,10 +1247,23 @@ def _run_calendar_completeness_rule(
         if not present:
             continue  # absent dataset/series -> skip silently
 
+        missing: list[Any]
         try:
-            missing = _calendar_completeness_gaps(
-                present, calendar_name, start_cfg, end_cfg
-            )
+            if frequency == "daily":
+                missing = _calendar_completeness_gaps(
+                    present, calendar_name, start_cfg, end_cfg
+                )
+                noun = f"{calendar_name} business day"
+            elif frequency == "monthly":
+                missing = _period_completeness_gaps(
+                    present, "monthly", start_cfg, end_cfg
+                )
+                noun = "month"
+            else:  # quarterly
+                missing = _period_completeness_gaps(
+                    present, "quarterly", start_cfg, end_cfg
+                )
+                noun = "quarter"
         except Exception as exc:
             issues.append(
                 _validation_config_error(
@@ -1199,8 +1279,8 @@ def _run_calendar_completeness_rule(
                     code="calendar-completeness",
                     severity="error",
                     description=(
-                        f"{label}: {len(missing)} missing {calendar_name} "
-                        f"business day(s) between {missing[0]} and {missing[-1]}"
+                        f"{label}: {len(missing)} missing {noun}(s) "
+                        f"between {missing[0]} and {missing[-1]}"
                     ),
                     details=[str(d) for d in missing],
                     fixable=False,
