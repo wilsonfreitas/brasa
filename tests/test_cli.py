@@ -248,3 +248,36 @@ class TestDoctorValidationsFile:
         with pytest.raises(SystemExit) as exc:
             cli.main()
         assert exc.value.code == 2
+
+
+class TestListTemplatesCommand:
+    def test_parser_registers_list_templates(self):
+        from brasa import cli
+
+        args = cli.parser.parse_args(["list-templates"])
+        assert args.command == "list-templates"
+
+    def test_lists_bundled_and_marks_user_shadow(self, tmp_path, monkeypatch, capsys):
+        import sys
+
+        from brasa import cli
+        from brasa.engine.template import clear_template_cache
+
+        (tmp_path / "b3-futures.yaml").write_text(
+            "id: b3-futures\n"
+            "description: test\n"
+            "etl:\n"
+            "  pipeline:\n"
+            "    - step: sql_query\n"
+            "      datasets: [input.b3-bvbg086]\n"
+            "      query: SELECT 1\n"
+        )
+        monkeypatch.setenv("BRASA_TEMPLATE_PATH", str(tmp_path))
+        clear_template_cache()
+        monkeypatch.setattr(sys, "argv", ["brasa", "list-templates"])
+        cli.main()
+        clear_template_cache()
+        out = capsys.readouterr().out
+        assert "b3-futures" in out
+        assert "shadows bundled" in out
+        assert "bundled" in out  # at least one purely-bundled template
