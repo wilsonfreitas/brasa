@@ -539,14 +539,23 @@ parser_doctor.add_argument(
     "--category",
     nargs="+",
     metavar="CATEGORY",
-    choices=["raw", "db", "meta", "templates", "gaps", "validations"],
-    help="run only specific categories: raw, db, meta, templates, gaps, validations",
+    choices=["raw", "db", "meta", "templates", "gaps", "validations", "downloads"],
+    help=(
+        "run only specific categories: raw, db, meta, templates, gaps, "
+        "validations, downloads"
+    ),
 )
 parser_doctor.add_argument(
     "--template",
     nargs="+",
     metavar="TEMPLATE",
     help="restrict date-gaps and stale-etl checks to specific templates",
+)
+parser_doctor.add_argument(
+    "--calendar",
+    metavar="NAME",
+    default="B3",
+    help="business calendar for the downloads category refdate check (default: B3)",
 )
 parser_doctor.add_argument(
     "--since",
@@ -1375,6 +1384,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915
         skip_confirm = getattr(args, "yes", False)
         validations_file = getattr(args, "validations_file", None)
         validations_config = Path(validations_file) if validations_file else None
+        calendar_name = getattr(args, "calendar", "B3")
 
         try:
             report = run_doctor(
@@ -1382,6 +1392,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915
                 template_filter=template_filter,
                 since_days=since_days,
                 validations_config=validations_config,
+                calendar_name=calendar_name,
             )
         except ValueError as exc:
             print(f"Error: {exc}", file=sys.stderr)
