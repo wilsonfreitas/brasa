@@ -327,6 +327,41 @@ def _read_series_dates(
     return result
 
 
+def _read_columns(
+    dataset_key: str, dataset_path: Path, columns: list[str]
+) -> Any | None:
+    """Read the requested columns from a dataset as a pyarrow Table.
+
+    Reuses the typed-schema resolution used by the calendar rules so
+    Hive-partitioned columns are typed correctly. Reads only the requested
+    columns.
+
+    Args:
+        dataset_key: ``"layer.dataset"`` key (for schema lookup).
+        dataset_path: Absolute path to the dataset folder under db/.
+        columns: Column names to read (non-empty).
+
+    Returns:
+        A pyarrow Table of ``columns``, or ``None`` when the dataset is absent.
+
+    Raises:
+        KeyError: If any requested column is not present in the schema.
+    """
+    if not dataset_path.exists():
+        return None
+    dataset = _resolve_series_dataset(dataset_key, dataset_path, columns[0], None)
+    if dataset is None:
+        return None
+    schema_names = set(dataset.schema.names)
+    missing = [c for c in columns if c not in schema_names]
+    if missing:
+        raise KeyError(f"column(s) not found: {', '.join(missing)}")
+    try:
+        return dataset.to_table(columns=columns)
+    except Exception:
+        return None
+
+
 def _as_date(value: Any) -> date:
     """Coerce a bizdays/datetime/date/ISO-string value to a ``date``."""
     if isinstance(value, datetime):

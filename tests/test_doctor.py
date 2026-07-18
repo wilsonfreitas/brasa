@@ -1091,3 +1091,30 @@ class TestUnexpectedObservations:
         )
         report = run_doctor(categories=["validations"], validations_config=cfg)
         assert [i for i in report.issues if i.code == "validation-config-error"]
+
+
+class TestReadColumns:
+    def test_absent_dataset_returns_none(self):
+        from brasa.engine.doctor import _read_columns
+
+        man = CacheManager()
+        path = Path(man.db_path("staging/does-not-exist"))
+        assert _read_columns("staging.does-not-exist", path, ["refdate"]) is None
+
+    def test_reads_requested_columns(self):
+        from brasa.engine.doctor import _read_columns
+
+        ds_dir = _write_series_parquet(
+            "staging/rc-basic", None, [date(2021, 1, 4), date(2021, 1, 5)]
+        )
+        table = _read_columns("staging.rc-basic", ds_dir, ["refdate", "value"])
+        assert table is not None
+        assert set(table.column_names) == {"refdate", "value"}
+        assert table.num_rows == 2
+
+    def test_missing_column_raises_keyerror(self):
+        from brasa.engine.doctor import _read_columns
+
+        ds_dir = _write_series_parquet("staging/rc-missing", None, [date(2021, 1, 4)])
+        with pytest.raises(KeyError):
+            _read_columns("staging.rc-missing", ds_dir, ["nope"])
