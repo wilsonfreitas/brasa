@@ -54,6 +54,7 @@ class DownloadAttemptStatus(Enum):
     DUPLICATED = "duplicated"
     INVALID = "invalid"
     CORRUPTED = "corrupted"
+    NO_DATA = "no_data"
     WARNING = "warning"
 
     @property
@@ -71,6 +72,7 @@ class DownloadAttemptStatus(Enum):
             DownloadAttemptStatus.DUPLICATED: "D",
             DownloadAttemptStatus.INVALID: "I",
             DownloadAttemptStatus.CORRUPTED: "C",
+            DownloadAttemptStatus.NO_DATA: "N",
             DownloadAttemptStatus.WARNING: "W",
         }
         return symbols[self]
@@ -90,6 +92,7 @@ class DownloadAttemptStatus(Enum):
             DownloadAttemptStatus.DUPLICATED: "cyan",
             DownloadAttemptStatus.INVALID: "magenta",
             DownloadAttemptStatus.CORRUPTED: "yellow",
+            DownloadAttemptStatus.NO_DATA: "yellow",
             DownloadAttemptStatus.WARNING: "yellow",
         }
         return colors[self]
@@ -119,18 +122,22 @@ def map_exception_to_download_status(
         DownloadException,
         DuplicatedFolderException,
         InvalidContentException,
+        NoDataException,
     )
 
     if ex is None:
         return DownloadAttemptStatus.PASSED
-    if isinstance(ex, DuplicatedFolderException):
-        return DownloadAttemptStatus.DUPLICATED
-    if isinstance(ex, CorruptedContentException):
-        return DownloadAttemptStatus.CORRUPTED
-    if isinstance(ex, InvalidContentException):
-        return DownloadAttemptStatus.INVALID
-    if isinstance(ex, DownloadException):
-        return DownloadAttemptStatus.FAILED
+    # Ordered exception → status map (most specific first).
+    exc_map = (
+        (DuplicatedFolderException, DownloadAttemptStatus.DUPLICATED),
+        (CorruptedContentException, DownloadAttemptStatus.CORRUPTED),
+        (InvalidContentException, DownloadAttemptStatus.INVALID),
+        (NoDataException, DownloadAttemptStatus.NO_DATA),
+        (DownloadException, DownloadAttemptStatus.FAILED),
+    )
+    for exc_type, status in exc_map:
+        if isinstance(ex, exc_type):
+            return status
     return DownloadAttemptStatus.ERROR
 
 
@@ -160,6 +167,7 @@ def to_task_status(
         DownloadAttemptStatus.DUPLICATED: TaskStatus.DUPLICATED,
         DownloadAttemptStatus.INVALID: TaskStatus.INVALID,
         DownloadAttemptStatus.CORRUPTED: TaskStatus.CORRUPTED,
+        DownloadAttemptStatus.NO_DATA: TaskStatus.NO_DATA,
         DownloadAttemptStatus.WARNING: TaskStatus.WARNING,
     }
     return mapping[download_status]
@@ -179,6 +187,7 @@ class TaskStatus(Enum):
     DUPLICATED = "duplicated"
     INVALID = "invalid"
     CORRUPTED = "corrupted"
+    NO_DATA = "no_data"
     WARNING = "warning"
 
     @property
@@ -192,6 +201,7 @@ class TaskStatus(Enum):
             TaskStatus.DUPLICATED: "D",
             TaskStatus.INVALID: "I",
             TaskStatus.CORRUPTED: "C",
+            TaskStatus.NO_DATA: "N",
             TaskStatus.WARNING: "W",
         }
         return symbols[self]
@@ -207,6 +217,7 @@ class TaskStatus(Enum):
             TaskStatus.DUPLICATED: "cyan",
             TaskStatus.INVALID: "magenta",
             TaskStatus.CORRUPTED: "yellow",
+            TaskStatus.NO_DATA: "yellow",
             TaskStatus.WARNING: "yellow",
         }
         return colors[self]

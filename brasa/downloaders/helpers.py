@@ -8,6 +8,7 @@ from typing import IO
 from brasa.downloaders.downloaders import (
     B3FilesURLDownloader,
     B3PagedURLEncodedDownloader,
+    B3PregaoDownloader,
     B3URLEncodedDownloader,
     BCBCurrencyDownloader,
     BCBSGSDownloader,
@@ -22,18 +23,48 @@ from brasa.engine.exceptions import DownloadException
 logger = logging.getLogger(__name__)
 
 
+def _apply_download_config(downloader, md_downloader):
+    """Copy format + timeout config from the template onto the downloader.
+
+    Args:
+        downloader: A SimpleDownloader-derived instance.
+        md_downloader: The MarketDataDownloader carrying ``format``/``timeout``.
+
+    Returns:
+        The same downloader, with ``fmt`` and (when set) ``timeout`` applied.
+    """
+    downloader.fmt = md_downloader.format
+    if md_downloader.timeout is not None:
+        downloader.timeout = md_downloader.timeout
+    return downloader
+
+
 def simple_download(
     md_downloader: MarketDataDownloader, **kwargs
 ) -> tuple[IO | None, dict[str, str]]:
-    downloader = SimpleDownloader(md_downloader.url, md_downloader.verify_ssl, **kwargs)
+    downloader = _apply_download_config(
+        SimpleDownloader(md_downloader.url, md_downloader.verify_ssl, **kwargs),
+        md_downloader,
+    )
     return downloader.download(), dict(downloader.response.headers)
 
 
 def datetime_download(
     md_downloader: MarketDataDownloader, **kwargs
 ) -> tuple[IO | None, dict[str, str]]:
-    downloader = DatetimeDownloader(
-        md_downloader.url, md_downloader.verify_ssl, **kwargs
+    downloader = _apply_download_config(
+        DatetimeDownloader(md_downloader.url, md_downloader.verify_ssl, **kwargs),
+        md_downloader,
+    )
+    return downloader.download(), dict(downloader.response.headers)
+
+
+def b3_pregao_download(
+    md_downloader: MarketDataDownloader, **kwargs
+) -> tuple[IO | None, dict[str, str]]:
+    downloader = _apply_download_config(
+        B3PregaoDownloader(md_downloader.url, md_downloader.verify_ssl, **kwargs),
+        md_downloader,
     )
     return downloader.download(), dict(downloader.response.headers)
 
@@ -41,8 +72,9 @@ def datetime_download(
 def format_download(
     md_downloader: MarketDataDownloader, **kwargs
 ) -> tuple[IO | None, dict[str, str]]:
-    downloader = FormatURLDownloader(
-        md_downloader.url, md_downloader.verify_ssl, **kwargs
+    downloader = _apply_download_config(
+        FormatURLDownloader(md_downloader.url, md_downloader.verify_ssl, **kwargs),
+        md_downloader,
     )
     return downloader.download(), dict(downloader.response.headers)
 
@@ -50,8 +82,9 @@ def format_download(
 def b3_url_encoded_download(
     md_downloader: MarketDataDownloader, **kwargs
 ) -> tuple[IO | None, dict[str, str]]:
-    downloader = B3URLEncodedDownloader(
-        md_downloader.url, md_downloader.verify_ssl, **kwargs
+    downloader = _apply_download_config(
+        B3URLEncodedDownloader(md_downloader.url, md_downloader.verify_ssl, **kwargs),
+        md_downloader,
     )
     return downloader.download(), dict(downloader.response.headers)
 
@@ -59,8 +92,11 @@ def b3_url_encoded_download(
 def b3_paged_url_encoded_download(
     md_downloader: MarketDataDownloader, **kwargs
 ) -> tuple[IO | None, dict[str, str]]:
-    downloader = B3PagedURLEncodedDownloader(
-        md_downloader.url, md_downloader.verify_ssl, **kwargs
+    downloader = _apply_download_config(
+        B3PagedURLEncodedDownloader(
+            md_downloader.url, md_downloader.verify_ssl, **kwargs
+        ),
+        md_downloader,
     )
     return downloader.download(), dict(downloader.response.headers)
 
@@ -68,8 +104,11 @@ def b3_paged_url_encoded_download(
 def settlement_prices_download(
     md_downloader: MarketDataDownloader, **kwargs
 ) -> tuple[IO | None, dict[str, str]]:
-    downloader = SettlementPricesDownloader(
-        md_downloader.url, md_downloader.verify_ssl, **kwargs
+    downloader = _apply_download_config(
+        SettlementPricesDownloader(
+            md_downloader.url, md_downloader.verify_ssl, **kwargs
+        ),
+        md_downloader,
     )
     return downloader.download(), dict(downloader.response.headers)
 
@@ -77,8 +116,9 @@ def settlement_prices_download(
 def b3_files_download(
     md_downloader: MarketDataDownloader, **kwargs
 ) -> tuple[IO | None, dict[str, str]]:
-    downloader = B3FilesURLDownloader(
-        md_downloader.url, md_downloader.verify_ssl, **kwargs
+    downloader = _apply_download_config(
+        B3FilesURLDownloader(md_downloader.url, md_downloader.verify_ssl, **kwargs),
+        md_downloader,
     )
     return downloader.download(), dict(downloader.response.headers)
 

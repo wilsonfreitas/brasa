@@ -929,7 +929,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915
             if verbosity != Verbosity.QUIET:
                 print(
                     "Status legend: .(passed) F(failed) E(error) "
-                    "S(skipped) D(duplicated) I(invalid) C(corrupted)"
+                    "S(skipped) D(duplicated) I(invalid) C(corrupted) N(no-data)"
                 )
             for template in templates:
                 download_marketdata(

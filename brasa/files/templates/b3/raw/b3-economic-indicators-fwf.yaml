@@ -3,9 +3,13 @@ id: b3-economic-indicators-fwf
 description: Arquivo de Indicadores Econômicos
 
 downloader:
-  function: brasa.downloaders.datetime_download
+  function: brasa.downloaders.b3_pregao_download
   url: https://www.b3.com.br/pesquisapregao/download?filelist=ID%y%m%d.ex_
   format: zip
+  retry_attempts: 3
+  retry_delay: 2.0
+  retry_backoff: 2.0
+  timeout: 90
   args:
     refdate: ~
 

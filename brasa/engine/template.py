@@ -302,11 +302,15 @@ def _is_retriable_failure(
         DownloadException,
         DuplicatedFolderException,
         InvalidContentException,
+        NoDataException,
     )
 
     # RTRY-003: Non-retriable exception types
     _non_retriable = (
-        InvalidContentException | CorruptedContentException | DuplicatedFolderException
+        InvalidContentException
+        | CorruptedContentException
+        | DuplicatedFolderException
+        | NoDataException
     )
     if isinstance(err, _non_retriable):
         return False
@@ -365,6 +369,8 @@ class MarketDataDownloader:
         self.encoding = downloader.get("encoding", "utf-8")
         self.verify_ssl = downloader.get("verify_ssl", True)
         self.download_delay = downloader.get("download_delay", 0)
+        # Request timeout (None → downloader default); scalar or (connect, read).
+        self.timeout = downloader.get("timeout")
         self.download_function = load_function_by_name(downloader["function"])
         validator: str = downloader.get(
             "validator", "brasa.downloaders.validate_empty_file"
@@ -462,6 +468,7 @@ class MarketDataDownloader:
             DownloadException,
             DuplicatedFolderException,
             InvalidContentException,
+            NoDataException,
         )
 
         args = self.download_args(**kwargs)
@@ -496,6 +503,7 @@ class MarketDataDownloader:
                         InvalidContentException,
                         CorruptedContentException,
                         DuplicatedFolderException,
+                        NoDataException,
                     ),
                 ):
                     raise caught_err
