@@ -1,4 +1,3 @@
-import re
 from datetime import datetime
 
 import numpy as np
@@ -487,12 +486,10 @@ def create_equities_returns(handler: MarketDataETL):
         .to_table()
         .to_pandas()
     )
-    symbols = df.groupby(["symbol"]).apply(lambda x: x.shape[0])
+    symbols = df.groupby("symbol").size()
     symbols_to_ignore = symbols[symbols == 1].index
     df_clean = df[~df["symbol"].isin(symbols_to_ignore)]
-    symbols = df_clean.groupby(["symbol"]).apply(
-        lambda x: len(x["distribution_id"].unique())
-    )
+    symbols = df_clean.groupby("symbol")["distribution_id"].nunique()
     symbols_to_use = symbols[symbols == 1].index
     df_final = df[df["symbol"].isin(symbols_to_use)]
     df_final = (
@@ -883,7 +880,7 @@ def create_b3_companies_cash_dividends(handler: MarketDataETL):
         .to_table()
         .to_pandas()
     )
-    sp["trading_name"] = sp["trading_name"].apply(lambda x: re.sub("[^A-Z0-9]", "", x))
+    sp["trading_name"] = sp["trading_name"].str.replace("[^A-Z0-9]", "", regex=True)
 
     # cash dividends ----
     df = (
@@ -892,11 +889,11 @@ def create_b3_companies_cash_dividends(handler: MarketDataETL):
         .to_table()
         .to_pandas()
     )
-    df["tradingName"] = df["tradingName"].apply(lambda x: re.sub("[^A-Z0-9]", "", x))
+    df["tradingName"] = df["tradingName"].str.replace("[^A-Z0-9]", "", regex=True)
     df = df.groupby(["tradingName"], sort=True).last().reset_index()
 
     cd = get_dataset(handler.cash_dividends_dataset).to_table().to_pandas()
-    cd["tradingName"] = cd["tradingName"].apply(lambda x: re.sub("[^A-Z0-9]", "", x))
+    cd["tradingName"] = cd["tradingName"].str.replace("[^A-Z0-9]", "", regex=True)
     cd = pd.merge(df, cd, on=["tradingName", "refdate"], how="inner")
     cd_ = cd[
         [
