@@ -1,7 +1,6 @@
 """Tests for FieldsetReader path handling (audit Q8.5)."""
 
 import io
-from pathlib import Path
 
 import pytest
 

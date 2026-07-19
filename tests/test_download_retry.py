@@ -10,13 +10,11 @@ Covers:
 """
 
 import io
-import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from brasa.engine.cache import CacheManager, CacheMetadata, DownloadResult
+from brasa.engine.cache import CacheMetadata, DownloadResult
 from brasa.engine.exceptions import (
     CorruptedContentException,
     DownloadException,
@@ -52,28 +50,6 @@ def _make_downloader(
     if retry_on_status_codes is not None:
         config["retry_on_status_codes"] = retry_on_status_codes
     return MarketDataDownloader(config)
-
-
-@pytest.fixture
-def temp_cache():
-    """Create a temporary cache directory for testing."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        original_cache = CacheManager.__dict__.get("__it__")
-        CacheManager.__it__ = None
-
-        cache = CacheManager()
-        cache._cache_folder = tmpdir
-        Path(tmpdir).mkdir(parents=True, exist_ok=True)
-        Path(cache.cache_path(cache._meta_folder)).mkdir(parents=True, exist_ok=True)
-        Path(cache.cache_path(cache._db_folder)).mkdir(parents=True, exist_ok=True)
-        cache.create_meta_db()
-
-        yield cache
-
-        if original_cache is not None:
-            CacheManager.__it__ = original_cache
-        else:
-            CacheManager.__it__ = None
 
 
 # ---------------------------------------------------------------------------
