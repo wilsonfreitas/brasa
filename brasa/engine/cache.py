@@ -528,15 +528,6 @@ class CacheManager(Singleton):
         if Path(folder).exists():
             shutil.rmtree(folder, ignore_errors=False)
 
-    def clean_meta_db_folder(self, meta: CacheMetadata) -> None:
-        """Clean the database folder for a cache entry.
-
-        Note: With partitioned datasets, output paths are shared across
-        entries and cannot be cleaned per-entry. Use check_orphan_db()
-        in doctor to find orphaned db folders instead.
-        """
-        pass
-
     def clean_meta_db(self, meta: CacheMetadata) -> None:
         """Remove metadata from the database.
 
@@ -556,9 +547,13 @@ class CacheManager(Singleton):
             c.execute("delete from download_trials where cache_id = ?", (meta.id,))
 
     def remove_meta(self, meta: CacheMetadata) -> None:
-        """Remove all traces of a cache entry (files and metadata)."""
+        """Remove all traces of a cache entry (files and metadata).
+
+        Db output folders are not cleaned per-entry: with partitioned
+        datasets they are shared across entries — use doctor's
+        check_orphan_db() to find orphans instead.
+        """
         self.clean_meta_raw_folder(meta)
-        self.clean_meta_db_folder(meta)
         self.clean_meta_db(meta)
 
     def drop(self, meta_id: str) -> None:
