@@ -50,3 +50,14 @@ class CacheError(Exception):
     """Raised for cache management errors (missing entries, invalid IDs)."""
 
     pass
+
+
+class NoDataException(Exception):
+    """The source responded successfully but has no data for this request.
+
+    Non-retriable and non-error: e.g. B3's pregão endpoint returns a valid
+    but empty (0-entry) zip for dates outside its retention window. Distinct
+    from InvalidContentException so it is not persisted as a permanent skip.
+    """
+
+    pass
