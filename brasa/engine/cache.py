@@ -663,7 +663,7 @@ class CacheManager(Singleton):
         with closing(self.meta_db_connection) as conn, conn:
             c = conn.cursor()
             c.execute(
-                "select * from download_trials where cache_id = ? and downloaded == 1",
+                "select * from download_trials where cache_id = ? and downloaded = '1'",
                 (meta.id,),
             )
             return len(c.fetchall()) > 0
