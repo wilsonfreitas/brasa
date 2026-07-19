@@ -303,6 +303,22 @@ fields:
 - Supports URL patterns with date substitution (e.g., `%y%m%d`)
 - Returns downloaded file(s) cached by CacheManager
 
+**Resilience options** (`downloader:`)
+- `timeout` — request timeout in seconds, either a scalar (applied to both
+  connect and read) or a `(connect, read)` pair. Defaults to `(10, 120)`.
+  Some B3 endpoints take ~20s to assemble a file, so keep the read timeout
+  generous. A timeout becomes a retriable failure.
+- `retry_attempts` / `retry_delay` / `retry_backoff` — retry policy for
+  transient failures (default: no retries). Also
+  `retry_on_status_codes` and `retry_on_download_exception`.
+- **Content validation for `format: zip`** — after an `HTTP 200`, the response
+  body is validated before it counts as a success: an empty or non-zip body is
+  raised as a *retriable* error (so a transient glitch is retried), while a
+  valid-but-empty zip (0 entries) yields the distinct, non-error **`NO_DATA`**
+  status (legend `N`) — it is not treated as a failure and is not persisted as
+  a permanent skip, so a date that is merely not-yet-published is retried on the
+  next run.
+
 **Best practice for static URLs (no date in URL):**
 - Set `downloader.extra-key: date` to make cache identity date-aware and avoid
   repeated downloads for the same reference date.

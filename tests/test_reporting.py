@@ -27,7 +27,17 @@ from brasa.engine.reporting import (
 class TestDownloadAttemptStatusSymbols:
     """TEST-001: Verify symbol uniqueness and completeness."""
 
-    EXPECTED_SYMBOLS: ClassVar[set[str]] = {".", "F", "E", "S", "D", "I", "C", "W"}
+    EXPECTED_SYMBOLS: ClassVar[set[str]] = {
+        ".",
+        "F",
+        "E",
+        "S",
+        "D",
+        "I",
+        "C",
+        "N",
+        "W",
+    }
 
     def test_symbol_set_matches_spec(self):
         """All expected symbols are present."""
@@ -45,7 +55,7 @@ class TestDownloadAttemptStatusSymbols:
             assert len(status.symbol) == 1, f"{status.name} symbol is not single-char"
 
     def test_all_members_present(self):
-        """Enum contains exactly the 8 defined members."""
+        """Enum contains exactly the 9 defined members."""
         expected_names = {
             "PASSED",
             "FAILED",
@@ -54,6 +64,7 @@ class TestDownloadAttemptStatusSymbols:
             "DUPLICATED",
             "INVALID",
             "CORRUPTED",
+            "NO_DATA",
             "WARNING",
         }
         assert {s.name for s in DownloadAttemptStatus} == expected_names
