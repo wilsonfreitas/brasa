@@ -383,6 +383,23 @@ def resolve_plan_args(args: dict, calendar: str = "B3") -> dict:
     return resolved
 
 
+def _template_accepts_arg(template_name: str, key: str) -> bool:
+    """Return True if a template's downloader declares ``key`` as an arg.
+
+    Args:
+        template_name: Template name to inspect.
+        key: Download argument name to look for.
+
+    Returns:
+        True when ``key`` appears in the template's ``downloader.args``.
+    """
+    try:
+        template = retrieve_template(template_name)
+        return key in template.downloader.args
+    except Exception:
+        return False
+
+
 def _template_requires_refdate(template_name: str) -> bool:
     """Return True if a template's downloader expects a refdate argument.
 
@@ -392,11 +409,7 @@ def _template_requires_refdate(template_name: str) -> bool:
     Returns:
         True when ``refdate`` appears in the template's downloader args.
     """
-    try:
-        template = retrieve_template(template_name)
-        return "refdate" in template.downloader.args
-    except Exception:
-        return False
+    return _template_accepts_arg(template_name, "refdate")
 
 
 def _parse_refdate(refdate_str: str, calendar: str) -> Any:
@@ -453,12 +466,52 @@ def _resolve_task_refdate(
         return refdate_val
 
 
+def _effective_smart_update(
+    task: DownloadPlanTask,
+    smart_update_override: bool | None,
+    plan_default: bool,
+) -> bool:
+    """Resolve a task's effective smart_update.
+
+    Priority: task override > CLI ``smart_update_override`` > plan default.
+
+    Args:
+        task: The plan task.
+        smart_update_override: CLI ``--update`` override (None if not passed).
+        plan_default: ``plan.defaults.smart_update``.
+
+    Returns:
+        The effective smart_update flag for the task.
+    """
+    if task.smart_update is not None:
+        return task.smart_update
+    if smart_update_override is not None:
+        return smart_update_override
+    return plan_default
+
+
+def _effective_force(task: DownloadPlanTask, force_override: bool) -> bool:
+    """Resolve a task's effective force flag (task force OR CLI override).
+
+    Args:
+        task: The plan task.
+        force_override: CLI ``--force`` value.
+
+    Returns:
+        True if either the task or the CLI requests force.
+    """
+    return task.force or force_override
+
+
 def _execute_task(
     task: DownloadPlanTask,
     resolved_args: dict,
     verbosity: Verbosity,
     plan_calendar: str = "B3",
-    plan_smart_update: bool = False,
+    *,
+    smart_update: bool = False,
+    force: bool = False,
+    since: Any | None = None,
 ) -> TaskReport:
     """Run a single plan task and return its TaskReport.
 
@@ -469,7 +522,10 @@ def _execute_task(
         resolved_args: Fully resolved keyword arguments (may include refdate).
         verbosity: Output verbosity level.
         plan_calendar: Default calendar from plan defaults.
-        plan_smart_update: Default smart_update from plan defaults.
+        smart_update: Effective smart_update for this task.
+        force: Effective force flag for this task.
+        since: Explicit incremental start date; injected only when
+            ``smart_update`` is True (it is meaningless otherwise).
 
     Returns:
         A TaskReport (may contain an ERROR result on unexpected exceptions).
@@ -477,19 +533,15 @@ def _execute_task(
     from .api import download_marketdata
     from .reporting import create_task_result_from_exception
 
-    # Determine smart_update: task override wins, then plan default
-    smart_update = (
-        task.smart_update if task.smart_update is not None else plan_smart_update
-    )
-
     try:
         return download_marketdata(
             task.template,
-            force=task.force,
+            force=force,
             smart_update=smart_update,
             calendar=plan_calendar,
             verbosity=verbosity,
             **resolved_args,
+            **({"since": since} if (since and smart_update) else {}),
         )
     except Exception as exc:
         logger.error(
@@ -521,9 +573,47 @@ def _execute_task(
 # ---------------------------------------------------------------------------
 
 
+def _validate_plan_flags(
+    plan: DownloadPlan,
+    since: Any | None,
+    smart_update_override: bool | None,
+    extra_args: dict,
+) -> None:
+    """Fail-fast validation of CLI flags against the plan (before any download).
+
+    Args:
+        plan: The DownloadPlan being executed.
+        since: The CLI ``--since`` value (None if not passed).
+        smart_update_override: CLI ``--update`` override (None if not passed).
+        extra_args: Non-refdate ``--arg`` values to inject.
+
+    Raises:
+        ValueError: If ``--since`` is given but no task runs smart update, or a
+            global ``--arg`` key is accepted by no task in the plan.
+    """
+    # --since is meaningless unless some task runs smart update.
+    if since and not any(
+        _effective_smart_update(t, smart_update_override, plan.defaults.smart_update)
+        for t in plan.tasks
+    ):
+        raise ValueError(
+            "--since needs smart update: set smart_update in the plan or pass --update"
+        )
+
+    # Every global --arg key must be accepted by at least one task.
+    for key in extra_args:
+        if not any(_template_accepts_arg(t.template, key) for t in plan.tasks):
+            raise ValueError(f"--arg '{key}' is not accepted by any task in the plan")
+
+
 def execute_download_plan(
     plan: DownloadPlan,
     refdate_override: Any | None = None,
+    force_override: bool = False,
+    smart_update_override: bool | None = None,
+    since: Any | None = None,
+    extra_args: dict | None = None,
+    calendar_override: Any | None = None,
     verbosity: Verbosity = Verbosity.NORMAL,
     report_file: str | Path | None = None,
 ) -> DownloadPlanReport:
@@ -557,6 +647,10 @@ def execute_download_plan(
             "S(skipped) D(duplicated) I(invalid) C(corrupted)"
         )
 
+    extra_args = extra_args or {}
+    effective_calendar = calendar_override or plan.defaults.calendar
+    _validate_plan_flags(plan, since, smart_update_override, extra_args)
+
     plan_report = DownloadPlanReport(plan_name=plan.name)
     plan_report._start_time = datetime.now()
 
@@ -569,24 +663,34 @@ def execute_download_plan(
 
         # 2. Resolve refdate with priority ordering
         refdate = _resolve_task_refdate(
-            merged_args, refdate_override, plan.defaults.calendar
+            merged_args, refdate_override, effective_calendar
         )
 
         # 3. Resolve remaining args (symbols, integer ranges), excluding refdate
         non_refdate = {k: v for k, v in merged_args.items() if k != "refdate"}
-        resolved_args = resolve_plan_args(non_refdate, calendar=plan.defaults.calendar)
+        resolved_args = resolve_plan_args(non_refdate, calendar=effective_calendar)
 
         # 4. Smart injection: only pass refdate if the template actually wants it
         if refdate is not None and _template_requires_refdate(task.template):
             resolved_args["refdate"] = refdate
+
+        # 4b. Smart-inject global --arg overrides: only into declaring templates.
+        # CLI --arg wins over the task's YAML value.
+        for key, value in extra_args.items():
+            if _template_accepts_arg(task.template, key):
+                resolved_args[key] = value
 
         # 5. Execute — continue on any error
         plan_report.task_reports[task.template] = _execute_task(
             task,
             resolved_args,
             verbosity,
-            plan_calendar=plan.defaults.calendar,
-            plan_smart_update=plan.defaults.smart_update,
+            plan_calendar=effective_calendar,
+            smart_update=_effective_smart_update(
+                task, smart_update_override, plan.defaults.smart_update
+            ),
+            force=_effective_force(task, force_override),
+            since=since,
         )
         # Collect dependency reports from the task
         task_report = plan_report.task_reports[task.template]

@@ -144,7 +144,7 @@ class TestExecuteTaskSmartUpdate:
             resolved_args,
             verbosity,
             plan_calendar="B3",
-            plan_smart_update=True,
+            smart_update=True,
         )
 
         # Verify download_marketdata was called with smart_update=True
@@ -164,15 +164,16 @@ class TestExecuteTaskSmartUpdate:
 
         mock_download.return_value = Mock()
 
+        # Effective smart_update (task override False) is computed by the caller;
+        # _execute_task receives the resolved value directly.
         _execute_task(
             task,
             resolved_args,
             verbosity,
             plan_calendar="B3",
-            plan_smart_update=True,
+            smart_update=False,
         )
 
-        # Task override (False) should win over plan default (True)
         call_kwargs = mock_download.call_args[1]
         assert call_kwargs["smart_update"] is False
 
@@ -187,15 +188,15 @@ class TestExecuteTaskSmartUpdate:
 
         mock_download.return_value = Mock()
 
+        # Caller resolves task-None to the plan default (True) before calling.
         _execute_task(
             task,
             resolved_args,
             verbosity,
             plan_calendar="B3",
-            plan_smart_update=True,
+            smart_update=True,
         )
 
-        # Task should inherit plan default (True)
         call_kwargs = mock_download.call_args[1]
         assert call_kwargs["smart_update"] is True
 
@@ -215,7 +216,7 @@ class TestExecuteTaskSmartUpdate:
             resolved_args,
             verbosity,
             plan_calendar="ANBIMA",
-            plan_smart_update=False,
+            smart_update=False,
         )
 
         call_kwargs = mock_download.call_args[1]
