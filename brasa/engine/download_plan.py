@@ -573,6 +573,39 @@ def _execute_task(
 # ---------------------------------------------------------------------------
 
 
+def _validate_plan_flags(
+    plan: DownloadPlan,
+    since: Any | None,
+    smart_update_override: bool | None,
+    extra_args: dict,
+) -> None:
+    """Fail-fast validation of CLI flags against the plan (before any download).
+
+    Args:
+        plan: The DownloadPlan being executed.
+        since: The CLI ``--since`` value (None if not passed).
+        smart_update_override: CLI ``--update`` override (None if not passed).
+        extra_args: Non-refdate ``--arg`` values to inject.
+
+    Raises:
+        ValueError: If ``--since`` is given but no task runs smart update, or a
+            global ``--arg`` key is accepted by no task in the plan.
+    """
+    # --since is meaningless unless some task runs smart update.
+    if since and not any(
+        _effective_smart_update(t, smart_update_override, plan.defaults.smart_update)
+        for t in plan.tasks
+    ):
+        raise ValueError(
+            "--since needs smart update: set smart_update in the plan or pass --update"
+        )
+
+    # Every global --arg key must be accepted by at least one task.
+    for key in extra_args:
+        if not any(_template_accepts_arg(t.template, key) for t in plan.tasks):
+            raise ValueError(f"--arg '{key}' is not accepted by any task in the plan")
+
+
 def execute_download_plan(
     plan: DownloadPlan,
     refdate_override: Any | None = None,
@@ -616,6 +649,7 @@ def execute_download_plan(
 
     extra_args = extra_args or {}
     effective_calendar = calendar_override or plan.defaults.calendar
+    _validate_plan_flags(plan, since, smart_update_override, extra_args)
 
     plan_report = DownloadPlanReport(plan_name=plan.name)
     plan_report._start_time = datetime.now()

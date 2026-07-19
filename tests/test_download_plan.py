@@ -741,3 +741,25 @@ def test_extra_arg_injected_only_into_declaring_template(mock_dl):
     calls = {c.args[0]: c.kwargs for c in mock_dl.call_args_list}
     assert calls["bcb-sgs"]["code"] == [11]  # CLI overrides YAML
     assert "code" not in calls["b3-bvbg028"]  # not injected
+
+
+@patch("brasa.engine.api.download_marketdata")
+def test_since_without_any_smart_update_fails_fast(mock_dl):
+    with pytest.raises(ValueError, match="since needs smart update"):
+        execute_download_plan(
+            _plan_one(smart_update=False),
+            since="2026-07-01",
+            verbosity=Verbosity.QUIET,
+        )
+    mock_dl.assert_not_called()
+
+
+@patch("brasa.engine.api.download_marketdata")
+def test_unknown_extra_arg_fails_fast(mock_dl):
+    with pytest.raises(ValueError, match="not accepted by any task"):
+        execute_download_plan(
+            _plan_one(),
+            extra_args={"no_such_arg": "x"},
+            verbosity=Verbosity.QUIET,
+        )
+    mock_dl.assert_not_called()
