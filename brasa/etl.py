@@ -876,46 +876,6 @@ def create_b3_equity_symbols_properties(handler: MarketDataETL):
     write_dataset(companies_symbols, handler.template_id)
 
 
-def create_b3_listed_funds(handler: MarketDataETL):
-    """Create consolidated B3 listed funds dataset.
-
-    .. deprecated::
-        This function is deprecated. The b3-listed-funds-consolidated template now uses
-        pipeline-based ETL with the concat_datasets step. This function is
-        kept for backward compatibility only.
-
-    Note:
-        This function expects outdated column names (fundName, typeFund) that
-        no longer exist in source datasets. Use the pipeline-based template
-        instead.
-    """
-    import warnings
-
-    warnings.warn(
-        "create_b3_listed_funds is deprecated. "
-        "The b3-listed-funds-consolidated template now uses pipeline-based ETL.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-
-    tables = []
-    cols = ["refdate", "acronym", "fundName", "typeFund"]
-    for ds in handler.datasets:
-        tb = get_dataset(ds).scanner(columns=cols).to_table()
-        tables.append(tb)
-    df = pyarrow.concat_tables(tables).to_pandas()
-    df["symbol"] = df["acronym"] + "11"
-    df["typeFund"] = df["typeFund"].map({7: "FII", 20: "ETF", 19: "Fixed Income ETF"})
-    df = df.rename(
-        columns={
-            "fundName": "fund_name",
-            "acronym": "asset_name",
-            "typeFund": "fund_type",
-        }
-    )
-    write_dataset(df, handler.template_id)
-
-
 def create_b3_companies_cash_dividends(handler: MarketDataETL):
     sp = (
         get_dataset(handler.symbols_properties_dataset)
