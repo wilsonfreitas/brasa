@@ -9,6 +9,7 @@ import pytest
 
 from brasa.downloaders import bcb_currency_download
 from brasa.downloaders.downloaders import BCBCurrencyDownloader
+from brasa.engine.exceptions import DownloadException
 from brasa.engine import (
     CacheManager,
     MarketDataTemplate,
@@ -60,12 +61,13 @@ def test_bcb_currency_downloader_serializes_dataframe_to_json():
     assert data[0]["cotacaoVenda"] == 6.1240
 
 
-def test_bcb_currency_downloader_returns_none_on_error():
+def test_bcb_currency_downloader_raises_download_exception_on_error():
     with patch("brasa.downloaders.downloaders.PTAX", side_effect=Exception("boom")):
         downloader = BCBCurrencyDownloader(
             currency="USD", start=date(2025, 1, 1), end=date(2025, 1, 1)
         )
-        assert downloader.download() is None
+        with pytest.raises(DownloadException, match="USD"):
+            downloader.download()
 
 
 def test_bcb_currency_download_helper_is_exported():
