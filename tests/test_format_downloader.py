@@ -137,3 +137,12 @@ def test_simple_downloader_empty_zip_raises_no_data(mock_get):
     d.fmt = "zip"
     with pytest.raises(NoDataException):
         d.download()
+
+
+def test_b3_pregao_download_importable_and_tuned():
+    from brasa.downloaders import b3_pregao_download
+    from brasa.downloaders.downloaders import B3PregaoDownloader, DatetimeDownloader
+
+    assert issubclass(B3PregaoDownloader, DatetimeDownloader)
+    assert B3PregaoDownloader.timeout == (10, 90)
+    assert callable(b3_pregao_download)

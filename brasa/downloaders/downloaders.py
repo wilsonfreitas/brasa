@@ -105,6 +105,19 @@ class DatetimeDownloader(SimpleDownloader):
         return self.refdate.strftime(self._url)
 
 
+class B3PregaoDownloader(DatetimeDownloader):
+    """Downloader for B3's pregão-download service (pesquisapregao/download).
+
+    The endpoint is retention-limited and intermittently returns HTTP 200 with
+    an empty body (transient) or a valid-but-empty zip (no data). Content
+    validation and retry classification live in the base classes; this subclass
+    only carries an endpoint-tuned default timeout (healthy responses take
+    ~20s, so a generous read timeout is required). See WIL-97.
+    """
+
+    timeout = (10, 90)
+
+
 class FormatURLDownloader(SimpleDownloader):
     """Downloader that expands named placeholders in the URL template.
 
