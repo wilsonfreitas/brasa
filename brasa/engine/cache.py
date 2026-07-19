@@ -802,6 +802,7 @@ class CacheManager(Singleton):
             DownloadException,
             DuplicatedFolderException,
             InvalidContentException,
+            NoDataException,
         )
 
         # Build per-attempt callback for intermediate retry failures
@@ -890,6 +891,27 @@ class CacheManager(Singleton):
             result = DownloadResult(
                 status_code="C",
                 status_name="CORRUPTED",
+                reason=str(e),
+                is_success=False,
+                is_expected_error=True,
+                exception=e,
+            )
+        except NoDataException as e:
+            # Source returned successfully but has no data (e.g. empty zip for
+            # an out-of-retention date). Not an error and not persisted as a
+            # permanent skip — a recent date can be retried on the next run.
+            self.save_trial(
+                meta,
+                downloaded=False,
+                status_code="N",
+                status_name="NO_DATA",
+                reason=str(e),
+            )
+            self.clean_meta_db(meta)
+            self.clean_meta_raw_folder(meta)
+            result = DownloadResult(
+                status_code="N",
+                status_name="NO_DATA",
                 reason=str(e),
                 is_success=False,
                 is_expected_error=True,

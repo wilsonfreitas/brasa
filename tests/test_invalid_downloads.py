@@ -259,3 +259,28 @@ def test_clear_invalid_status_on_successful_download(temp_cache):
 
     assert loaded_meta.is_invalid_download is False
     assert loaded_meta.invalid_download_reason == ""
+
+
+# ---------------------------------------------------------------------------
+# WIL-97 — NO_DATA (valid-but-empty zip) is a non-error, non-persisted outcome
+# ---------------------------------------------------------------------------
+
+from unittest.mock import patch  # noqa: E402
+
+from brasa.engine.exceptions import NoDataException  # noqa: E402
+from brasa.util import DownloadArgs  # noqa: E402
+
+
+def test_no_data_download_yields_no_data_result(temp_cache):
+    meta = CacheMetadata("test-template")
+    meta.download_args = DownloadArgs({"refdate": "2018-12-14"})
+
+    with patch(
+        "brasa.engine.download._download_marketdata",
+        side_effect=NoDataException("empty zip: no data for this request"),
+    ):
+        result = temp_cache.download_marketdata(meta)
+
+    assert result.status_code == "N"
+    assert result.status_name == "NO_DATA"
+    assert result.is_success is False
