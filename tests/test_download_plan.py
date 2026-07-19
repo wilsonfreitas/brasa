@@ -609,3 +609,32 @@ class TestCliDownloadPlanArgs:
         ns = self._parse(["download", "--plan", "p.yaml", "--arg", "refdate=@2026-01"])
         assert ns.plan == "p.yaml"
         assert ns.arg == ["refdate=@2026-01"]
+
+
+# ---------------------------------------------------------------------------
+# WIL-95 — CLI/plan flag consistency
+# ---------------------------------------------------------------------------
+
+from brasa.engine.download_plan import (  # noqa: E402
+    _template_accepts_arg,
+    _template_requires_refdate,
+)
+
+
+def test_template_accepts_arg_true_for_declared_arg():
+    # bcb-sgs declares code/start/end in downloader.args
+    assert _template_accepts_arg("bcb-sgs", "code") is True
+
+
+def test_template_accepts_arg_false_for_undeclared_arg():
+    assert _template_accepts_arg("bcb-sgs", "no_such_arg") is False
+
+
+def test_template_accepts_arg_false_for_unknown_template():
+    assert _template_accepts_arg("no-such-template", "code") is False
+
+
+def test_template_requires_refdate_delegates():
+    # b3-bvbg028 declares refdate; bcb-sgs does not
+    assert _template_requires_refdate("b3-bvbg028") is True
+    assert _template_requires_refdate("bcb-sgs") is False

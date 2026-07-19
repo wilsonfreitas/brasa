@@ -383,6 +383,23 @@ def resolve_plan_args(args: dict, calendar: str = "B3") -> dict:
     return resolved
 
 
+def _template_accepts_arg(template_name: str, key: str) -> bool:
+    """Return True if a template's downloader declares ``key`` as an arg.
+
+    Args:
+        template_name: Template name to inspect.
+        key: Download argument name to look for.
+
+    Returns:
+        True when ``key`` appears in the template's ``downloader.args``.
+    """
+    try:
+        template = retrieve_template(template_name)
+        return key in template.downloader.args
+    except Exception:
+        return False
+
+
 def _template_requires_refdate(template_name: str) -> bool:
     """Return True if a template's downloader expects a refdate argument.
 
@@ -392,11 +409,7 @@ def _template_requires_refdate(template_name: str) -> bool:
     Returns:
         True when ``refdate`` appears in the template's downloader args.
     """
-    try:
-        template = retrieve_template(template_name)
-        return "refdate" in template.downloader.args
-    except Exception:
-        return False
+    return _template_accepts_arg(template_name, "refdate")
 
 
 def _parse_refdate(refdate_str: str, calendar: str) -> Any:
