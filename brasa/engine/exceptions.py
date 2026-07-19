@@ -61,3 +61,16 @@ class NoDataException(Exception):
     """
 
     pass
+
+
+#: Domain exceptions that carry classification meaning for the engine.
+#: Pipeline executors re-raise these unwrapped so callers can match on type.
+DOMAIN_EXCEPTIONS: tuple[type[Exception], ...] = (
+    DownloadException,
+    DuplicatedFolderException,
+    InvalidContentException,
+    CorruptedContentException,
+    DependencyResolutionError,
+    CacheError,
+    NoDataException,
+)
