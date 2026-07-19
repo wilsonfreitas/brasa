@@ -360,6 +360,29 @@ def _resolve_date_range(start, end) -> tuple[datetime, datetime]:
     return start, end
 
 
+def _check_duplicate_rows(df: pd.DataFrame, dataset: str) -> None:
+    """Raise if df holds more than one row per (refdate, symbol) pair.
+
+    pivot_table would otherwise silently *average* the duplicates — the
+    worst failure mode for financial series.
+
+    Raises:
+        ValueError: Naming the duplicated (refdate, symbol) pairs.
+    """
+    dup_mask = df.duplicated(subset=["refdate", "symbol"], keep=False)
+    if dup_mask.any():
+        pairs = (
+            df.loc[dup_mask, ["refdate", "symbol"]]
+            .drop_duplicates()
+            .itertuples(index=False, name=None)
+        )
+        listed = ", ".join(f"({d.date()}, {s})" for d, s in list(pairs)[:10])
+        raise ValueError(
+            f"dataset {dataset!r} has duplicate (refdate, symbol) rows: {listed}. "
+            "Refusing to aggregate them; reprocess the dataset to remove duplicates."
+        )
+
+
 def get_returns(
     symbols: str | list[str], start=None, end=None, calendar="B3"
 ) -> pd.DataFrame:
@@ -375,6 +398,7 @@ def get_returns(
         .sort_by("refdate")
         .to_pandas()
     )
+    _check_duplicate_rows(df, "brasa-returns")
     df = df.pivot_table(values="returns", index="refdate", columns="symbol")
     df.index.name = None
     df.columns.name = None
@@ -412,6 +436,7 @@ def get_prices(
         .sort_by("refdate")
         .to_pandas()
     )
+    _check_duplicate_rows(df, "brasa-prices")
     if len(columns) == 1:
         df = df.pivot_table(values=columns[0], index="refdate", columns="symbol")
     else:

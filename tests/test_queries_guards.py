@@ -92,3 +92,40 @@ def test_get_returns_known_symbol_still_works(fake_returns_dataset):
     df = brasa.queries.get_returns("PETR4")
     assert list(df.columns) == ["PETR4"]
     assert len(df) == 2
+
+
+@pytest.fixture
+def duplicated_datasets(monkeypatch):
+    """Datasets containing duplicate (refdate, symbol) rows (audit Q7.1)."""
+    dup_dates = pd.to_datetime([date(2024, 1, 2), date(2024, 1, 2)])
+    datasets = {
+        "brasa-returns": pads.dataset(
+            pyarrow.table(
+                {
+                    "refdate": dup_dates,
+                    "symbol": ["PETR4", "PETR4"],
+                    "returns": [0.01, -0.02],
+                }
+            )
+        ),
+        "brasa-prices": pads.dataset(
+            pyarrow.table(
+                {
+                    "refdate": dup_dates,
+                    "symbol": ["PETR4", "PETR4"],
+                    "close": [37.5, 38.5],
+                }
+            )
+        ),
+    }
+    monkeypatch.setattr(brasa.queries, "get_dataset", lambda name, **kw: datasets[name])
+
+
+def test_get_returns_raises_on_duplicate_rows(duplicated_datasets):
+    with pytest.raises(ValueError, match="duplicate"):
+        brasa.queries.get_returns("PETR4")
+
+
+def test_get_prices_raises_on_duplicate_rows(duplicated_datasets):
+    with pytest.raises(ValueError, match="duplicate"):
+        brasa.queries.get_prices("PETR4")
