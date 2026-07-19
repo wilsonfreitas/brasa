@@ -18,7 +18,7 @@ from brasa.downloaders.downloaders import (
     SimpleDownloader,
 )
 from brasa.engine import MarketDataDownloader
-from brasa.engine.exceptions import DownloadException
+from brasa.engine.exceptions import DownloadException, InvalidContentException
 
 logger = logging.getLogger(__name__)
 
@@ -142,17 +142,17 @@ def validate_empty_file(fname: str) -> None:
         fp.seek(0, io.SEEK_END)
         size = fp.tell()
     if size == 0:
-        raise Exception("Downloaded file is empty")
+        raise InvalidContentException("Downloaded file is empty")
 
 
 def validate_json_empty_file(fname: str) -> None:
     with Path(fname).open("rb") as fp:
         if fp.readlines() == []:
-            raise Exception("JSON file is empty")
+            raise InvalidContentException("JSON file is empty")
         fp.seek(0)
         obj = json.load(fp)
         if len(obj) == 0:
-            raise Exception("JSON file is empty")
+            raise InvalidContentException("JSON file is empty")
 
 
 def _render_import_path(raw_path: str, kwargs: dict) -> str:
