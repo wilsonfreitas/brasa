@@ -137,8 +137,7 @@ class FWFFile(metaclass=FWFFileMeta):
         if isinstance(fname, str):
             with Path(fname).open(encoding=encoding) as fp:
                 for ix, line in enumerate(fp):
-                    if isinstance(line, bytes):
-                        _line = line.decode(encoding)
+                    _line = line.decode(encoding) if isinstance(line, bytes) else line
                     if ix < self.skip_row:
                         continue
                     row_name, row_template = self._get_row_template(_line)
@@ -149,8 +148,7 @@ class FWFFile(metaclass=FWFFileMeta):
                     self._buckets[row_name].append(obj)
         else:
             for ix, line in enumerate(fname):
-                if isinstance(line, bytes):
-                    _line = line.decode(encoding)
+                _line = line.decode(encoding) if isinstance(line, bytes) else line
                 if ix < self.skip_row:
                     continue
                 row_name, row_template = self._get_row_template(_line)

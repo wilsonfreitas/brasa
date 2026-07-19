@@ -9,6 +9,7 @@ This module sets up the test environment, including:
 
 import os
 import shutil
+import tempfile
 from contextlib import closing
 from pathlib import Path
 
@@ -100,3 +101,31 @@ def cleanup_cache_between_tests():
     except Exception:
         # If CacheManager hasn't been initialized yet, that's fine
         pass
+
+
+@pytest.fixture
+def temp_cache():
+    """Fresh CacheManager backed by a temporary directory (audit Q11.8).
+
+    Resets the singleton for the duration of the test and restores the
+    previous instance afterwards.
+    """
+    from brasa.engine import CacheManager
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        original_cache = CacheManager.__dict__.get("__it__")
+        CacheManager.__it__ = None
+
+        cache = CacheManager()
+        cache._cache_folder = tmpdir
+        Path(tmpdir).mkdir(parents=True, exist_ok=True)
+        Path(cache.cache_path(cache._meta_folder)).mkdir(parents=True, exist_ok=True)
+        Path(cache.cache_path(cache._db_folder)).mkdir(parents=True, exist_ok=True)
+        cache.create_meta_db()
+
+        yield cache
+
+        if original_cache is not None:
+            CacheManager.__it__ = original_cache
+        else:
+            CacheManager.__it__ = None

@@ -1,6 +1,7 @@
 import pandas as pd
 from lxml import etree
 
+from ...engine.exceptions import CorruptedContentException
 from ..util import Parser
 
 
@@ -23,7 +24,7 @@ class BVBG086Parser(Parser):
         if len(td) > 0:
             self.creation_date = td[0].find("CreDtAndTm", ns).text[:10]
         else:
-            raise Exception("Invalid XML: tag BizGrpDtls not found")
+            raise CorruptedContentException("Invalid XML: tag BizGrpDtls not found")
 
         xs = exchange.findall(
             "{urn:bvmf.052.01.xsd}BizGrp/{urn:bvmf.217.01.xsd}Document/{urn:bvmf.217.01.xsd}PricRpt"

@@ -44,6 +44,8 @@ docs = [
 ]
 tests = [
     "pytest>=7.1.3",
+    "pytest-cov>=7.1.0",
+    "pytest-timeout>=2.3.1",
 ]
 
 [project.scripts]
@@ -61,6 +63,7 @@ exclude = ["**/legacy/**"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+timeout = 120
 markers = [
     "integration: marks tests that require an internet connection (skip with --no-integration)",
 ]
@@ -182,3 +185,10 @@ line-ending = "auto"
 
 # Format docstrings
 docstring-code-format = true
+
+[tool.coverage.run]
+source = ["brasa"]
+
+[tool.coverage.report]
+skip_covered = false
+show_missing = false

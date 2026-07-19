@@ -4,6 +4,8 @@ Comprehensive code review of **brasa** at commit `ff98d10` (branch `review/2026-
 
 > **Post-merge note (2026-07-19):** WIL-95 and WIL-97 merged after this review was written. Questions affected by that merge carry a `Post-merge` note (Q2.1 resolved, Q2.7 partially resolved). This file supersedes the 2025 review that previously lived at `docs/QUESTIONS.md`.
 
+> **Quick-wins pass (2026-07-19, branch `fix/audit-quick-wins`):** 24 S-effort items implemented with TDD — answers recorded inline below. Still open from the quick-win candidates (need a decision): Q7.1, Q2.2, Q2.3, Q11.6, Q13.1.
+
 Every finding below was verified against the current code (file:line references checked). Findings from the two previous reviews (`docs/QUESTIONS.md`, 2025, and `~/dev/python/brasa_QUESTIONS.md`) were re-verified: still-valid ones are carried forward with current line numbers; resolved/stale ones were dropped (e.g., `requests` is now a declared dependency, pytest is no longer pinned `<8`, SSL verification now defaults to on).
 
 **How to answer**: fill each **Answer** with one of
@@ -62,7 +64,7 @@ Total: **99 questions**
 - **Issue:** `zf.extract(name, dest)` extracts every member without checking that the resolved path stays inside `dest`. Zips come from external endpoints (B3, ANBIMA); a crafted archive with `../../` members writes outside the destination. Also: no `with` statement (leaks handle on exception).
 - **Proposed fix:** Validate `Path(dest, name).resolve().is_relative_to(Path(dest).resolve())` per member (or use Python 3.12's `filter="data"` semantics), and use a context manager.
 - **Question(s):** Agree to add path validation + context manager?
-- **Answer:**
+- **Answer:** fix — implemented (branch `fix/audit-quick-wins`, 62f4a6f): members resolving outside the destination raise `ValueError` before extraction; zip handles now use context managers.
 
 ### Q1.4: `unzip_recursive()` — unbounded depth, shared temp dir, no cleanup
 - **File:** `brasa/util.py:203-211`, consumed by `brasa/engine/download.py:50-58`
@@ -129,7 +131,7 @@ Total: **99 questions**
 - **Issue:** References `self.attrs`, `self.now`, and `self.get_fname()` — none of which exist on the class or its parents — and returns a 4-tuple instead of the `IO` contract every other downloader follows. Any call path would raise `AttributeError`.
 - **Proposed fix:** Delete it (or rewrite against the current contract if a VNA template is planned).
 - **Question(s):** Is VNA data still on the roadmap, or can this be deleted?
-- **Answer:**
+- **Answer:** fix — implemented: class deleted (no template, export, or test referenced it; any call raised AttributeError).
 
 ### Q2.3: BCB downloaders swallow all exceptions and return `None`
 - **File:** `brasa/downloaders/downloaders.py:184-193` (`BCBSGSDownloader`), `:200-216` (`BCBCurrencyDownloader`), also `B3FilesURLDownloader.download` returns `None` on non-200 at `:173-174`
@@ -139,7 +141,7 @@ Total: **99 questions**
 - **Issue:** `except Exception: return None` hides the real failure (bad JSON, network error, API change). The engine then raises a generic "null file pointer" `DownloadException` — the root cause is unrecoverable from logs, and `_extract_http_status` can't extract a status. This also defeats retry classification (no status code → falls back to `retry_on_download_exception`).
 - **Proposed fix:** Let exceptions propagate (or wrap in `DownloadException` with the original as `__cause__` and status where known); make `B3FilesURLDownloader` raise on non-200 like its siblings.
 - **Question(s):** Any known flaky-BCB reason for the swallow, or safe to propagate?
-- **Answer:**
+- **Answer:** fix — implemented: BCBSGSDownloader/BCBCurrencyDownloader wrap failures in DownloadException with the original as __cause__; B3FilesURLDownloader raises on non-200 using the `status_code = N` message convention. Tests updated from the returns-None contract.
 
 ### Q2.4: Retry backoff has no jitter
 - **File:** `brasa/engine/template.py:471-541`
@@ -148,7 +150,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** Exponential backoff with identical delays across a batch means N failed downloads all retry simultaneously (thundering herd against B3 rate limits — precisely the 429 case the retry codes list).
 - **Proposed fix:** `delay * random.uniform(0.5, 1.5)` per attempt.
-- **Answer:**
+- **Answer:** fix — implemented (4eec58c): each retry sleep is scaled by `random.uniform(0.5, 1.5)`; logged delay remains the base sequence, and TEST-003 pins the base sequence with jitter factored out.
 
 ### Q2.5: Retry telemetry lost when all attempts fail
 - **File:** `brasa/engine/template.py:520-523`
@@ -179,7 +181,7 @@ Total: **99 questions**
 
 > **Post-merge (WIL-97):** Partially resolved — the empty-zip site now raises typed `NoDataException` (`engine/download.py:53`, mapped to the new `NO_DATA` status). Still bare `Exception`: `downloaders/helpers.py:145,151,155` and `parsers/b3/bvbg087.py:78`, `bvbg028.py:112`, `bvbg086.py:26`.
 
-- **Answer:**
+- **Answer:** fix — implemented (730a869): empty-file/JSON validators raise `InvalidContentException`; bvbg028/086/087 parsers raise `CorruptedContentException` on malformed XML. (Empty-zip site was already fixed by WIL-97 with `NoDataException`.)
 
 ### Q2.8: `B3PagedURLEncodedDownloader` mutates its args and hardcodes page size
 - **File:** `brasa/downloaders/downloaders.py:102-133`
@@ -239,7 +241,7 @@ Total: **99 questions**
 - **Issue:** `save_trial` binds Python bools (stored as integers 1/0), but `_migrate_download_trials` backfills with `WHERE ... downloaded = '1'`. With SQLite type affinity this only matches if the column has TEXT/NUMERIC affinity in `create-meta-db.sql`; if it's INTEGER, `1 = '1'` is false and legacy rows keep NULL status. `has_successful_trial` (`:666`) uses `downloaded == 1` (int) — the two disagree.
 - **Proposed fix:** Verify the DDL affinity; normalize both queries to integer comparison and add a test with a legacy DB fixture.
 - **Question(s):** Do you have production `meta.db` files old enough to hit this backfill?
-- **Answer:**
+- **Answer:** no defect — verified empirically (dee480c): the column has TEXT affinity, so bound Python bools store as text '1'/'0' and *both* comparison spellings match. Normalized `has_successful_trial` to `= '1'` anyway so the queries cannot diverge if the DDL changes.
 
 ### Q3.6: `_should_download` never re-downloads when raw files were deleted but a successful trial exists
 - **File:** `brasa/engine/api.py:39-89`
@@ -258,7 +260,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** Now carries a comment explaining why (partitioned outputs are shared; doctor's `check_orphan_db` covers it) — better than before, but the dead call in `remove_meta` (`:561`) still suggests per-entry cleanup happens when it doesn't. Processed parquet rows for a dropped entry are left behind by `brasa cache drop`.
 - **Proposed fix:** Remove the no-op method and its call; document in `cache drop` help that db-layer data is reclaimed via `doctor`.
-- **Answer:**
+- **Answer:** fix — implemented (2c4beb0): method removed; the partitioned-dataset rationale moved to `remove_meta`'s docstring.
 
 ### Q3.8: `load_marketdata` returns the *whole* materialized dataset, not the entry's rows
 - **File:** `brasa/engine/cache.py:718-739`
@@ -408,7 +410,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** If schema generation fails, data is written *without* schema enforcement and nobody is told — type drift then surfaces much later in doctor's schema-drift check or in queries.
 - **Proposed fix:** `logger.warning` with the exception; consider failing hard when the template explicitly declares fields.
-- **Answer:**
+- **Answer:** fix — implemented (1c9d68d): failures now log a warning with the exception before returning None.
 
 ### Q5.5: Pipeline executor re-wraps all step failures as `RuntimeError`
 - **File:** `brasa/engine/pipeline/executor.py:120-128`
@@ -417,7 +419,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** Typed exceptions (e.g. `InvalidContentException` from a read step) become `RuntimeError`, so upstream classification (expected vs unexpected in `DownloadResult`/TaskReport) can't see them. `__cause__` is preserved, but callers match on type.
 - **Proposed fix:** Re-raise brasa-domain exceptions unwrapped; wrap only unknown ones.
-- **Answer:**
+- **Answer:** fix — implemented (349b979): added `DOMAIN_EXCEPTIONS` registry in `engine.exceptions`; both executors re-raise those unwrapped and wrap only unknown exceptions in RuntimeError.
 
 ### Q5.6: ETL pipelines have no checkpoint/transaction semantics
 - **File:** `brasa/engine/pipeline/etl_executor.py:132-175`
@@ -454,7 +456,7 @@ Total: **99 questions**
   ```
   `Table.sort_by` returns a new table; the dataset is written unsorted. Anything downstream assuming refdate order (e.g. `.iloc[0]`/`.iloc[-1]` patterns, `ffill`) may be silently wrong.
 - **Proposed fix:** `tb_cotahist = tb_cotahist.sort_by(...)`; audit other handlers for the same pattern.
-- **Answer:**
+- **Answer:** fix — implemented (1b1289c): `tb_cotahist = tb_cotahist.sort_by(...)`; regression test asserts the written frame is sorted. Audited the rest of etl.py — this was the only dropped-return `sort_by`.
 
 ### Q6.2: Hardcoded 2021-06-10 data patch runs inside `create_equities_returns` forever
 - **File:** `brasa/etl.py:479-509`
@@ -491,7 +493,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** Deprecation warning added and the docstring even says the columns it expects no longer exist — i.e. it can only fail. Dead weight.
 - **Proposed fix:** Delete it (git history keeps it).
-- **Answer:**
+- **Answer:** fix — implemented (e932f69): function deleted; no template or test referenced it and it expected column names that no longer exist.
 
 ### Q6.6: Row-wise `.apply(lambda ...)` where vectorized ops exist
 - **File:** `brasa/etl.py:489, 925, 934, 938`; `brasa/readers/helpers.py:635`
@@ -500,7 +502,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** `df[col].apply(lambda x: re.sub(...))` → `df[col].str.replace(regex=True)`; `groupby().apply(lambda x: x.shape[0])` → `groupby().size()`. Straightforward wins on large frames.
 - **Proposed fix:** Mechanical replacement + spot-check outputs.
-- **Answer:**
+- **Answer:** fix — implemented (e4a50f1): `groupby().apply(...)` → `size()`/`nunique()`; regex scrubbing → `.str.replace(regex=True)`. Equivalence verified; also silences a pandas FutureWarning.
 
 ### Q6.7: `create_bcb_currency_data` — serial HTTP loop over all currencies, no error isolation
 - **File:** `brasa/etl.py:212-240`
@@ -522,7 +524,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** `pivot_table` defaults to `aggfunc="mean"`. If the underlying dataset ever contains duplicate rows for a (refdate, symbol) pair (reprocessing overlap, extra-key snapshots, concat ETLs), users get the *average of prices* with no warning — the worst possible failure mode for financial data.
 - **Proposed fix:** Use `pivot` (raises on duplicates) or `pivot_table(aggfunc="last")` after an explicit duplicate check that logs/raises.
-- **Answer:**
+- **Answer:** fix — implemented: explicit pre-pivot duplicate check in get_returns/get_prices raises ValueError naming up to 10 offending (refdate, symbol) pairs; silent averaging is gone.
 
 ### Q7.2: Empty-result crashes: `df.index[0]` / `pc.max` with no guard
 - **File:** `brasa/queries.py:399, 442` (IndexError on unknown symbol or reversed dates), `:923, 939, 957` (`pyarrow.compute.max` on possibly-empty tables)
@@ -531,7 +533,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** `get_returns("TYPO3")` raises a bare `IndexError` from deep inside; `get_symbols` helpers on empty datasets propagate nulls. No `start <= end` validation either (reversed range → empty → IndexError).
 - **Proposed fix:** Validate inputs, return an empty typed DataFrame (or raise a clear `ValueError("no data for symbols ...")`).
-- **Answer:**
+- **Answer:** fix — implemented (3dc9229): `start > end` raises ValueError (`_resolve_date_range`); empty pivots return an empty DataFrame before the calendar reindex. The `pc.max` helpers were verified safe on empty datasets (max=None filter matches nothing → `[]`) — no change needed there.
 
 ### Q7.3: `BrasaDB` class-level shared read-write DuckDB connection
 - **File:** `brasa/queries.py:37-55`
@@ -559,7 +561,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** `set_option("mode", "pandas")` … restore is not exception-safe (an error mid-block leaks global state), not thread-safe, and `import brasa` permanently mutates bizdays' global datetype for the whole process — surprising for co-resident code using bizdays.
 - **Proposed fix:** try/finally (or a context manager) around option flips; document the import side effect or scope it.
-- **Answer:**
+- **Answer:** fix — implemented (09e674d): new `util.bizdays_mode()` context manager used in get_returns/get_prices and the adjusted-returns ETL handler. The import-time `set_option("mode.datetype")` side effect remains (documenting/scoping it is a separate decision).
 
 ### Q7.6: `list_tables` returns `[]` on any exception; view-creation errors truncated to 100 chars
 - **File:** `brasa/queries.py:283-284`, `:150`
@@ -568,7 +570,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** "DB corrupt" and "no views yet" are indistinguishable; SQL error detail is cut off exactly where the useful part (path) usually is.
 - **Proposed fix:** Log the exception in `list_tables`; drop the `[:100]` truncation.
-- **Answer:**
+- **Answer:** fix — implemented (47e809c): `list_tables` logs a warning (connection errors included) before returning `[]`; view-creation errors are no longer truncated to 100 chars.
 
 ### Q7.7: `get_marketdata` swallows everything and returns `None`
 - **File:** `brasa/engine/api.py:116-127`
@@ -604,7 +606,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** Dead commented code; and two different notions of "public API" (see also Q12.5).
 - **Proposed fix:** Delete the comment block; reconcile export lists.
-- **Answer:**
+- **Answer:** fix — partially implemented (8e0ee4d): dead `get_timeseries` block deleted. Export-list reconciliation deferred to Q12.5, since the right fix depends on whether the public API shrinks.
 
 ---
 
@@ -618,7 +620,7 @@ Total: **99 questions**
 - **Issue:** Second occurrence builds the adapter from the raw template fields object instead of a `Fieldset`. The commented-out correct version right above it strongly suggests an unfinished edit. Whether this path currently "works by duck-typing" or silently mis-parses needs a test.
 - **Proposed fix:** Use `Fieldset.from_template_fields(...)` like the first occurrence; add a regression test for that reader.
 - **Question(s):** Which template exercises this function? Is its output currently correct?
-- **Answer:**
+- **Answer:** stale premise — `template.fields` has been a `Fieldset` since the fieldsets refactor, and both construction patterns produce identical fields (pinned by regression test). Aligned the site with the explicit `Fieldset.from_template_fields` pattern and removed the commented-out remains (faffe34). Note: no template currently uses this reader (settlement-prices is pipeline-based).
 
 ### Q8.2: FWF text-mode path: `_line` referenced before assignment → `NameError`
 - **File:** `brasa/parsers/fwf.py:135-160`
@@ -627,7 +629,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** `_line = line.decode(...)` only happens `if isinstance(line, bytes)`, but the file is opened in *text* mode (`Path.open(encoding=...)`) — so in the `str`-filename branch `_line` is never assigned and the first line raises `NameError`. Ergo that branch is unreachable in practice (callers must pass byte iterators), i.e. it's broken dead code. The old review flagged the dead bytes check; the reality is worse.
 - **Proposed fix:** `_line = line.decode(encoding) if isinstance(line, bytes) else line` (both branches), plus one test with a real FWF file per mode; also consider `strict=True` in the `zip(...)` (Q8.3).
-- **Answer:**
+- **Answer:** fix — implemented (4c5735b): `_line = line.decode(encoding) if isinstance(line, bytes) else line` in both branches; tests cover text-file and byte-iterator modes.
 
 ### Q8.3: `zip(..., strict=False)` silently drops mismatched columns in parsers
 - **File:** `brasa/parsers/util.py:54, 78`, `brasa/parsers/fwf.py:29, 148, 160`
@@ -655,7 +657,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** `isinstance(a, str) | isinstance(a, Path)` — works, but returns the wrong type and reads as a typo. `isinstance(a, (str, Path))` is the idiom.
 - **Proposed fix:** One-line change.
-- **Answer:**
+- **Answer:** fix — implemented (6664f6f): replaced with `isinstance(x, (str, Path))`; behavior was already correct (bool | bool is bool), so this is idiom cleanup pinned by tests.
 
 ### Q8.6: Hardcoded `latin1` default and no-context-manager zips in `unzip_and_get_content`
 - **File:** `brasa/util.py:214-224`
@@ -664,7 +666,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** `encoding="latin1"` default with `index=-1` member selection by position; no `with`; decoding failure propagates as a raw `UnicodeDecodeError`.
 - **Proposed fix:** Context manager; take encoding from the template (readers already carry `encoding`); select member by name where possible.
-- **Answer:**
+- **Answer:** fix — implemented (folded into 62f4a6f): both zip helpers use `with`; `_is_zip` accepts `Path`. The hardcoded `latin1` default remains (changing it is a behavior decision).
 
 ### Q8.7: `SuppressUserWarnings` resets filters instead of restoring them
 - **File:** `brasa/util.py:21-26`
@@ -673,7 +675,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** `filterwarnings("default", ...)` on exit clobbers any caller-installed filters. `warnings.catch_warnings()` does this correctly. Check if the class is even used — if not, delete.
 - **Proposed fix:** Replace with `contextlib` + `catch_warnings`, or delete if unused.
-- **Answer:**
+- **Answer:** fix — implemented (cf366a6): delegates to `warnings.catch_warnings()`, restoring the caller's filters exactly.
 
 ### Q8.8: Silent `except Exception: return None` in parser helpers
 - **File:** `brasa/parsers/util.py:88-89`, `brasa/parsers/b3/bvbg087.py:12-13`, `brasa/engine/pipeline/steps/b3_steps.py:295-296, 422-423`
@@ -695,7 +697,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** In `_run_upstream_templates`, when an optional upstream *raises*, the code warns and `return`s — abandoning all remaining dataset refs for that dependency. When it merely *reports failure*, it warns and `continue`s. The asymmetry looks accidental; an optional failure on ref 1 of 3 silently skips refreshing refs 2–3.
 - **Proposed fix:** `continue` in both branches (or document why early-return is right).
-- **Answer:**
+- **Answer:** fix — implemented (671e7fb): `continue` in both optional-failure branches; regression test proves ref 2 is still attempted when ref 1's producer raises, and that required failures still raise `DependencyResolutionError`.
 
 ### Q9.2: Upstream resolution processes but never *downloads*
 - **File:** `brasa/engine/dependency_resolver.py:322-326`
@@ -830,7 +832,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** No `pytest-cov`; coverage is unknown and can regress invisibly.
 - **Proposed fix:** Add `pytest-cov`, publish the number, gate at the current baseline (ratchet up later).
-- **Answer:**
+- **Answer:** fix — implemented: pytest-cov added; baseline measured at 67% (--no-integration), CI gates at 65% (`--cov-fail-under=65`) — ratchet up as Q11.1–Q11.3 land.
 
 ### Q11.7: No CI workflow
 - **File:** `.github/` (has copilot instructions/agents/prompts, but **no `workflows/`**)
@@ -839,7 +841,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** The Definition of Done (pytest + ruff + pre-commit) is enforced only by discipline. A 10-line GitHub Actions workflow (`uv sync && uv run pytest --no-integration && uv run ruff check`) closes the gap.
 - **Proposed fix:** Add `.github/workflows/ci.yaml` for pushes/PRs, py310–py313 matrix if cheap.
-- **Answer:**
+- **Answer:** fix — implemented (1ecdddb): `.github/workflows/ci.yaml` runs ruff check, format check, and `pytest --no-integration` on Python 3.10/3.11/3.12 via uv, on pushes and PRs to main.
 
 ### Q11.8: Duplicate `temp_cache`/singleton-reset fixtures across ≥4 test files
 - **File:** `tests/test_cache.py`, `test_download_status.py`, `test_invalid_downloads.py`, `test_download_retry.py`
@@ -848,7 +850,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** Each re-implements CacheManager reset; drift between copies causes order-dependent test bugs. (Root cause is Q3.1.)
 - **Proposed fix:** One canonical fixture in `conftest.py`.
-- **Answer:**
+- **Answer:** fix — implemented (ab5a073): the four byte-identical fixtures collapsed into one `temp_cache` in conftest.py.
 
 ### Q11.9: No per-test timeout
 - **File:** `pyproject.toml`
@@ -857,7 +859,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** With no HTTP timeouts (Q2.1), a hung endpoint hangs the suite.
 - **Proposed fix:** `pytest-timeout` with e.g. 60s default (higher for marked integration tests).
-- **Answer:**
+- **Answer:** fix — implemented (35bec8b): pytest-timeout added with `timeout = 120` (generous because WIL-97 read timeouts reach 90s for integration runs).
 
 ---
 
@@ -915,7 +917,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** Helper exits the process directly (untestable); `nargs=1` yields a list while the default is a str, requiring the `isinstance` dance at `:1018`.
 - **Proposed fix:** Raise `argparse.ArgumentTypeError`/`SystemExit` via parser.error; drop `nargs=1`.
-- **Answer:**
+- **Answer:** fix — implemented (948b532): `_parse_download_args` raises ValueError (callers translate to stderr + exit 1); `nargs=1` dropped from `sql_query`/`--output`, removing the isinstance dance.
 
 ### Q12.7: Parser tree built at module import time
 - **File:** `brasa/cli.py:161-594`
@@ -947,7 +949,7 @@ Total: **99 questions**
 - **Issue:** The repo root mixes package config with personal run scripts, operational plan files, and one-off analysis writeups. New contributors (and tooling) can't tell what's product vs scratch. Note root `cli.py` shadows `brasa/cli.py` conceptually.
 - **Proposed fix:** `plans/` (or `examples/plans/`) for the YAMLs, `examples/` for driver scripts, `docs/analysis/` for the writeups; delete what's stale.
 - **Question(s):** Which of the root cli-*.py scripts are still in active personal use?
-- **Answer:**
+- **Answer:** fix — implemented: driver scripts → examples/, download plans → examples/plans/, analysis writeups (ERRORS.md, DEPENDENCY_*) → docs/analysis/. Nothing referenced the old paths; scripts kept (none deleted) pending the which-are-active question.
 
 ### Q13.2: ~25 MB of binary test data committed at `data/`, plus notebooks with output
 - **File:** `data/` (36 tracked files incl. `COTAHIST_A1986.zip` at 8.7 MB), `notebooks/` (45 tracked); pack size 27.7 MiB

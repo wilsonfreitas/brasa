@@ -3,6 +3,7 @@ from typing import ClassVar
 import pandas as pd
 from lxml import etree
 
+from ...engine.exceptions import CorruptedContentException
 from ..util import Parser
 
 
@@ -75,7 +76,7 @@ class BVBG087Parser(Parser):
         if len(td) > 0:
             trade_date = td[0].find("Dt", ns).text
         else:
-            raise Exception("Invalid XML: tag TradDt not found")
+            raise CorruptedContentException("Invalid XML: tag TradDt not found")
 
         for tag in self.ATTRS:
             fields = self.ATTRS[tag]

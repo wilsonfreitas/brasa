@@ -47,8 +47,11 @@
 
 ## User Directives
 
-1. **[2026-04-20] When planning b3-bvbg028 datasets, use linear-brasa-plan skill**
+1. **[2026-07-19] Audit points from docs/QUESTIONS.md are implemented in this clone**
+   Do instead: Work audit fixes here (`brasa-review`), branching per issue; `~/dev/python/brasa` is `origin`, GitHub remote is `github`. QUESTIONS.md themes map 1:1 to candidate Linear sub-issues; Answer slots take `fix/intended/won't fix/discuss`.
+
+2. **[2026-04-20] When planning b3-bvbg028 datasets, use linear-brasa-plan skill**
    Do instead: Invoke `/linear-brasa-plan WIL-X` to generate implementation plans directly to Linear issues. Do not create separate plan documents unless explicitly requested.
 
-2. **[2026-04-20] b3-bvbg028 sub-issues follow a consistent template: Design → Implementation Plan → Execution**
+3. **[2026-04-20] b3-bvbg028 sub-issues follow a consistent template: Design → Implementation Plan → Execution**
    Do instead: Use the established pattern: fetch issue, extract Design section, invoke superpowers:writing-plans, save plan back to issue as ## Implementation Plan. Then use linear-brasa-executor to execute.

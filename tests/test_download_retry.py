@@ -10,13 +10,11 @@ Covers:
 """
 
 import io
-import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from brasa.engine.cache import CacheManager, CacheMetadata, DownloadResult
+from brasa.engine.cache import CacheMetadata, DownloadResult
 from brasa.engine.exceptions import (
     CorruptedContentException,
     DownloadException,
@@ -52,28 +50,6 @@ def _make_downloader(
     if retry_on_status_codes is not None:
         config["retry_on_status_codes"] = retry_on_status_codes
     return MarketDataDownloader(config)
-
-
-@pytest.fixture
-def temp_cache():
-    """Create a temporary cache directory for testing."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        original_cache = CacheManager.__dict__.get("__it__")
-        CacheManager.__it__ = None
-
-        cache = CacheManager()
-        cache._cache_folder = tmpdir
-        Path(tmpdir).mkdir(parents=True, exist_ok=True)
-        Path(cache.cache_path(cache._meta_folder)).mkdir(parents=True, exist_ok=True)
-        Path(cache.cache_path(cache._db_folder)).mkdir(parents=True, exist_ok=True)
-        cache.create_meta_db()
-
-        yield cache
-
-        if original_cache is not None:
-            CacheManager.__it__ = original_cache
-        else:
-            CacheManager.__it__ = None
 
 
 # ---------------------------------------------------------------------------
@@ -292,8 +268,36 @@ class TestRetryBackoff:
         fp, resp, info = dl.download()
         assert call_count == 4  # 3 failures + 1 success
 
-        # Sleep calls: 1.0 (attempt 1), 2.0 (attempt 2), 4.0 (attempt 3)
+        # Sleep calls: 1.0 (attempt 1), 2.0 (attempt 2), 4.0 (attempt 3),
+        # each scaled by a jitter factor in [0.5, 1.5) (audit Q2.4).
         assert mock_sleep.call_count == 3
+        delays = [call.args[0] for call in mock_sleep.call_args_list]
+        for delay, base in zip(delays, [1.0, 2.0, 4.0], strict=True):
+            assert 0.5 * base <= delay <= 1.5 * base
+        # jitter must actually vary the delays: the odds of all three
+        # landing exactly on the base sequence are effectively zero
+        assert delays != [1.0, 2.0, 4.0]
+
+    @patch("brasa.engine.template.random.uniform", return_value=1.0)
+    @patch("brasa.engine.template.time.sleep")
+    def test_backoff_base_sequence_without_jitter(self, mock_sleep, _uniform):
+        dl = _make_downloader(
+            retry_attempts=3,
+            retry_delay=1.0,
+            retry_backoff=2.0,
+        )
+        call_count = 0
+
+        def _side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 3:
+                raise DownloadException("status_code = 503")
+            return io.BytesIO(b"data"), {"ok": True}
+
+        dl.download_function = _side_effect
+
+        dl.download()
         delays = [call.args[0] for call in mock_sleep.call_args_list]
         assert delays == [1.0, 2.0, 4.0]
 

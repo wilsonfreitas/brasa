@@ -15,6 +15,7 @@ import pyarrow.dataset as pads
 import pyarrow.parquet as pq
 
 from brasa.engine.cache import CacheManager
+from brasa.engine.exceptions import DOMAIN_EXCEPTIONS
 from brasa.fieldsets.adapters import PyArrowAdapter
 
 from .etl_context import ETLPipelineContext
@@ -115,6 +116,11 @@ class ETLPipeline:
             logger.debug(f"Executing ETL step {i + 1}/{len(self.steps)}: {step_name}")
             try:
                 data = step.execute(data, context)
+            except DOMAIN_EXCEPTIONS:
+                # typed exceptions drive expected/unexpected classification
+                # upstream — re-raise unwrapped so callers can match on type
+                logger.error(f"ETL Step '{step_name}' failed with domain exception")
+                raise
             except Exception as e:
                 logger.error(f"ETL Step '{step_name}' failed: {e}")
                 raise RuntimeError(

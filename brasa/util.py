@@ -6,24 +6,43 @@ import pickle
 import re
 import warnings
 import zipfile
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 from tempfile import gettempdir
 from typing import IO, Any
 
-from bizdays import Calendar, set_option
+from bizdays import Calendar, get_option, set_option
 from regexparser import TextParser
 
 set_option("mode.datetype", "datetime")
 
 
+@contextmanager
+def bizdays_mode(mode: str):
+    """Temporarily switch the bizdays global "mode" option.
+
+    Restores the previous mode on exit, even if the block raises.
+    """
+    previous = get_option("mode")
+    set_option("mode", mode)
+    try:
+        yield
+    finally:
+        set_option("mode", previous)
+
+
 class SuppressUserWarnings:
+    """Context manager that silences UserWarning, restoring prior filters."""
+
     def __enter__(self):
+        self._catcher = warnings.catch_warnings()
+        self._catcher.__enter__()
         warnings.filterwarnings("ignore", category=UserWarning)
 
     def __exit__(self, exc_type, exc_value, traceback):
-        warnings.filterwarnings("default", category=UserWarning)
+        self._catcher.__exit__(exc_type, exc_value, traceback)
 
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -186,18 +205,24 @@ def generate_checksum_from_zip(fp: IO) -> str:
 
 
 def unzip_file_to(fname, dest) -> list:
-    zf = zipfile.ZipFile(fname)
-    names = zf.namelist()
-    for name in names:
-        logging.debug("zipped file %s", name)
-        zf.extract(name, dest)
-    zf.close()
+    dest_root = Path(dest).resolve()
+    with zipfile.ZipFile(fname) as zf:
+        names = zf.namelist()
+        for name in names:
+            target = (dest_root / name).resolve()
+            if not target.is_relative_to(dest_root):
+                raise ValueError(
+                    f"zip member {name!r} would extract outside destination {dest!r}"
+                )
+        for name in names:
+            logging.debug("zipped file %s", name)
+            zf.extract(name, dest)
     return [str(Path(dest) / name) for name in names]
 
 
 def _is_zip(fname):
     """Check if a file is a zip archive (by content, not extension)."""
-    return isinstance(fname, str) and zipfile.is_zipfile(fname)
+    return isinstance(fname, (str, Path)) and zipfile.is_zipfile(fname)
 
 
 def unzip_recursive(fname):
@@ -212,11 +237,10 @@ def unzip_recursive(fname):
 
 
 def unzip_and_get_content(fname, index=-1, encode=False, encoding="latin1"):
-    zf = zipfile.ZipFile(fname)
-    name = zf.namelist()[index]
-    logging.debug("zipped file %s", name)
-    content = zf.read(name)
-    zf.close()
+    with zipfile.ZipFile(fname) as zf:
+        name = zf.namelist()[index]
+        logging.debug("zipped file %s", name)
+        content = zf.read(name)
 
     if encode:
         return content.decode(encoding)

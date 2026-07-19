@@ -100,11 +100,7 @@ class FieldsetReader:
         self, filepath_or_buffer: str | Path | io.StringIO
     ) -> Path | None:
         """Extract and validate filepath from input."""
-        is_filepath = isinstance(filepath_or_buffer, str) | isinstance(
-            filepath_or_buffer, Path
-        )
-
-        if is_filepath:
+        if isinstance(filepath_or_buffer, (str, Path)):
             filepath = Path(filepath_or_buffer)
             if not filepath.exists():
                 raise FileNotFoundError(f"File not found: {filepath}")

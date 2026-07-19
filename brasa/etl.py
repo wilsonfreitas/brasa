@@ -1,4 +1,3 @@
-import re
 from datetime import datetime
 
 import numpy as np
@@ -7,12 +6,13 @@ import pyarrow
 import pyarrow.acero as ac
 import pyarrow.compute as pc
 from bcb import PTAX
-from bizdays import Calendar, get_option, set_option
+from bizdays import Calendar
 
 from .engine import MarketDataETL
 from .engine.pipeline.steps.shared_transforms import interp_ff
 from .parsers.b3.futures_settlement_prices import maturity2date
 from .queries import BrasaDB, get_dataset, write_dataset
+from .util import bizdays_mode
 
 
 def create_b3_rate_futures(handler: MarketDataETL):
@@ -393,7 +393,7 @@ def create_cotahist_dataset(handler: MarketDataETL):
     tb_cotahist_yearly = get_dataset(handler.yearly_dataset).to_table()
     tb_cotahist_daily = get_dataset(handler.daily_dataset).to_table()
     tb_cotahist = pyarrow.concat_tables([tb_cotahist_yearly, tb_cotahist_daily])
-    tb_cotahist.sort_by([("refdate", "ascending")])
+    tb_cotahist = tb_cotahist.sort_by([("refdate", "ascending")])
     write_dataset(tb_cotahist.to_pandas(), handler.template_id)
 
 
@@ -486,12 +486,10 @@ def create_equities_returns(handler: MarketDataETL):
         .to_table()
         .to_pandas()
     )
-    symbols = df.groupby(["symbol"]).apply(lambda x: x.shape[0])
+    symbols = df.groupby("symbol").size()
     symbols_to_ignore = symbols[symbols == 1].index
     df_clean = df[~df["symbol"].isin(symbols_to_ignore)]
-    symbols = df_clean.groupby(["symbol"]).apply(
-        lambda x: len(x["distribution_id"].unique())
-    )
+    symbols = df_clean.groupby("symbol")["distribution_id"].nunique()
     symbols_to_use = symbols[symbols == 1].index
     df_final = df[df["symbol"].isin(symbols_to_use)]
     df_final = (
@@ -875,46 +873,6 @@ def create_b3_equity_symbols_properties(handler: MarketDataETL):
     write_dataset(companies_symbols, handler.template_id)
 
 
-def create_b3_listed_funds(handler: MarketDataETL):
-    """Create consolidated B3 listed funds dataset.
-
-    .. deprecated::
-        This function is deprecated. The b3-listed-funds-consolidated template now uses
-        pipeline-based ETL with the concat_datasets step. This function is
-        kept for backward compatibility only.
-
-    Note:
-        This function expects outdated column names (fundName, typeFund) that
-        no longer exist in source datasets. Use the pipeline-based template
-        instead.
-    """
-    import warnings
-
-    warnings.warn(
-        "create_b3_listed_funds is deprecated. "
-        "The b3-listed-funds-consolidated template now uses pipeline-based ETL.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-
-    tables = []
-    cols = ["refdate", "acronym", "fundName", "typeFund"]
-    for ds in handler.datasets:
-        tb = get_dataset(ds).scanner(columns=cols).to_table()
-        tables.append(tb)
-    df = pyarrow.concat_tables(tables).to_pandas()
-    df["symbol"] = df["acronym"] + "11"
-    df["typeFund"] = df["typeFund"].map({7: "FII", 20: "ETF", 19: "Fixed Income ETF"})
-    df = df.rename(
-        columns={
-            "fundName": "fund_name",
-            "acronym": "asset_name",
-            "typeFund": "fund_type",
-        }
-    )
-    write_dataset(df, handler.template_id)
-
-
 def create_b3_companies_cash_dividends(handler: MarketDataETL):
     sp = (
         get_dataset(handler.symbols_properties_dataset)
@@ -922,7 +880,7 @@ def create_b3_companies_cash_dividends(handler: MarketDataETL):
         .to_table()
         .to_pandas()
     )
-    sp["trading_name"] = sp["trading_name"].apply(lambda x: re.sub("[^A-Z0-9]", "", x))
+    sp["trading_name"] = sp["trading_name"].str.replace("[^A-Z0-9]", "", regex=True)
 
     # cash dividends ----
     df = (
@@ -931,11 +889,11 @@ def create_b3_companies_cash_dividends(handler: MarketDataETL):
         .to_table()
         .to_pandas()
     )
-    df["tradingName"] = df["tradingName"].apply(lambda x: re.sub("[^A-Z0-9]", "", x))
+    df["tradingName"] = df["tradingName"].str.replace("[^A-Z0-9]", "", regex=True)
     df = df.groupby(["tradingName"], sort=True).last().reset_index()
 
     cd = get_dataset(handler.cash_dividends_dataset).to_table().to_pandas()
-    cd["tradingName"] = cd["tradingName"].apply(lambda x: re.sub("[^A-Z0-9]", "", x))
+    cd["tradingName"] = cd["tradingName"].str.replace("[^A-Z0-9]", "", regex=True)
     cd = pd.merge(df, cd, on=["tradingName", "refdate"], how="inner")
     cd_ = cd[
         [
@@ -1169,10 +1127,8 @@ def create_adjusted_prices(handler: MarketDataETL):
     )
     all_data = rets.set_index(["refdate", "symbol"]).join(ohlc).reset_index()
 
-    bizdays_mode = get_option("mode")
-    set_option("mode", "pandas")
-    cal = Calendar.load(handler.calendar)
-    set_option("mode", bizdays_mode)
+    with bizdays_mode("pandas"):
+        cal = Calendar.load(handler.calendar)
 
     def _(all_data):
         all_data = all_data.set_index("refdate").sort_index(ascending=False)

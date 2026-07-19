@@ -7,37 +7,13 @@ Tests cover:
 - Forcing re-download with force=True
 """
 
-import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
-from brasa.engine import CacheManager, CacheMetadata
+from brasa.engine import CacheMetadata
 from brasa.engine.api import _should_download
 from brasa.engine.exceptions import InvalidContentException
-
-
-@pytest.fixture
-def temp_cache():
-    """Create a temporary cache directory for testing."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        original_cache = CacheManager.__dict__.get("__it__")
-        CacheManager.__it__ = None
-
-        cache = CacheManager()
-        cache._cache_folder = tmpdir
-        Path(tmpdir).mkdir(parents=True, exist_ok=True)
-        Path(cache.cache_path(cache._meta_folder)).mkdir(parents=True, exist_ok=True)
-        Path(cache.cache_path(cache._db_folder)).mkdir(parents=True, exist_ok=True)
-        cache.create_meta_db()
-
-        yield cache
-
-        if original_cache is not None:
-            CacheManager.__it__ = original_cache
-        else:
-            CacheManager.__it__ = None
 
 
 def test_invalid_download_metadata_fields():

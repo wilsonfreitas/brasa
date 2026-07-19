@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
+from ..exceptions import DOMAIN_EXCEPTIONS
 from .context import PipelineContext
 from .registry import StepRegistry
 
@@ -121,6 +122,11 @@ class ReaderPipeline:
             logger.debug(f"Executing step {i + 1}/{len(self.steps)}: {step_name}")
             try:
                 data = step.execute(data, context)
+            except DOMAIN_EXCEPTIONS:
+                # typed exceptions drive expected/unexpected classification
+                # upstream — re-raise unwrapped so callers can match on type
+                logger.error(f"Step '{step_name}' failed with domain exception")
+                raise
             except Exception as e:
                 logger.error(f"Step '{step_name}' failed: {e}")
                 raise RuntimeError(

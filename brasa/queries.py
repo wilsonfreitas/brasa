@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 
@@ -7,10 +8,13 @@ import pandas as pd
 import pyarrow
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
-from bizdays import Calendar, get_option, set_option
+from bizdays import Calendar
 
 from .engine import CacheManager, DatasetCatalog, DatasetInfo, retrieve_template
 from .fieldsets import PyArrowAdapter
+from .util import bizdays_mode
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "BrasaDB",
@@ -147,7 +151,7 @@ class BrasaDB:
             return True, f"Rows: ~{len(parquet_files)}"
 
         except Exception as e:
-            return False, f"Error: {str(e)[:100]}"
+            return False, f"Error: {e}"
 
     @classmethod
     def create_all_views(cls, layers: list[str] | None = None) -> dict[str, bool]:
@@ -268,8 +272,8 @@ class BrasaDB:
             for table in tables:
                 print(table)  # e.g., "input.b3-cotahist-daily"
         """
-        con = cls.get_connection()
         try:
+            con = cls.get_connection()
             result = con.sql(
                 """
                 SELECT table_name FROM information_schema.tables
@@ -280,7 +284,8 @@ class BrasaDB:
             )
             df = result.df()
             return df["table_name"].tolist()
-        except Exception:
+        except Exception as exc:
+            logger.warning("list_tables failed, returning empty list: %s", exc)
             return []
 
 
@@ -340,35 +345,42 @@ def list_sql_tables() -> list[str]:
     return BrasaDB.list_tables()
 
 
-# def get_timeseries(symbol: str, start: datetime, end: datetime) -> pd.DataFrame:
-#     con = BrasaDB.get_connection()
-#     _start = start.strftime("%Y-%m-%d")
-#     _end = end.strftime("%Y-%m-%d")
+def _resolve_date_range(start, end) -> tuple[datetime, datetime]:
+    """Fill date-range defaults and validate ordering.
 
-#     res = con.sql(f"""
-# with cal as (
-#     select refdate
-#     from calendar
-#     where isbizday_B3 = true and refdate < today()
-# ), ch as (
-#     select refdate, symbol, close, distribution_id
-#     from 'b3-cotahist'
-#     where symbol = '{symbol}'
-# ), minmax_dates as (
-#     select
-#         case when min(refdate) < '{_start}' then CAST('{_start}' as DATE) else min(refdate) end as min_date,
-#         case when max(refdate) > '{_end}' then CAST('{end}' as DATE) else max(refdate) end as max_date
-#     from ch
-# )
-# select * from (
-#     select cal.refdate, ch.symbol, ch.close, ch.distribution_id
-#     from cal
-#     left join ch on cal.refdate = ch.refdate
-#     where cal.refdate between (select min_date from minmax_dates) and (select max_date from minmax_dates)
-# )
-# order by refdate
-# """)
-#     return res.fetchdf().pivot(index="refdate", columns="symbol", values="close")
+    Raises:
+        ValueError: If start is after end.
+    """
+    if start is None:
+        start = datetime(2000, 1, 1)
+    if end is None:
+        end = datetime.today()
+    if start > end:
+        raise ValueError(f"start must be <= end, got start={start!r} end={end!r}")
+    return start, end
+
+
+def _check_duplicate_rows(df: pd.DataFrame, dataset: str) -> None:
+    """Raise if df holds more than one row per (refdate, symbol) pair.
+
+    pivot_table would otherwise silently *average* the duplicates — the
+    worst failure mode for financial series.
+
+    Raises:
+        ValueError: Naming the duplicated (refdate, symbol) pairs.
+    """
+    dup_mask = df.duplicated(subset=["refdate", "symbol"], keep=False)
+    if dup_mask.any():
+        pairs = (
+            df.loc[dup_mask, ["refdate", "symbol"]]
+            .drop_duplicates()
+            .itertuples(index=False, name=None)
+        )
+        listed = ", ".join(f"({d.date()}, {s})" for d, s in list(pairs)[:10])
+        raise ValueError(
+            f"dataset {dataset!r} has duplicate (refdate, symbol) rows: {listed}. "
+            "Refusing to aggregate them; reprocess the dataset to remove duplicates."
+        )
 
 
 def get_returns(
@@ -376,10 +388,7 @@ def get_returns(
 ) -> pd.DataFrame:
     if isinstance(symbols, str):
         symbols = [symbols]
-    if start is None:
-        start = datetime(2000, 1, 1)
-    if end is None:
-        end = datetime.today()
+    start, end = _resolve_date_range(start, end)
     df = (
         get_dataset("brasa-returns")
         .filter(pc.field("symbol").isin(symbols))
@@ -389,15 +398,16 @@ def get_returns(
         .sort_by("refdate")
         .to_pandas()
     )
+    _check_duplicate_rows(df, "brasa-returns")
     df = df.pivot_table(values="returns", index="refdate", columns="symbol")
     df.index.name = None
     df.columns.name = None
+    if df.empty:
+        return df
 
-    bizdays_mode = get_option("mode")
-    set_option("mode", "pandas")
-    cal = Calendar.load(calendar)
-    idx = cal.seq(df.index[0], df.index[-1])
-    set_option("mode", bizdays_mode)
+    with bizdays_mode("pandas"):
+        cal = Calendar.load(calendar)
+        idx = cal.seq(df.index[0], df.index[-1])
     df = df.reindex(idx)
     return df
 
@@ -415,10 +425,7 @@ def get_prices(
         columns = [columns]
     all_names = ["refdate", "symbol"]
     all_names.extend(columns)
-    if start is None:
-        start = datetime(2000, 1, 1)
-    if end is None:
-        end = datetime.today()
+    start, end = _resolve_date_range(start, end)
     df = (
         get_dataset("brasa-prices")
         .filter(pc.field("symbol").isin(symbols))
@@ -429,18 +436,19 @@ def get_prices(
         .sort_by("refdate")
         .to_pandas()
     )
+    _check_duplicate_rows(df, "brasa-prices")
     if len(columns) == 1:
         df = df.pivot_table(values=columns[0], index="refdate", columns="symbol")
     else:
         df = df.pivot_table(values=columns, index="refdate", columns="symbol")
     df.index.name = None
     df.columns.name = None
+    if df.empty:
+        return df
 
-    bizdays_mode = get_option("mode")
-    set_option("mode", "pandas")
-    cal = Calendar.load(calendar)
-    idx = cal.seq(df.index[0], df.index[-1])
-    set_option("mode", bizdays_mode)
+    with bizdays_mode("pandas"):
+        cal = Calendar.load(calendar)
+        idx = cal.seq(df.index[0], df.index[-1])
     df = df.reindex(idx)
     return df
 

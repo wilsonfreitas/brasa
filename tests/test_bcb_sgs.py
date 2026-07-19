@@ -15,6 +15,7 @@ from brasa.engine import (
     process_marketdata,
     retrieve_template,
 )
+from brasa.engine.exceptions import DownloadException
 from brasa.fieldsets import Fieldset
 
 # Task 1: BCBSGSDownloader tests
@@ -46,16 +47,15 @@ def test_bcb_sgs_downloader_with_start_end():
         assert data[0]["data"] == "02/01/2025"
 
 
-def test_bcb_sgs_downloader_returns_none_on_error():
+def test_bcb_sgs_downloader_raises_download_exception_on_error():
     with patch(
         "brasa.downloaders.downloaders.sgs.get_json", side_effect=Exception("API error")
     ):
         downloader = BCBSGSDownloader(
             code=9999, start=date(2025, 1, 1), end=date(2025, 1, 1)
         )
-        result = downloader.download()
-
-        assert result is None
+        with pytest.raises(DownloadException, match="9999"):
+            downloader.download()
 
 
 # Task 2: Template tests
