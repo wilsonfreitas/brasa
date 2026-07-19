@@ -692,3 +692,30 @@ def test_b3_curves_di1_standard_returns_template_loads():
         f"Missing: {expected_fields - field_names}; "
         f"extra: {field_names - expected_fields}"
     )
+
+
+# ---------------------------------------------------------------------------
+# WIL-97 — pregão templates use the tuned B3PregaoDownloader
+# ---------------------------------------------------------------------------
+
+# FPR is migrated too (its YAML uses b3_pregao_download), but it lives under a
+# legacy/ directory that the template loader skips, so it is not registered and
+# cannot be retrieved — hence it is not asserted here.
+PREGAO_TEMPLATES = [
+    "b3-bvbg028",
+    "b3-bvbg086",
+    "b3-bvbg087",
+    "b3-economic-indicators-fwf",
+    "b3-equity-options",
+    "b3-equities-volatility-surface",
+]
+
+
+@pytest.mark.parametrize("name", PREGAO_TEMPLATES)
+def test_pregao_templates_use_b3_pregao_download(name):
+    from brasa.downloaders import b3_pregao_download
+
+    tpl = retrieve_template(name)
+    assert tpl.downloader.download_function is b3_pregao_download
+    assert tpl.downloader.retry_attempts == 3
+    assert tpl.downloader.timeout == 90
