@@ -4,6 +4,7 @@ This module handles reading downloaded files, transforming data,
 and saving to parquet format.
 """
 
+import logging
 from pathlib import Path
 
 import pandas as pd
@@ -14,6 +15,8 @@ from brasa.fieldsets.adapters import PyArrowAdapter
 
 from .cache import CacheManager, CacheMetadata
 from .template import retrieve_template
+
+logger = logging.getLogger(__name__)
 
 
 def get_fname_part(meta: CacheMetadata, df: pd.DataFrame) -> str:
@@ -136,7 +139,12 @@ def _get_schema_from_fields(fields):
     try:
         adapter = PyArrowAdapter(fields, verbose_warnings=False)
         return adapter.get_target_schema()
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            "Could not build schema from template fields; data will be "
+            "written without schema enforcement: %s",
+            exc,
+        )
         return None
 
 
