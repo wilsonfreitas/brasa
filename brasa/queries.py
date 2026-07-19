@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 
@@ -12,6 +13,8 @@ from bizdays import Calendar
 from .engine import CacheManager, DatasetCatalog, DatasetInfo, retrieve_template
 from .fieldsets import PyArrowAdapter
 from .util import bizdays_mode
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "BrasaDB",
@@ -148,7 +151,7 @@ class BrasaDB:
             return True, f"Rows: ~{len(parquet_files)}"
 
         except Exception as e:
-            return False, f"Error: {str(e)[:100]}"
+            return False, f"Error: {e}"
 
     @classmethod
     def create_all_views(cls, layers: list[str] | None = None) -> dict[str, bool]:
@@ -269,8 +272,8 @@ class BrasaDB:
             for table in tables:
                 print(table)  # e.g., "input.b3-cotahist-daily"
         """
-        con = cls.get_connection()
         try:
+            con = cls.get_connection()
             result = con.sql(
                 """
                 SELECT table_name FROM information_schema.tables
@@ -281,7 +284,8 @@ class BrasaDB:
             )
             df = result.df()
             return df["table_name"].tolist()
-        except Exception:
+        except Exception as exc:
+            logger.warning("list_tables failed, returning empty list: %s", exc)
             return []
 
 

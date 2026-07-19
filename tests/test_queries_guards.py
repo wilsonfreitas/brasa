@@ -74,6 +74,19 @@ def test_get_returns_restores_bizdays_mode_on_error(fake_returns_dataset, monkey
     assert get_option("mode") == mode_before
 
 
+def test_list_tables_logs_on_error(monkeypatch, caplog):
+    """Regression for audit Q7.6: DB errors must at least be logged."""
+    import logging
+
+    def boom():
+        raise RuntimeError("db unreachable")
+
+    monkeypatch.setattr(brasa.queries.BrasaDB, "get_connection", boom)
+    with caplog.at_level(logging.WARNING, logger="brasa.queries"):
+        assert brasa.queries.BrasaDB.list_tables() == []
+    assert any("db unreachable" in rec.message for rec in caplog.records)
+
+
 def test_get_returns_known_symbol_still_works(fake_returns_dataset):
     df = brasa.queries.get_returns("PETR4")
     assert list(df.columns) == ["PETR4"]
