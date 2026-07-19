@@ -21,6 +21,7 @@ from .exceptions import (
     DownloadException,
     DuplicatedFolderException,
     InvalidContentException,
+    NoDataException,
 )
 from .template import retrieve_template
 
@@ -49,7 +50,7 @@ def _process_downloaded_format(
     if template.downloader.format == "zip":
         filenames = unzip_recursive(man.cache_path(file_rel_path))
         if len(filenames) == 0:
-            raise Exception("Market data download failed: empty zip file")
+            raise NoDataException("Market data download failed: empty zip file")
         for filename in filenames:
             fname = Path(filename).name
             _file_rel_path = str(Path(meta.download_folder) / fname)

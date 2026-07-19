@@ -763,3 +763,11 @@ def test_unknown_extra_arg_fails_fast(mock_dl):
             verbosity=Verbosity.QUIET,
         )
     mock_dl.assert_not_called()
+
+
+def test_plan_success_true_when_only_no_data():
+    # A NO_DATA result is neither success nor failure — the plan stays green.
+    report = _make_task_report("t", [TaskStatus.NO_DATA])
+    plan_report = DownloadPlanReport(plan_name="p")
+    plan_report.task_reports["t"] = report
+    assert plan_report.success is True
