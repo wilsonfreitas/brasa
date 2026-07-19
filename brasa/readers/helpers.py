@@ -387,14 +387,12 @@ def read_b3_futures_settlement_prices(meta: CacheMetadata) -> pd.DataFrame:
 
     template = retrieve_template(meta.template)
 
-    # Get template and create fieldset from template fields
-    # fieldset = Fieldset.from_template_fields(
-    #     template.fields,
-    #     raw_fields=template.template.get('fields')
-    # )
+    fieldset = Fieldset.from_template_fields(
+        template.fields, raw_fields=template.template.get("fields")
+    )
 
     # Apply type conversions using fieldsets
-    adapter = PandasAdapter(template.fields, errors="coerce")
+    adapter = PandasAdapter(fieldset, errors="coerce")
     df = adapter.apply_types(df)
 
     return df
