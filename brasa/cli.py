@@ -290,11 +290,10 @@ parser_list_tables.add_argument(
 parser_query = subparsers.add_parser(
     "query", help="execute read-only SQL queries on brasa database"
 )
-parser_query.add_argument("sql_query", nargs=1, help="SQL query to be executed")
+parser_query.add_argument("sql_query", help="SQL query to be executed")
 parser_query.add_argument(
     "-o",
     "--output",
-    nargs=1,
     help="output format (display, csv, json, parquet, xlsx)",
     default="display",
 )
@@ -834,17 +833,17 @@ def _render_ascii(graph, template_id: str | None = None) -> str:
 
 
 def _parse_download_args(raw_args: list[str] | None, calendar: str) -> dict:
-    """Parse --arg KEY=VALUE pairs into a kwargs dict."""
+    """Parse --arg KEY=VALUE pairs into a kwargs dict.
+
+    Raises:
+        ValueError: If an item is not in KEY=VALUE form.
+    """
     if not raw_args:
         return {}
     kwargs = {}
     for item in raw_args:
         if "=" not in item:
-            print(
-                f"Error: invalid --arg format: {item!r} (expected KEY=VALUE)",
-                file=sys.stderr,
-            )
-            sys.exit(1)
+            raise ValueError(f"invalid --arg format: {item!r} (expected KEY=VALUE)")
         key, value = item.split("=", 1)
         kwargs[key] = parse_arg_value(value, default_calendar=calendar)
     return kwargs
@@ -881,7 +880,11 @@ def main() -> None:  # noqa: PLR0912, PLR0915
             sys.exit(1)
 
         # Parse --arg with the effective calendar (both paths use this).
-        download_kwargs = _parse_download_args(args.arg, calendar)
+        try:
+            download_kwargs = _parse_download_args(args.arg, calendar)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(1)
 
         # Mutual exclusivity applies to BOTH paths: smart update auto-resolves
         # dates, so an explicit refdate contradicts it.
@@ -946,7 +949,11 @@ def main() -> None:  # noqa: PLR0912, PLR0915
         verbosity = get_verbosity(args)
         report_file = getattr(args, "report", None)
         templates = list(args.template or [])
-        download_kwargs = _parse_download_args(args.arg, args.calendar)
+        try:
+            download_kwargs = _parse_download_args(args.arg, args.calendar)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(1)
         if args.path is not None:
             download_kwargs["path"] = args.path
         for template in templates:
@@ -1033,13 +1040,13 @@ def main() -> None:  # noqa: PLR0912, PLR0915
             BrasaDB.create_all_views()
 
         # Execute query
-        q = BrasaDB.query(args.sql_query[0])
-        output = args.output[0] if isinstance(args.output, list) else args.output
+        q = BrasaDB.query(args.sql_query)
+        output = args.output
 
         if getattr(args, "verbose", False):
             # Show query execution info (could add EXPLAIN here)
             try:
-                explain = BrasaDB.query(f"EXPLAIN {args.sql_query[0]}")
+                explain = BrasaDB.query(f"EXPLAIN {args.sql_query}")
                 print("Query Plan:")
                 print(explain)
                 print("\n" + "=" * 60 + "\n")
