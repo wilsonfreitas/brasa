@@ -341,7 +341,7 @@ def _run_upstream_templates(
                 producer,
                 exc,
             )
-            return
+            continue
 
         if not report.success:
             if required:
