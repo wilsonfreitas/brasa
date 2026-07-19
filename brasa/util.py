@@ -34,11 +34,15 @@ def bizdays_mode(mode: str):
 
 
 class SuppressUserWarnings:
+    """Context manager that silences UserWarning, restoring prior filters."""
+
     def __enter__(self):
+        self._catcher = warnings.catch_warnings()
+        self._catcher.__enter__()
         warnings.filterwarnings("ignore", category=UserWarning)
 
     def __exit__(self, exc_type, exc_value, traceback):
-        warnings.filterwarnings("default", category=UserWarning)
+        self._catcher.__exit__(exc_type, exc_value, traceback)
 
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
