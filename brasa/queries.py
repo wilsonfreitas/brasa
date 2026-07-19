@@ -371,15 +371,27 @@ def list_sql_tables() -> list[str]:
 #     return res.fetchdf().pivot(index="refdate", columns="symbol", values="close")
 
 
+def _resolve_date_range(start, end) -> tuple[datetime, datetime]:
+    """Fill date-range defaults and validate ordering.
+
+    Raises:
+        ValueError: If start is after end.
+    """
+    if start is None:
+        start = datetime(2000, 1, 1)
+    if end is None:
+        end = datetime.today()
+    if start > end:
+        raise ValueError(f"start must be <= end, got start={start!r} end={end!r}")
+    return start, end
+
+
 def get_returns(
     symbols: str | list[str], start=None, end=None, calendar="B3"
 ) -> pd.DataFrame:
     if isinstance(symbols, str):
         symbols = [symbols]
-    if start is None:
-        start = datetime(2000, 1, 1)
-    if end is None:
-        end = datetime.today()
+    start, end = _resolve_date_range(start, end)
     df = (
         get_dataset("brasa-returns")
         .filter(pc.field("symbol").isin(symbols))
@@ -392,6 +404,8 @@ def get_returns(
     df = df.pivot_table(values="returns", index="refdate", columns="symbol")
     df.index.name = None
     df.columns.name = None
+    if df.empty:
+        return df
 
     bizdays_mode = get_option("mode")
     set_option("mode", "pandas")
@@ -415,10 +429,7 @@ def get_prices(
         columns = [columns]
     all_names = ["refdate", "symbol"]
     all_names.extend(columns)
-    if start is None:
-        start = datetime(2000, 1, 1)
-    if end is None:
-        end = datetime.today()
+    start, end = _resolve_date_range(start, end)
     df = (
         get_dataset("brasa-prices")
         .filter(pc.field("symbol").isin(symbols))
@@ -435,6 +446,8 @@ def get_prices(
         df = df.pivot_table(values=columns, index="refdate", columns="symbol")
     df.index.name = None
     df.columns.name = None
+    if df.empty:
+        return df
 
     bizdays_mode = get_option("mode")
     set_option("mode", "pandas")
