@@ -38,8 +38,7 @@ def test_template_load_fields():
     assert tpl.fields["code"].type_name == "integer"
 
 
-@pytest.mark.skip(reason="Legacy template - using new bcb-sgs template instead")
-def test_retrieve_temlate():
+def test_retrieve_template():
     tpl = retrieve_template("bcb-sgs-data")
     assert tpl is not None
     assert isinstance(tpl, MarketDataTemplate)
