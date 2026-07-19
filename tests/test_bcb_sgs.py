@@ -7,7 +7,6 @@ from unittest.mock import patch
 import pytest
 
 from brasa.downloaders.downloaders import BCBSGSDownloader
-from brasa.engine.exceptions import DownloadException
 from brasa.engine import (
     CacheManager,
     MarketDataTemplate,
@@ -16,6 +15,7 @@ from brasa.engine import (
     process_marketdata,
     retrieve_template,
 )
+from brasa.engine.exceptions import DownloadException
 from brasa.fieldsets import Fieldset
 
 # Task 1: BCBSGSDownloader tests

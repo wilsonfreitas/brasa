@@ -9,7 +9,6 @@ import pytest
 
 from brasa.downloaders import bcb_currency_download
 from brasa.downloaders.downloaders import BCBCurrencyDownloader
-from brasa.engine.exceptions import DownloadException
 from brasa.engine import (
     CacheManager,
     MarketDataTemplate,
@@ -17,6 +16,7 @@ from brasa.engine import (
     process_marketdata,
     retrieve_template,
 )
+from brasa.engine.exceptions import DownloadException
 from brasa.fieldsets import Fieldset
 
 
