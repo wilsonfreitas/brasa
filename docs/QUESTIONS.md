@@ -131,7 +131,7 @@ Total: **99 questions**
 - **Issue:** References `self.attrs`, `self.now`, and `self.get_fname()` — none of which exist on the class or its parents — and returns a 4-tuple instead of the `IO` contract every other downloader follows. Any call path would raise `AttributeError`.
 - **Proposed fix:** Delete it (or rewrite against the current contract if a VNA template is planned).
 - **Question(s):** Is VNA data still on the roadmap, or can this be deleted?
-- **Answer:**
+- **Answer:** fix — implemented: class deleted (no template, export, or test referenced it; any call raised AttributeError).
 
 ### Q2.3: BCB downloaders swallow all exceptions and return `None`
 - **File:** `brasa/downloaders/downloaders.py:184-193` (`BCBSGSDownloader`), `:200-216` (`BCBCurrencyDownloader`), also `B3FilesURLDownloader.download` returns `None` on non-200 at `:173-174`
@@ -141,7 +141,7 @@ Total: **99 questions**
 - **Issue:** `except Exception: return None` hides the real failure (bad JSON, network error, API change). The engine then raises a generic "null file pointer" `DownloadException` — the root cause is unrecoverable from logs, and `_extract_http_status` can't extract a status. This also defeats retry classification (no status code → falls back to `retry_on_download_exception`).
 - **Proposed fix:** Let exceptions propagate (or wrap in `DownloadException` with the original as `__cause__` and status where known); make `B3FilesURLDownloader` raise on non-200 like its siblings.
 - **Question(s):** Any known flaky-BCB reason for the swallow, or safe to propagate?
-- **Answer:**
+- **Answer:** fix — implemented: BCBSGSDownloader/BCBCurrencyDownloader wrap failures in DownloadException with the original as __cause__; B3FilesURLDownloader raises on non-200 using the `status_code = N` message convention. Tests updated from the returns-None contract.
 
 ### Q2.4: Retry backoff has no jitter
 - **File:** `brasa/engine/template.py:471-541`
@@ -524,7 +524,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** `pivot_table` defaults to `aggfunc="mean"`. If the underlying dataset ever contains duplicate rows for a (refdate, symbol) pair (reprocessing overlap, extra-key snapshots, concat ETLs), users get the *average of prices* with no warning — the worst possible failure mode for financial data.
 - **Proposed fix:** Use `pivot` (raises on duplicates) or `pivot_table(aggfunc="last")` after an explicit duplicate check that logs/raises.
-- **Answer:**
+- **Answer:** fix — implemented: explicit pre-pivot duplicate check in get_returns/get_prices raises ValueError naming up to 10 offending (refdate, symbol) pairs; silent averaging is gone.
 
 ### Q7.2: Empty-result crashes: `df.index[0]` / `pc.max` with no guard
 - **File:** `brasa/queries.py:399, 442` (IndexError on unknown symbol or reversed dates), `:923, 939, 957` (`pyarrow.compute.max` on possibly-empty tables)
@@ -832,7 +832,7 @@ Total: **99 questions**
 - **Effort (est.):** S
 - **Issue:** No `pytest-cov`; coverage is unknown and can regress invisibly.
 - **Proposed fix:** Add `pytest-cov`, publish the number, gate at the current baseline (ratchet up later).
-- **Answer:**
+- **Answer:** fix — implemented: pytest-cov added; baseline measured at 67% (--no-integration), CI gates at 65% (`--cov-fail-under=65`) — ratchet up as Q11.1–Q11.3 land.
 
 ### Q11.7: No CI workflow
 - **File:** `.github/` (has copilot instructions/agents/prompts, but **no `workflows/`**)
@@ -949,7 +949,7 @@ Total: **99 questions**
 - **Issue:** The repo root mixes package config with personal run scripts, operational plan files, and one-off analysis writeups. New contributors (and tooling) can't tell what's product vs scratch. Note root `cli.py` shadows `brasa/cli.py` conceptually.
 - **Proposed fix:** `plans/` (or `examples/plans/`) for the YAMLs, `examples/` for driver scripts, `docs/analysis/` for the writeups; delete what's stale.
 - **Question(s):** Which of the root cli-*.py scripts are still in active personal use?
-- **Answer:**
+- **Answer:** fix — implemented: driver scripts → examples/, download plans → examples/plans/, analysis writeups (ERRORS.md, DEPENDENCY_*) → docs/analysis/. Nothing referenced the old paths; scripts kept (none deleted) pending the which-are-active question.
 
 ### Q13.2: ~25 MB of binary test data committed at `data/`, plus notebooks with output
 - **File:** `data/` (36 tracked files incl. `COTAHIST_A1986.zip` at 8.7 MB), `notebooks/` (45 tracked); pack size 27.7 MiB
