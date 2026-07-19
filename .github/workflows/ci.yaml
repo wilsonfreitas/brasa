@@ -31,5 +31,5 @@ jobs:
       - name: Ruff format check
         run: uv run ruff format --check .
 
-      - name: Run tests (no integration)
-        run: uv run pytest --no-integration
+      - name: Run tests (no integration, coverage gated at 65%)
+        run: uv run pytest --no-integration --cov=brasa --cov-fail-under=65
