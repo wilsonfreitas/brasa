@@ -42,9 +42,7 @@ def test_unzip_file_to_rejects_path_traversal(tmp_path):
 def test_unzip_and_get_content_reads_member(tmp_path):
     archive = _make_zip(tmp_path / "ok.zip", {"a.txt": "alpha"})
     assert unzip_and_get_content(str(archive)) == b"alpha"
-    assert (
-        unzip_and_get_content(str(archive), encode=True, encoding="utf-8") == "alpha"
-    )
+    assert unzip_and_get_content(str(archive), encode=True, encoding="utf-8") == "alpha"
 
 
 def test_is_zip_accepts_path_objects(tmp_path):

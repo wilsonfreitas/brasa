@@ -3,7 +3,9 @@
 from brasa.engine.template import MarketDataTemplate
 from brasa.fieldsets import Fieldset
 
-SETTLEMENT_TEMPLATE = "brasa/files/templates/b3/futures/b3-futures-settlement-prices.yaml"
+SETTLEMENT_TEMPLATE = (
+    "brasa/files/templates/b3/futures/b3-futures-settlement-prices.yaml"
+)
 
 
 def test_template_fields_is_a_fieldset_equivalent_to_from_template_fields():

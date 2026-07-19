@@ -19,18 +19,19 @@ def fake_returns_dataset(monkeypatch):
             "returns": [0.01, -0.02],
         }
     )
-    datasets = {"brasa-returns": pads.dataset(table), "brasa-prices": pads.dataset(
-        pyarrow.table(
-            {
-                "refdate": pd.to_datetime([date(2024, 1, 2)]),
-                "symbol": ["PETR4"],
-                "close": [37.5],
-            }
-        )
-    )}
-    monkeypatch.setattr(
-        brasa.queries, "get_dataset", lambda name, **kw: datasets[name]
-    )
+    datasets = {
+        "brasa-returns": pads.dataset(table),
+        "brasa-prices": pads.dataset(
+            pyarrow.table(
+                {
+                    "refdate": pd.to_datetime([date(2024, 1, 2)]),
+                    "symbol": ["PETR4"],
+                    "close": [37.5],
+                }
+            )
+        ),
+    }
+    monkeypatch.setattr(brasa.queries, "get_dataset", lambda name, **kw: datasets[name])
 
 
 def test_get_returns_unknown_symbol_returns_empty_frame(fake_returns_dataset):

@@ -39,7 +39,7 @@ def test_validate_json_empty_file_passes_on_content(tmp_path):
 def test_bvbg086_parser_raises_corrupted_content_on_missing_tag():
     xml = (
         b'<?xml version="1.0"?>'
-        b"<root><doc><exchange xmlns=\"urn:bvmf.052.01.xsd\"></exchange></doc></root>"
+        b'<root><doc><exchange xmlns="urn:bvmf.052.01.xsd"></exchange></doc></root>'
     )
     parser = BVBG086Parser(io.BytesIO(xml))
     with pytest.raises(CorruptedContentException):
