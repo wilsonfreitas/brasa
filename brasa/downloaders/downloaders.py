@@ -2,6 +2,7 @@ import binascii
 import io
 import json
 import logging
+import zipfile
 from contextlib import contextmanager
 from datetime import datetime
 from typing import IO
@@ -12,9 +13,40 @@ import requests
 from bcb import PTAX, sgs
 from bcb.http import _CLIENT
 
-from brasa.engine.exceptions import DownloadException, InvalidContentException
+from brasa.engine.exceptions import (
+    DownloadException,
+    InvalidContentException,
+    NoDataException,
+)
 
 _CLIENT.timeout = 60.0
+
+# Default (connect, read) timeout for HTTP downloads. Read is generous because
+# some B3 endpoints take ~20s to assemble a file before responding (WIL-97).
+_DEFAULT_DOWNLOAD_TIMEOUT = (10, 120)
+
+
+def validate_download_content(content: bytes, fmt: str) -> None:
+    """Validate raw download bytes against the declared format.
+
+    Args:
+        content: The raw response body.
+        fmt: The template's declared download format (e.g. "zip").
+
+    Raises:
+        DownloadException: Empty body, or a non-zip body when ``fmt == "zip"``
+            (both treated as transient and therefore retriable).
+        NoDataException: A valid but empty (0-entry) zip — the source has no
+            data for this request (non-retriable, non-error).
+    """
+    if len(content) == 0:
+        raise DownloadException("empty response body")
+    if fmt == "zip":
+        if not zipfile.is_zipfile(io.BytesIO(content)):
+            raise DownloadException("response body is not a valid zip")
+        with zipfile.ZipFile(io.BytesIO(content)) as zf:
+            if len(zf.namelist()) == 0:
+                raise NoDataException("empty zip: no data for this request")
 
 
 @contextmanager
@@ -29,6 +61,10 @@ def disable_ssl_warnings():
 
 
 class SimpleDownloader:
+    # Config applied by the download helpers after construction (see helpers.py).
+    timeout = None
+    fmt = ""
+
     def __init__(self, url, verify_ssl):
         self.verify_ssl = verify_ssl
         self._url = url
@@ -44,15 +80,19 @@ class SimpleDownloader:
 
     def download(self) -> IO | None:
         with disable_ssl_warnings():
-            res = requests.get(self.url, verify=self.verify_ssl)
+            res = requests.get(
+                self.url,
+                verify=self.verify_ssl,
+                timeout=self.timeout or _DEFAULT_DOWNLOAD_TIMEOUT,
+            )
             self.response = res
 
         if res.status_code != 200:
             msg = f"status_code = {res.status_code} url = {self.url}"
             raise DownloadException(msg)
 
-        temp = io.BytesIO(res.content)
-        return temp
+        validate_download_content(res.content, self.fmt)
+        return io.BytesIO(res.content)
 
 
 class DatetimeDownloader(SimpleDownloader):
@@ -146,7 +186,12 @@ class SettlementPricesDownloader(DatetimeDownloader):
             "dData1": self.refdate.strftime("%d/%m/%Y"),
         }
         with disable_ssl_warnings():
-            res = requests.post(self.url, params=body, verify=self.verify_ssl)
+            res = requests.post(
+                self.url,
+                params=body,
+                verify=self.verify_ssl,
+                timeout=self.timeout or _DEFAULT_DOWNLOAD_TIMEOUT,
+            )
             self.response = res
 
         if res.status_code != 200:
@@ -168,7 +213,10 @@ class B3FilesURLDownloader(DatetimeDownloader):
         )
 
     def download(self) -> IO | None:
-        res = requests.get(self.refdate.strftime(self._url))
+        res = requests.get(
+            self.refdate.strftime(self._url),
+            timeout=self.timeout or _DEFAULT_DOWNLOAD_TIMEOUT,
+        )
         self.response = res
         if res.status_code != 200:
             return None
@@ -231,7 +279,9 @@ class VnaAnbimaURLDownloader(SimpleDownloader):
             "Dt_Ref_Ver": refdate.strftime("%Y%m%d"),
             "Inicio": refdate.strftime("%d/%m/%Y"),
         }
-        res = requests.post(url, params=body)
+        res = requests.post(
+            url, params=body, timeout=self.timeout or _DEFAULT_DOWNLOAD_TIMEOUT
+        )
         if res.status_code != 200:
             msg = f"status_code = {res.status_code} url = {self.url}"
             raise DownloadException(msg)

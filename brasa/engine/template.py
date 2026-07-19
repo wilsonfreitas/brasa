@@ -369,6 +369,8 @@ class MarketDataDownloader:
         self.encoding = downloader.get("encoding", "utf-8")
         self.verify_ssl = downloader.get("verify_ssl", True)
         self.download_delay = downloader.get("download_delay", 0)
+        # Request timeout (None → downloader default); scalar or (connect, read).
+        self.timeout = downloader.get("timeout")
         self.download_function = load_function_by_name(downloader["function"])
         validator: str = downloader.get(
             "validator", "brasa.downloaders.validate_empty_file"
