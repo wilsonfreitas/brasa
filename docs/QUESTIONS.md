@@ -2,6 +2,8 @@
 
 This document contains architectural, refactoring, performance, security, and technical questions found during a full codebase review of the **brasa** project. Each question is independent. Please answer directly below each question to guide improvements.
 
+> **Verification pass (2026-07-19):** every question below was re-checked against the current tree (post WIL-95/WIL-97 merge, commit 71ae5b9). Each question carries a `Verified` note: *Confirmed* (still valid, line refs corrected where drifted), *Resolved* (fixed since/by the latest merges), *Partially outdated*, or *Invalid* (never true).
+
 ---
 
 ## Table of Contents
@@ -25,6 +27,8 @@ This document contains architectural, refactoring, performance, security, and te
 
 `CacheManager` and `DatasetCatalog` use a custom `Singleton` base class (`engine/core.py:52-73`) that stores the instance in `cls.__dict__["__it__"]`. This makes testing painful — tests must hack `CacheManager.__it__ = None` to get a fresh instance, and if a test fails mid-reset the singleton is corrupted for subsequent tests. Have you considered replacing this with a simpler pattern (e.g., module-level instance, `functools.lru_cache`, or dependency injection)?
 
+> **Verified 2026-07-19:** Confirmed — `engine/core.py:52-73` unchanged.
+
 **Answer:**
 
 ---
@@ -32,6 +36,8 @@ This document contains architectural, refactoring, performance, security, and te
 ### Q2. CacheManager is a God class (883 lines)
 
 `CacheManager` manages: file I/O, SQLite metadata persistence, download folder creation, parquet writing, schema registration, checksum verification, and meta cleanup. Have you considered splitting responsibilities into smaller classes (e.g., `CacheMetadataStore` for DB ops, `CacheFileManager` for file I/O, `SchemaRegistry` for schema ops)?
+
+> **Verified 2026-07-19:** Confirmed — now worse: `engine/cache.py` is 998 lines.
 
 **Answer:**
 
@@ -41,6 +47,8 @@ This document contains architectural, refactoring, performance, security, and te
 
 `template.py` uses a module-level `_template_cache` dict that persists for the process lifetime. There's no TTL, no invalidation on file changes, and no scoping to a CacheManager instance. Two CacheManager instances with different `BRASA_DATA_PATH` values could share stale template entries. Is the assumption that `BRASA_DATA_PATH` never changes within a process? Should the cache be attached to the CacheManager instead?
 
+> **Verified 2026-07-19:** Partially outdated — `clear_template_cache()` and `reload_template()` now exist (`template.py:810-832`); still module-level, no mtime-based or path-scoped invalidation.
+
 **Answer:**
 
 ---
@@ -48,6 +56,8 @@ This document contains architectural, refactoring, performance, security, and te
 ### Q4. BrasaDB uses a class-level singleton connection
 
 `queries.py:38-55`: `BrasaDB.connection` is a class variable holding a single DuckDB connection. This is not thread-safe — concurrent calls to `get_connection()` could race on the health check/reconnect. Is BrasaDB intended for single-threaded use only? If so, should this be documented? If not, should we add a threading lock or connection pool?
+
+> **Verified 2026-07-19:** Confirmed — `queries.py:37-55` unchanged.
 
 **Answer:**
 
@@ -57,6 +67,8 @@ This document contains architectural, refactoring, performance, security, and te
 
 `retrieve_template()` is imported directly in many modules. `MarketDataReader.read()` requires a full `CacheMetadata` object. This makes unit testing difficult without a full cache setup. Would you be open to introducing a lightweight interface/Protocol for template retrieval and reader inputs to improve testability?
 
+> **Verified 2026-07-19:** Confirmed — `retrieve_template` imported in 15 modules.
+
 **Answer:**
 
 ---
@@ -64,6 +76,8 @@ This document contains architectural, refactoring, performance, security, and te
 ### Q6. No downloader abstraction / interface
 
 There's only one downloader implementation (`MarketDataDownloader`). There's no Protocol or ABC defining the downloader contract. If you ever need FTP, S3, or custom API downloaders, the current design requires modifying the existing class. Would it be useful to extract a `Downloader` Protocol?
+
+> **Verified 2026-07-19:** Premise outdated — `downloaders/downloaders.py` already has a class hierarchy (`SimpleDownloader` + ~10 subclasses, incl. the new `B3PregaoDownloader` from WIL-97); still no formal Protocol/ABC contract, so the underlying question stands.
 
 **Answer:**
 
@@ -73,6 +87,8 @@ There's only one downloader implementation (`MarketDataDownloader`). There's no 
 
 `pipeline/executor.py`: All steps in a ReaderPipeline share the same `PipelineContext`. Steps can mutate `intermediate_results`, potentially affecting later steps in unexpected ways. Is this shared-state-by-design (for step communication), or would you prefer per-step isolation with explicit data passing?
 
+> **Verified 2026-07-19:** Confirmed — shared `intermediate_results` (`pipeline/etl_context.py:34`); a `PipelineContextProtocol` now exists but state is still shared across steps.
+
 **Answer:**
 
 ---
@@ -80,6 +96,8 @@ There's only one downloader implementation (`MarketDataDownloader`). There's no 
 ### Q8. ETL pipeline has no transaction/checkpoint semantics
 
 `pipeline/etl_executor.py:131-170`: If the output write fails after all transformation steps complete, the computation is lost. For expensive ETL pipelines, would checkpoint/recovery or write-ahead logging be valuable?
+
+> **Verified 2026-07-19:** Confirmed — `etl_executor.py:132` (`execute_and_write`), no checkpointing.
 
 **Answer:**
 
@@ -89,6 +107,8 @@ There's only one downloader implementation (`MarketDataDownloader`). There's no 
 
 The codebase supports both legacy templates (with `reader.function` and `handler`-based fields) and modern templates (with `reader.pipeline` and `type`-based fields). This creates two code paths in `processing.py`, `template.py`, and throughout the reader system. What's the plan for deprecating legacy templates? Is there a timeline?
 
+> **Verified 2026-07-19:** Confirmed — legacy function-based paths still supported (`template.py:106,186`).
+
 **Answer:**
 
 ---
@@ -96,6 +116,8 @@ The codebase supports both legacy templates (with `reader.function` and `handler
 ### Q10. etl.py is 1251 lines of individual handler functions
 
 `etl.py` contains ~30 individual ETL functions (`create_b3_rate_futures`, `create_b3_equities_returns`, etc.) with highly repeated patterns: load dataset → transform → write. This is a God module. Is the plan to migrate all of these to pipeline-based ETL templates? If so, which ones are candidates for near-term migration?
+
+> **Verified 2026-07-19:** Confirmed — `etl.py` is now 1233 lines with 33 top-level functions.
 
 **Answer:**
 
@@ -105,6 +127,8 @@ The codebase supports both legacy templates (with `reader.function` and `handler
 
 `etl.py:896-933`: This function is marked `@deprecated` with a deprecation warning, but it still has the full 30+ line implementation. Is it still called by any template? Can it be removed, or does removing it break backward compatibility?
 
+> **Verified 2026-07-19:** Confirmed — now at `etl.py:878`, still fully implemented behind the deprecation warning.
+
 **Answer:**
 
 ---
@@ -113,6 +137,8 @@ The codebase supports both legacy templates (with `reader.function` and `handler
 
 `core.py:37-49` dynamically loads any Python function by fully-qualified name using `__import__`. This is used for legacy template `function:` fields. If templates ever come from an untrusted source, this is an arbitrary code execution risk. Are templates always trusted (authored by you)? Would a whitelist of allowed modules be prudent?
 
+> **Verified 2026-07-19:** Confirmed — `core.py:37-49`.
+
 **Answer:**
 
 ---
@@ -120,6 +146,8 @@ The codebase supports both legacy templates (with `reader.function` and `handler
 ### Q13. DataLayer enum vs string-based layers
 
 `layers.py` defines a `DataLayer` enum (RAW, INPUT, STAGING, CURATED), but many parts of the codebase use plain strings like `"input"`, `"staging"`. Is the intent to migrate everything to use the enum? Or are strings the preferred interface?
+
+> **Verified 2026-07-19:** Confirmed — `DataLayer` enum coexists with plain strings (e.g. `pipeline_map.py:121`, `doctor.py:1019`).
 
 **Answer:**
 
@@ -133,6 +161,8 @@ The codebase supports both legacy templates (with `reader.function` and `handler
 
 `util.py:54-61`: `zf.extract(name, dest)` is called without validating that extracted paths stay within `dest`. A crafted zip with entries like `../../../etc/passwd` would extract outside the destination directory. This is a known zipfile vulnerability (ZipSlip). Since you download zip files from external B3 URLs, should we add path validation?
 
+> **Verified 2026-07-19:** Confirmed — now at `util.py:188-195`; no path validation.
+
 **Answer:**
 
 ---
@@ -140,6 +170,8 @@ The codebase supports both legacy templates (with `reader.function` and `handler
 ### Q15. Unbounded recursion in `unzip_recursive()`
 
 `util.py:69-77`: This function recursively extracts zip-in-zip files with no depth limit and no cycle detection. A pathological archive (zip containing itself) would cause infinite recursion and crash with a stack overflow. It also leaks temp files (each extracted level goes to `gettempdir()` but is never cleaned). Should we add a max depth and cleanup?
+
+> **Verified 2026-07-19:** Confirmed — now at `util.py:203-212`: no depth limit, temp files not cleaned. Note the newer `generate_checksum_from_zip` does cap nesting at depth 8 (`util.py:137`).
 
 **Answer:**
 
@@ -149,6 +181,8 @@ The codebase supports both legacy templates (with `reader.function` and `handler
 
 `util.py:43` uses `hashlib.md5(pickle.dumps(obj))` for template checksums, and `util.py:47-51` uses MD5 for file checksums. MD5 is cryptographically broken. While this isn't being used for security (just deduplication), is there a reason not to use SHA-256 instead? Also, using `pickle.dumps` for hashing is fragile — pickle output can vary between Python versions.
 
+> **Verified 2026-07-19:** Confirmed — MD5 + `pickle.dumps` now at `util.py:121-133`.
+
 **Answer:**
 
 ---
@@ -156,6 +190,8 @@ The codebase supports both legacy templates (with `reader.function` and `handler
 ### Q17. SQL executed directly from template config in `execute_query()`
 
 `etl.py` has an `execute_query()` function that runs `handler.query` directly against DuckDB without parameterization. The query string comes from template YAML. Similarly, `dependency_resolver.py` executes SQL from dependency configs. Are templates the only source of these queries? Is YAML considered a trusted input?
+
+> **Verified 2026-07-19:** Confirmed — `execute_query` now at `etl.py:1229-1233`; `dependency_resolver.py:95-131` also executes SQL from template configs.
 
 **Answer:**
 
@@ -165,6 +201,8 @@ The codebase supports both legacy templates (with `reader.function` and `handler
 
 `template.py:516-524`: Download retry error messages are logged with full exception strings, which could include API keys embedded in URLs (e.g., `?key=...`). Should exception messages be sanitized before logging?
 
+> **Verified 2026-07-19:** Confirmed — retry logging includes `str(last_err)` (`template.py:537-545`).
+
 **Answer:**
 
 ---
@@ -172,6 +210,8 @@ The codebase supports both legacy templates (with `reader.function` and `handler
 ### Q19. No YAML structure validation on template load
 
 Templates are loaded with `yaml.safe_load()` (good — no arbitrary code exec), but there's no schema validation of the loaded dict structure. A template with typos in field names (e.g., `reader.encodng` instead of `reader.encoding`) is silently ignored. Would adding JSON Schema or Pydantic validation for templates be worthwhile?
+
+> **Verified 2026-07-19:** Confirmed — `yaml.safe_load` at `template.py:674`, no structure validation.
 
 **Answer:**
 
@@ -189,6 +229,8 @@ is_filepath = isinstance(filepath_or_buffer, str) | isinstance(filepath_or_buffe
 
 This uses `|` (bitwise) instead of `or` (logical). It works by accident (True/False are 0/1 in Python), but returns `int` instead of `bool`, which could fail with `is True` comparisons. Is this intentional or a bug?
 
+> **Verified 2026-07-19:** Confirmed — exact match, but the path is `fieldsets/adapters/unified_reader.py:103` (not `readers/`).
+
 **Answer:**
 
 ---
@@ -201,6 +243,8 @@ adapter = PandasAdapter(template.fields, errors="coerce")
 
 `template.fields` is a `TemplateFields` object, but `PandasAdapter.__init__` expects a `Fieldset`. Line 303-305 of the same file shows the correct pattern: `Fieldset.from_template_fields(template.fields, ...)`. Is this a bug? Is this code path ever hit?
 
+> **Verified 2026-07-19:** Confirmed — `readers/helpers.py:397-398` still passes `template.fields` directly; the correct `Fieldset.from_template_fields` pattern is at lines 303-305.
+
 **Answer:**
 
 ---
@@ -208,6 +252,8 @@ adapter = PandasAdapter(template.fields, errors="coerce")
 ### Q22. Dead bytes check in FWF parser
 
 `parsers/fwf.py:140-141`: When opening a file in text mode (`Path.open(encoding=...)`), lines are always strings, never bytes. The `isinstance(line, bytes)` check is dead code. If the branch were ever entered, `_line` would be used before assignment (NameError). Should this be cleaned up?
+
+> **Verified 2026-07-19:** Confirmed, but the failure mode is inverted: in text mode lines are always `str`, so `_line` is *never* assigned and this branch would raise `NameError` if executed (`parsers/fwf.py:139-141`).
 
 **Answer:**
 
@@ -217,6 +263,8 @@ adapter = PandasAdapter(template.fields, errors="coerce")
 
 Several places use `dict(zip(headers, values, strict=False))` (e.g., `parsers/util.py:54`, `parsers/fwf.py`). If there's a column count mismatch between header and data row, extra values are silently dropped. For financial data parsing, is silent truncation acceptable, or should this raise an error?
 
+> **Verified 2026-07-19:** Confirmed — `parsers/util.py:54,78` and `parsers/fwf.py:29,148,160`.
+
 **Answer:**
 
 ---
@@ -224,6 +272,8 @@ Several places use `dict(zip(headers, values, strict=False))` (e.g., `parsers/ut
 ### Q24. Float precision loss in PyArrow decimal casting
 
 `pyarrow_adapter.py:374-395`: Decimal columns are cast through `float64` intermediate, which has only ~15 significant digits. For financial data with high precision (e.g., BRL rates with 8+ decimal places), this can introduce rounding errors. Should this use string-based conversion instead?
+
+> **Verified 2026-07-19:** Confirmed — string→`float64`→decimal at `pyarrow_adapter.py:376-395`.
 
 **Answer:**
 
@@ -233,6 +283,8 @@ Several places use `dict(zip(headers, values, strict=False))` (e.g., `parsers/ut
 
 `etl.py:1026-1035`: `ix.idxmax()` on a boolean Series returns the index of the **first** True value, not the maximum. The function name says "ffill" (forward-fill), but the implementation takes the first non-NaN value, not the last. Is this the intended behavior?
 
+> **Verified 2026-07-19:** Confirmed — now at `etl.py:1008-1017`.
+
 **Answer:**
 
 ---
@@ -240,6 +292,8 @@ Several places use `dict(zip(headers, values, strict=False))` (e.g., `parsers/ut
 ### Q26. No validation that `start <= end` in query functions
 
 `queries.py:385-387`: `get_returns()` and `get_prices()` accept `start` and `end` datetime parameters but never check that `start <= end`. Reversed dates silently return empty results. Should this validate and warn/error?
+
+> **Verified 2026-07-19:** Confirmed — `queries.py:378-387`, no `start <= end` validation.
 
 **Answer:**
 
@@ -249,6 +303,8 @@ Several places use `dict(zip(headers, values, strict=False))` (e.g., `parsers/ut
 
 Multiple functions (`get_returns`, `get_prices`, `_get_indexes_names`, `_get_equity_symbols`) call `pyarrow.compute.max(tb.column(...))` or `df.index[0]` without checking if the table/DataFrame is empty. These would return `null` or raise `IndexError`. Should there be guards for empty datasets?
 
+> **Verified 2026-07-19:** Confirmed — e.g. unguarded `pyarrow.compute.max` at `queries.py:923`.
+
 **Answer:**
 
 ---
@@ -257,6 +313,8 @@ Multiple functions (`get_returns`, `get_prices`, `_get_indexes_names`, `_get_equ
 
 `queries.py:789-792`: `describe()` reads `schema.metadata[b"pandas"]` from parquet files. If a parquet file was created without pandas metadata (e.g., by PyArrow directly), this raises `KeyError`. Is this a realistic scenario in brasa?
 
+> **Verified 2026-07-19:** Confirmed — `queries.py:787-792`.
+
 **Answer:**
 
 ---
@@ -264,6 +322,8 @@ Multiple functions (`get_returns`, `get_prices`, `_get_indexes_names`, `_get_equ
 ### Q29. Partition column type conflicts not detected
 
 `queries.py:583-591`: When adding partition columns to a schema, the code only checks if the column name exists, not if the type matches. A partition column with `string` type in the schema but `date` in the partitioning would cause silent type coercion. Is this a concern?
+
+> **Verified 2026-07-19:** Confirmed — `queries.py:584-590`.
 
 **Answer:**
 
@@ -277,6 +337,8 @@ Multiple functions (`get_returns`, `get_prices`, `_get_indexes_names`, `_get_equ
 
 `dependency_resolver.py:49-51`: `_get_latest_mtime()` calls `rglob("*")` to find the most recent file modification time in a directory. For datasets with thousands of parquet partitions, this is a full directory scan on every staleness check. Would a marker file (written on dataset update) be more efficient?
 
+> **Verified 2026-07-19:** Confirmed — `dependency_resolver.py:49`.
+
 **Answer:**
 
 ---
@@ -284,6 +346,8 @@ Multiple functions (`get_returns`, `get_prices`, `_get_indexes_names`, `_get_equ
 ### Q31. Template lookup does `rglob()` on every cache miss
 
 `template.py:730-749`: `retrieve_template()` calls `rglob(f"{template_name}.yaml")` to find template files when not in cache. With 112+ templates across nested directories, this is a full filesystem scan per miss. Should we build an in-memory index at startup?
+
+> **Verified 2026-07-19:** Mechanism changed — `_discover_templates()` (`template.py:765-777`) builds a full name→path map via `rglob` per root, but the map is rebuilt on every cache miss, so the concern stands.
 
 **Answer:**
 
@@ -293,6 +357,8 @@ Multiple functions (`get_returns`, `get_prices`, `_get_indexes_names`, `_get_equ
 
 `queries.py:858-998`: Each call to `get_symbols("equity")`, `get_symbols("etf")`, etc. loads the underlying PyArrow dataset from scratch. In CLI batch operations, the same dataset may be loaded dozens of times. Should there be a session-level dataset cache?
 
+> **Verified 2026-07-19:** Confirmed — no session-level dataset cache.
+
 **Answer:**
 
 ---
@@ -300,6 +366,8 @@ Multiple functions (`get_returns`, `get_prices`, `_get_indexes_names`, `_get_equ
 ### Q33. Pandas conversions when PyArrow would suffice
 
 `etl.py` and `queries.py` frequently do `.to_table().to_pandas()` when operations could stay in PyArrow. For example, `etl.py:558-564` loads a PyArrow table, converts to pandas just to get unique symbols, then discards the DataFrame. Should we prefer staying in PyArrow until the final output?
+
+> **Verified 2026-07-19:** Confirmed — 10 `.to_table().to_pandas()` call sites across `etl.py`/`queries.py`.
 
 **Answer:**
 
@@ -309,6 +377,8 @@ Multiple functions (`get_returns`, `get_prices`, `_get_indexes_names`, `_get_equ
 
 `queries.py:186-196`: `create_all_views()` calls `_create_single_view()` for each dataset, which internally globs for `**/*.parquet` files. With 42 datasets and potentially thousands of partitions each, this is expensive. Could we cache the file list or use PyArrow dataset discovery?
 
+> **Verified 2026-07-19:** Confirmed — glob at `queries.py:125-133`.
+
 **Answer:**
 
 ---
@@ -316,6 +386,8 @@ Multiple functions (`get_returns`, `get_prices`, `_get_indexes_names`, `_get_equ
 ### Q35. SQLite lock contention in multi-threaded download
 
 `api.py:427-428`: `process_marketdata()` uses `max_workers=4` with a `db_lock` for SQLite writes. SQLite has limited concurrent write support, so 4 workers competing for one lock degrades to near-serial execution for the DB portion. Is multi-threaded download actually faster than sequential, given the lock? Would batching writes help?
+
+> **Verified 2026-07-19:** Confirmed — `api.py:580` (`max_workers=4`), `api.py:645` (`db_lock`).
 
 **Answer:**
 
@@ -325,6 +397,8 @@ Multiple functions (`get_returns`, `get_prices`, `_get_indexes_names`, `_get_equ
 
 `processing.py:125-140`: `_get_schema_from_fields()` creates a PyArrow schema from template fields on every call, with no caching. For templates processed repeatedly (multi-date downloads), this is redundant. Should schemas be cached per template?
 
+> **Verified 2026-07-19:** Confirmed — `processing.py:125-140`, no caching.
+
 **Answer:**
 
 ---
@@ -332,6 +406,8 @@ Multiple functions (`get_returns`, `get_prices`, `_get_indexes_names`, `_get_equ
 ### Q37. `apply(lambda ...)` instead of vectorized operations
 
 `etl.py:670,943,952` use `df[col].apply(lambda x: re.sub(...))` for regex operations. Pandas `.str.replace()` is vectorized and significantly faster. Same pattern appears with other string operations. Should these be migrated to vectorized ops?
+
+> **Verified 2026-07-19:** Confirmed — now at `etl.py:489,925,934,938`.
 
 **Answer:**
 
@@ -345,6 +421,8 @@ Multiple functions (`get_returns`, `get_prices`, `_get_indexes_names`, `_get_equ
 
 `queries.py:283`: `list_tables()` catches all exceptions and returns an empty list. The caller can't distinguish "no tables exist" from "database is corrupt/unreachable." Should this at minimum log the error?
 
+> **Verified 2026-07-19:** Confirmed — `queries.py:283-284`: bare `except` returns `[]`, nothing logged.
+
 **Answer:**
 
 ---
@@ -352,6 +430,8 @@ Multiple functions (`get_returns`, `get_prices`, `_get_indexes_names`, `_get_equ
 ### Q39. `_create_single_view()` truncates error messages to 100 chars
 
 `queries.py:149`: Error messages are truncated with `str(e)[:100]`. For complex SQL errors or file path issues, this loses critical diagnostic information. Is there a reason for this truncation?
+
+> **Verified 2026-07-19:** Confirmed — `queries.py:150`.
 
 **Answer:**
 
@@ -361,6 +441,8 @@ Multiple functions (`get_returns`, `get_prices`, `_get_indexes_names`, `_get_equ
 
 `processing.py:125-140`: If schema generation fails, this catches all exceptions and returns `None`. Data is then written without schema validation. No warning is logged. Should this at least emit a warning?
 
+> **Verified 2026-07-19:** Confirmed — `processing.py:136-140`, silent `return None`.
+
 **Answer:**
 
 ---
@@ -368,6 +450,8 @@ Multiple functions (`get_returns`, `get_prices`, `_get_indexes_names`, `_get_equ
 ### Q41. Generic `raise Exception("empty zip file")` in download.py
 
 `download.py:47`: `raise Exception(...)` instead of a specific exception type. This bypasses the custom exception hierarchy (`DownloadException`, `InvalidContentException`). Should this use a specific exception?
+
+> **Verified 2026-07-19:** **Resolved by WIL-97** — now raises typed `NoDataException` (`engine/download.py:53`), classified non-retriable and mapped to the new `NO_DATA` status.
 
 **Answer:**
 
@@ -385,6 +469,8 @@ Multiple functions (`get_returns`, `get_prices`, `_get_indexes_names`, `_get_equ
 
 There's no consistent strategy. Should all functions raise on invalid input? Or all return empty/None? What's the intended contract?
 
+> **Verified 2026-07-19:** Confirmed — inconsistency unchanged.
+
 **Answer:**
 
 ---
@@ -392,6 +478,8 @@ There's no consistent strategy. Should all functions raise on invalid input? Or 
 ### Q43. No jitter in exponential backoff for retries
 
 `template.py:421-545`: The retry system uses exponential backoff but with no jitter. If multiple downloads fail simultaneously (e.g., during a batch of 100 dates against B3), all retry at the same time, causing a thundering herd. Should we add random jitter?
+
+> **Verified 2026-07-19:** Confirmed — still no jitter; backoff multiplier is configurable (`retry_backoff`, default 1.0 = constant delay, `template.py:390`).
 
 **Answer:**
 
@@ -401,6 +489,8 @@ There's no consistent strategy. Should all functions raise on invalid input? Or 
 
 `template.py`: When all retry attempts fail, the exception is raised but retry metadata (which attempts were tried, which status codes were seen) is lost. The caller only gets the final exception. Should retry info be attached to the exception?
 
+> **Verified 2026-07-19:** Partially resolved by WIL-97 — intermediate failed attempts are now persisted to `download_trials` via `on_attempt_failure` (`download.py:121-157`); the final raised exception still carries no attempt metadata.
+
 **Answer:**
 
 ---
@@ -408,6 +498,8 @@ There's no consistent strategy. Should all functions raise on invalid input? Or 
 ### Q45. `clean_meta_db_folder()` is a no-op
 
 `cache.py:528`: This method contains only `pass` with a comment about partitioned datasets. It's called from `remove_meta()`. Is this intentionally a placeholder for future logic, or should it be removed?
+
+> **Verified 2026-07-19:** Confirmed — still `pass` (`cache.py:531-538`), now with a docstring explaining why per-entry cleanup is impossible for partitioned datasets.
 
 **Answer:**
 
@@ -421,6 +513,8 @@ There's no consistent strategy. Should all functions raise on invalid input? Or 
 
 `queries.py:343-371`: A fully commented-out function left in the file with no explanation. Was this superseded by `get_returns()`? Should it be removed (it's in git history if needed)?
 
+> **Verified 2026-07-19:** Confirmed — still at `queries.py:343-371`.
+
 **Answer:**
 
 ---
@@ -428,6 +522,8 @@ There's no consistent strategy. Should all functions raise on invalid input? Or 
 ### Q47. `json_convert_to_object()` regex matches too broadly
 
 `core.py:30-33`: The date regex `\d{4}-\d{2}-\d{2}` matches any dict value that looks like a date string and converts it to `datetime`. This could unintentionally convert non-date strings like version numbers (`"2024-01-01"` as a version). Is this used only for deserialization of known-date fields, or could it hit arbitrary dict values?
+
+> **Verified 2026-07-19:** Confirmed — `core.py:25-33`; regex is now anchored with `$` and accepts full ISO timestamps, but still applies to every dict value.
 
 **Answer:**
 
@@ -437,6 +533,8 @@ There's no consistent strategy. Should all functions raise on invalid input? Or 
 
 `util.py:18-23`: Uses `warnings.filterwarnings("default")` on exit, which resets to default rather than restoring the previous state. If user code had custom warning filters, they'd be lost. Is this context manager actually used? Should it use `warnings.catch_warnings()` instead?
 
+> **Verified 2026-07-19:** Confirmed — `util.py:21-26`.
+
 **Answer:**
 
 ---
@@ -444,6 +542,8 @@ There's no consistent strategy. Should all functions raise on invalid input? Or 
 ### Q49. Hardcoded field/schema definitions in etl.py
 
 Throughout `etl.py` (lines 156-160, 290-296, 370-376, etc.), field names and schemas are hardcoded in Python functions rather than in template YAML configs. This means schema changes require code changes, not just config changes. Is this a temporary state while migrating to pipeline-based ETL, or is it the intended pattern?
+
+> **Verified 2026-07-19:** Confirmed — hardcoded schemas remain throughout `etl.py`.
 
 **Answer:**
 
@@ -453,6 +553,8 @@ Throughout `etl.py` (lines 156-160, 290-296, 370-376, etc.), field names and sch
 
 At least 4 test files (`test_cache.py`, `test_download_status.py`, `test_invalid_downloads.py`, `test_download_retry.py`) independently create `temp_cache` fixtures that reset the CacheManager singleton. This should be centralized in `conftest.py`. Is there a reason these are duplicated?
 
+> **Verified 2026-07-19:** Confirmed — 4 files still define their own `temp_cache`; none in `conftest.py`.
+
 **Answer:**
 
 ---
@@ -460,6 +562,8 @@ At least 4 test files (`test_cache.py`, `test_download_status.py`, `test_invalid
 ### Q51. `queries.py` exports differ between `__all__` and `__init__.py`
 
 `queries.py:15-34` has `__all__` including `get_template_dataset`, `get_template_layer`, `get_template_partitioning`, `get_template_schema` — but `__init__.py` doesn't re-export all of these. Is this intentional? Which is the canonical public API?
+
+> **Verified 2026-07-19:** Confirmed — `get_template_*` in `queries.__all__` (`queries.py:25-28`) but not re-exported by `__init__.py`.
 
 **Answer:**
 
@@ -469,6 +573,8 @@ At least 4 test files (`test_cache.py`, `test_download_status.py`, `test_invalid
 
 `cli.py:852,878`: `add_argument("-o", "--output", nargs=1, default="display")` — with `nargs=1`, the parsed value is always a list, but the default `"display"` is a string. The code then has `args.output[0] if isinstance(args.output, list) else args.output` to handle both. Should this just use `nargs=None` (default) or `type=str`?
 
+> **Verified 2026-07-19:** Confirmed — now at `cli.py:293-300`.
+
 **Answer:**
 
 ---
@@ -476,6 +582,8 @@ At least 4 test files (`test_cache.py`, `test_download_status.py`, `test_invalid
 ### Q53. `sys.exit(1)` in utility function
 
 `cli.py:704-718`: `_parse_download_args()` calls `sys.exit(1)` directly on invalid input. This makes the function untestable and unusable outside CLI context. Should it raise an exception instead?
+
+> **Verified 2026-07-19:** Confirmed — `_parse_download_args` now at `cli.py:836`, still calls `sys.exit(1)` (`cli.py:847`).
 
 **Answer:**
 
@@ -489,6 +597,8 @@ At least 4 test files (`test_cache.py`, `test_download_status.py`, `test_invalid
 
 The entire query module — `BrasaDB`, `create_all_views`, `get_prices`, `get_returns`, `get_symbols`, `describe_dataset`, etc. — has no unit tests. This is the primary public API for data consumers. What's the barrier to testing this? Is it the DuckDB dependency? Would in-memory DuckDB fixtures help?
 
+> **Verified 2026-07-19:** Confirmed — still no test file for `queries.py` (now 1002 lines).
+
 **Answer:**
 
 ---
@@ -496,6 +606,8 @@ The entire query module — `BrasaDB`, `create_all_views`, `get_prices`, `get_re
 ### Q55. Zero test coverage for etl.py (1251 lines)
 
 All 30+ ETL handler functions are untested. Some have complex logic (join, filter, aggregate, pivot). Since these transform financial data, correctness is critical. What's the testing strategy here?
+
+> **Verified 2026-07-19:** Confirmed — no tests for `etl.py`.
 
 **Answer:**
 
@@ -505,6 +617,8 @@ All 30+ ETL handler functions are untested. Some have complex logic (join, filte
 
 These modules do the actual data parsing — the most critical correctness path. No tests exist. What's the barrier?
 
+> **Verified 2026-07-19:** Confirmed — no tests for `readers/helpers.py` / `readers/csv.py`.
+
 **Answer:**
 
 ---
@@ -513,6 +627,8 @@ These modules do the actual data parsing — the most critical correctness path.
 
 All parsers in `parsers/b3/` (bvbg028, bvbg086, cdi, indic, stock_indexes, futures_settlement_prices, cotahist), `parsers/anbima/` (debentures, tpf), `parsers/td.py`, `parsers/fwf.py`, `parsers/util.py` are untested (except bvbg087). Are these parsers considered stable/legacy, or would tests catch real issues?
 
+> **Verified 2026-07-19:** Mostly confirmed — bvbg086 and FWF templates have some coverage (`test_bvbg086_reader.py`, `test_bmf_bovespa_fwf_templates.py`); the rest remain untested.
+
 **Answer:**
 
 ---
@@ -520,6 +636,8 @@ All parsers in `parsers/b3/` (bvbg028, bvbg086, cdi, indic, stock_indexes, futur
 ### Q58. Integration tests depend on real B3 APIs with `time.sleep(5)`
 
 `test_downloads.py`: 4 integration tests make real HTTP calls to B3/BMFBOVESPA endpoints with hardcoded `time.sleep(5)` between them. These are slow, flaky, and depend on external availability. Would you accept test doubles (VCR cassettes, `responses` library, or mock fixtures) for the default test suite, with real integration tests as a separate opt-in suite?
+
+> **Verified 2026-07-19:** Confirmed — `test_downloads.py:46-78`.
 
 **Answer:**
 
@@ -536,6 +654,8 @@ These tests are skipped due to broken external endpoints or missing resources:
 
 Should these be removed, converted to mock-based tests, or kept as documentation of known issues?
 
+> **Verified 2026-07-19:** Confirmed — now 8 `@pytest.mark.skip` (5 in `test_templates.py`, 3 in `test_downloads.py`).
+
 **Answer:**
 
 ---
@@ -543,6 +663,8 @@ Should these be removed, converted to mock-based tests, or kept as documentation
 ### Q60. Over-mocking in large test files
 
 `test_dependency_graph.py` (1763 lines) and `test_orchestrator.py` (785 lines) use `MagicMock` for nearly all objects. If `MarketDataTemplate` changes its constructor signature, these tests won't catch the breakage. Are you comfortable with this level of mocking, or should some tests use real objects?
+
+> **Verified 2026-07-19:** Confirmed — files have grown (`test_dependency_graph.py` 1778 lines, `test_orchestrator.py` 931) and remain mock-heavy.
 
 **Answer:**
 
@@ -552,6 +674,8 @@ Should these be removed, converted to mock-based tests, or kept as documentation
 
 There's no coverage tool configured. Adding `pytest-cov` with a minimum threshold (even 40-50% initially) would prevent coverage regressions. Would you like this added?
 
+> **Verified 2026-07-19:** Confirmed — no pytest-cov configured.
+
 **Answer:**
 
 ---
@@ -559,6 +683,8 @@ There's no coverage tool configured. Adding `pytest-cov` with a minimum threshol
 ### Q62. No test timeouts configured
 
 Tests that make HTTP calls or read large files could hang indefinitely. `pytest-timeout` is not configured. Should we add a default timeout (e.g., 30s per test)?
+
+> **Verified 2026-07-19:** Confirmed — no pytest-timeout; note WIL-97 added HTTP `(connect, read)` timeouts to downloaders, which reduces (but doesn't eliminate) hang risk.
 
 **Answer:**
 
@@ -568,6 +694,8 @@ Tests that make HTTP calls or read large files could hang indefinitely. `pytest-
 
 Test data (CSV samples, parquet fixtures, zip files) is scattered or generated inline. `test_bvbg087_parser.py` references `tests/data/IR210423.zip` but there's no organized `tests/data/` or `tests/fixtures/` directory. Would a structured test data directory be useful?
 
+> **Verified 2026-07-19:** Partially outdated — a top-level `data/` directory with organized fixtures exists (ANBIMA/B3 samples, zips); there is still no `tests/data/`.
+
 **Answer:**
 
 ---
@@ -575,6 +703,8 @@ Test data (CSV samples, parquet fixtures, zip files) is scattered or generated i
 ### Q64. Pipeline steps have zero unit tests
 
 All pipeline steps in `engine/pipeline/steps/` (b3_steps, column_steps, custom_steps, etl_steps, html_steps, io_steps, transform_steps, shared_transforms) — totaling ~2000 lines — have no dedicated unit tests. `test_pipeline.py` (159 lines) only tests registry/construction. Should steps have individual unit tests?
+
+> **Verified 2026-07-19:** Partially outdated — pipeline tests now total ~1475 lines incl. `test_pipeline_steps_multi.py` (430) and `test_sql_export_step.py` (192); many step modules still lack dedicated unit tests.
 
 **Answer:**
 
@@ -593,6 +723,8 @@ Templates use three formats:
 
 This creates parser ambiguity and maintenance burden. Is there a migration plan to standardize on format 2?
 
+> **Verified 2026-07-19:** Confirmed but shrinking — only 4 non-legacy templates still use `handler:` blocks.
+
 **Answer:**
 
 ---
@@ -600,6 +732,8 @@ This creates parser ambiguity and maintenance burden. Is there a migration plan 
 ### Q66. No template schema validation
 
 A template with `reader.encodng: "utf-8"` (typo) silently uses the default encoding. There's no validation that template YAML contains only known keys with valid values. Would JSON Schema or Pydantic validation be worth the effort?
+
+> **Verified 2026-07-19:** Confirmed — no schema validation (same underlying issue as Q19).
 
 **Answer:**
 
@@ -613,6 +747,8 @@ A template with `reader.encodng: "utf-8"` (typo) silently uses the default encod
 
 No test validates naming conventions. Should naming be standardized? Does the CLI handle all formats correctly?
 
+> **Verified 2026-07-19:** Confirmed — PascalCase templates still discoverable outside `legacy/` (e.g. `CenariosCurva.yaml`).
+
 **Answer:**
 
 ---
@@ -620,6 +756,8 @@ No test validates naming conventions. Should naming be standardized? Does the CL
 ### Q68. Template ID validation happens after full load
 
 `template.py:755-759`: The template ID is checked against the filename after the entire YAML is parsed and the `MarketDataTemplate` is constructed. For large templates, this is wasted work. Should we validate the ID first (read just the `id:` field)?
+
+> **Verified 2026-07-19:** Confirmed — validation still happens after full construction, now at `template.py:864-866`.
 
 **Answer:**
 
@@ -629,6 +767,8 @@ No test validates naming conventions. Should naming be standardized? Does the CL
 
 There are 6 legacy templates that use `etl.function: brasa.etl.create_*` patterns. Are these actively used in production? Can they be migrated to pipeline-based ETL? Is there a compatibility risk in removing them?
 
+> **Verified 2026-07-19:** Outdated — `b3/companies/legacy/` no longer exists; legacy templates now live in `templates/legacy/`, which is excluded from discovery (`template.py:778`).
+
 **Answer:**
 
 ---
@@ -637,6 +777,8 @@ There are 6 legacy templates that use `etl.function: brasa.etl.create_*` pattern
 
 `template.py:644-649`: ETL templates default to STAGING, others to INPUT. This is hardcoded with no documentation in the method. Should this be made explicit (required field in template YAML) rather than implicit?
 
+> **Verified 2026-07-19:** Confirmed — still implicit, now via `DEFAULT_LAYER`/`DEFAULT_ETL_LAYER` constants (`layers.py:77-80`, applied at `template.py:687-701`).
+
 **Answer:**
 
 ---
@@ -644,6 +786,8 @@ There are 6 legacy templates that use `etl.function: brasa.etl.create_*` pattern
 ### Q71. `writer` section is auto-created if missing
 
 `template.py:635-638`: If a template has no `writer:` section, a default `MarketDataWriter()` is created. What defaults does this use? Could the defaults be wrong for specific templates? Should `writer` be required?
+
+> **Verified 2026-07-19:** Confirmed — auto-created at `template.py:687-690`; defaults: no partitioning, dataset = template id, layer = INPUT (STAGING for ETL).
 
 **Answer:**
 
@@ -657,6 +801,8 @@ There are 6 legacy templates that use `etl.function: brasa.etl.create_*` pattern
 
 `__init__.py` exports 38 symbols, including internal engine classes like `ExecutionPlan`, `ExecutionStep`, `MigrationReport`, `OrchestratorReport`. Are all of these intended for end-user consumption? Could the public API be smaller (just the core workflow functions)?
 
+> **Verified 2026-07-19:** Confirmed — 38 exports incl. `ExecutionPlan`, `ExecutionStep`, `MigrationReport`, `OrchestratorReport`.
+
 **Answer:**
 
 ---
@@ -664,6 +810,8 @@ There are 6 legacy templates that use `etl.function: brasa.etl.create_*` pattern
 ### Q73. `get_symbols()` returns `[]` for unknown type
 
 `queries.py:966-998`: If you call `get_symbols("invalid_type")`, it silently returns an empty list. The function also accepts `**kwargs` but silently ignores unknown keys. Should unknown types raise `ValueError`?
+
+> **Verified 2026-07-19:** Confirmed — `queries.py:970-1002`.
 
 **Answer:**
 
@@ -673,6 +821,8 @@ There are 6 legacy templates that use `etl.function: brasa.etl.create_*` pattern
 
 `queries.py:800-856`: No check that `df` is non-empty, `name` is a valid identifier, `format` is supported, or `schema` matches the DataFrame. Should there be validation?
 
+> **Verified 2026-07-19:** Confirmed — `queries.py:800-856`.
+
 **Answer:**
 
 ---
@@ -680,6 +830,8 @@ There are 6 legacy templates that use `etl.function: brasa.etl.create_*` pattern
 ### Q75. `describe()` function assumes pandas metadata
 
 `queries.py:789-792`: `describe()` reads `schema.metadata[b"pandas"]` — fails if parquet was written without pandas metadata. The newer `describe_dataset()` function seems more robust. Should `describe()` be deprecated in favor of `describe_dataset()`?
+
+> **Verified 2026-07-19:** Confirmed — `describe()` at `queries.py:787` unchanged; `describe_dataset()` at 679.
 
 **Answer:**
 
@@ -689,6 +841,8 @@ There are 6 legacy templates that use `etl.function: brasa.etl.create_*` pattern
 
 Throughout `queries.py` and `etl.py`, datetime defaults use naive datetimes (`datetime(2000, 1, 1)`, `datetime.today()`). If data is stored with UTC timezone, naive datetime filters would cause silent mismatches. Is all data timezone-naive by design?
 
+> **Verified 2026-07-19:** Confirmed — naive datetimes at `queries.py:380-382,419-421`.
+
 **Answer:**
 
 ---
@@ -697,6 +851,8 @@ Throughout `queries.py` and `etl.py`, datetime defaults use naive datetimes (`da
 
 Does the CLI consistently return non-zero exit codes on failure? For scripting/CI integration, this matters. Some paths use `sys.exit(1)`, others may not.
 
+> **Verified 2026-07-19:** Still open — many paths call `sys.exit(1)`, but no systematic audit of CLI exit codes exists.
+
 **Answer:**
 
 ---
@@ -704,6 +860,8 @@ Does the CLI consistently return non-zero exit codes on failure? For scripting/C
 ### Q78. CLI graphviz rendering with unvalidated output path
 
 `cli.py:1133-1143`: The `output_file` from CLI args is passed to `subprocess.run(["dot", ... "-o", output_file])`. While list-form subprocess prevents shell injection, the file path itself is not validated. Could a user accidentally overwrite an important file?
+
+> **Verified 2026-07-19:** Confirmed — now at `cli.py:1352`; output path still unvalidated.
 
 **Answer:**
 
@@ -717,6 +875,8 @@ Does the CLI consistently return non-zero exit codes on failure? For scripting/C
 
 The downloaders use HTTP requests, but `requests` is not listed in `pyproject.toml` dependencies. Is it pulled in transitively through `python-bcb`? Should it be an explicit dependency?
 
+> **Verified 2026-07-19:** **Invalid** — `requests>=2.28.0` has been in `pyproject.toml` since 2026-03-30 (commit 11b47c6), before this review was written.
+
 **Answer:**
 
 ---
@@ -724,6 +884,8 @@ The downloaders use HTTP requests, but `requests` is not listed in `pyproject.to
 ### Q80. Heavy dependency tree for a data library
 
 The project requires: lxml, pandas, numpy, xlrd, pyarrow, duckdb, beautifulsoup4, html5lib, rich, openpyxl, python-bcb, progressbar2, bizdays, regexparser, pyyaml. That's 15 direct dependencies. Are all of them needed for core functionality? Could some (e.g., `rich`, `progressbar2`, `openpyxl`, `html5lib`) be optional extras?
+
+> **Verified 2026-07-19:** Confirmed — 16 direct dependencies.
 
 **Answer:**
 
@@ -733,6 +895,8 @@ The project requires: lxml, pandas, numpy, xlrd, pyarrow, duckdb, beautifulsoup4
 
 The project is at `0.0.1` — is this intended for public release on PyPI? Are there API stability guarantees? The version suggests pre-alpha, but the feature set is extensive.
 
+> **Verified 2026-07-19:** Confirmed — still 0.0.1.
+
 **Answer:**
 
 ---
@@ -740,6 +904,8 @@ The project is at `0.0.1` — is this intended for public release on PyPI? Are t
 ### Q82. Python 3.10+ target but no CI configuration visible
 
 `pyproject.toml` targets `py310+`, but there's no CI configuration (GitHub Actions, etc.) in the repo. Is CI run elsewhere? Should we add a basic CI workflow for automated testing?
+
+> **Verified 2026-07-19:** Confirmed — no `.github/workflows/`.
 
 **Answer:**
 
@@ -749,6 +915,8 @@ The project is at `0.0.1` — is this intended for public release on PyPI? Are t
 
 pytest 8.x has been stable for over a year. Is there a known incompatibility, or can this constraint be relaxed?
 
+> **Verified 2026-07-19:** **Resolved** — the constraint is now `pytest>=7.1.3` with no `<8` cap.
+
 **Answer:**
 
 ---
@@ -756,6 +924,8 @@ pytest 8.x has been stable for over a year. Is there a known incompatibility, or
 ### Q84. No `py.typed` marker for type checking consumers
 
 If downstream projects want to type-check code using brasa, they need a `py.typed` marker file. Is this on the roadmap?
+
+> **Verified 2026-07-19:** Confirmed — no `brasa/py.typed`.
 
 **Answer:**
 
@@ -769,6 +939,8 @@ If downstream projects want to type-check code using brasa, they need a `py.type
 
 `util.py:54-61`: `zf = zipfile.ZipFile(fname)` ... `zf.close()` — should use `with` statement. Same issue with `unzip_and_get_content()` at line 80-90.
 
+> **Verified 2026-07-19:** Confirmed — now at `util.py:188-195` and `util.py:214-225`.
+
 **Answer:**
 
 ---
@@ -776,6 +948,8 @@ If downstream projects want to type-check code using brasa, they need a `py.type
 ### Q86. `_is_zip()` checks `isinstance(fname, str)` before `zipfile.is_zipfile()`
 
 `util.py:64-66`: `_is_zip()` rejects Path objects. Since `zipfile.is_zipfile()` accepts both `str` and `Path`, the isinstance check unnecessarily restricts the input type.
+
+> **Verified 2026-07-19:** Confirmed — now at `util.py:198-200`.
 
 **Answer:**
 
@@ -785,6 +959,8 @@ If downstream projects want to type-check code using brasa, they need a `py.type
 
 Some functions accept `str`, others `Path`, some both. There's no consistent convention. Should we standardize on `Path` internally and accept `str | Path` at public API boundaries?
 
+> **Verified 2026-07-19:** Confirmed — mixed `str`/`Path` conventions remain.
+
 **Answer:**
 
 ---
@@ -792,6 +968,8 @@ Some functions accept `str`, others `Path`, some both. There's no consistent con
 ### Q88. `download.py:47` raises bare `Exception`
 
 `raise Exception("Market data download failed: empty zip file")` should be `raise InvalidContentException(...)` or similar, to fit the exception hierarchy.
+
+> **Verified 2026-07-19:** **Resolved by WIL-97** — same fix as Q41: typed `NoDataException` at `engine/download.py:53`.
 
 **Answer:**
 
