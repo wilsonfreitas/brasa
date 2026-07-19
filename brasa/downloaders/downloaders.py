@@ -1,14 +1,10 @@
 import binascii
 import io
 import json
-import logging
 import zipfile
 from contextlib import contextmanager
-from datetime import datetime
 from typing import IO
 
-import bizdays
-import pytz
 import requests
 from bcb import PTAX, sgs
 from bcb.http import _CLIENT
@@ -277,42 +273,3 @@ class BCBCurrencyDownloader:
         return io.BytesIO(text.encode("utf8"))
 
 
-class VnaAnbimaURLDownloader(SimpleDownloader):
-    calendar = bizdays.Calendar.load("ANBIMA")
-
-    def download(self, refdate=None):
-        refdate = refdate or self.get_refdate()
-        logging.info("refdate %s", refdate)
-        url = "https://www.anbima.com.br/informacoes/vna/vna.asp"
-        body = {
-            "Data": refdate.strftime("%d%m%Y"),
-            "escolha": "1",
-            "Idioma": "PT",
-            "saida": "txt",
-            "Dt_Ref_Ver": refdate.strftime("%Y%m%d"),
-            "Inicio": refdate.strftime("%d/%m/%Y"),
-        }
-        res = requests.post(
-            url, params=body, timeout=self.timeout or _DEFAULT_DOWNLOAD_TIMEOUT
-        )
-        if res.status_code != 200:
-            msg = f"status_code = {res.status_code} url = {self.url}"
-            raise DownloadException(msg)
-        status_code = res.status_code
-        temp_file = io.BytesIO(res.content)
-        f_fname = self.get_fname(None, refdate)
-        logging.info(
-            "Returned from download %s %s %s %s",
-            f_fname,
-            temp_file,
-            status_code,
-            refdate,
-        )
-        return f_fname, temp_file, status_code, refdate
-
-    def get_refdate(self):
-        offset = self.attrs.get("offset", 0)
-        refdate = self.calendar.offset(self.now, offset)
-        refdate = datetime(refdate.year, refdate.month, refdate.day)
-        refdate = pytz.timezone("America/Sao_Paulo").localize(refdate)
-        return refdate
