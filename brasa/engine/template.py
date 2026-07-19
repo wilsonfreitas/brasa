@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import random
 import time
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -544,7 +545,8 @@ class MarketDataDownloader:
                     str(last_err),
                 )
                 if current_delay > 0:
-                    time.sleep(current_delay)
+                    # jitter avoids thundering-herd retries across a batch
+                    time.sleep(current_delay * random.uniform(0.5, 1.5))
                 current_delay *= self.retry_backoff
                 continue
 

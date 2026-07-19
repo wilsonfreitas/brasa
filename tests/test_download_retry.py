@@ -292,8 +292,36 @@ class TestRetryBackoff:
         fp, resp, info = dl.download()
         assert call_count == 4  # 3 failures + 1 success
 
-        # Sleep calls: 1.0 (attempt 1), 2.0 (attempt 2), 4.0 (attempt 3)
+        # Sleep calls: 1.0 (attempt 1), 2.0 (attempt 2), 4.0 (attempt 3),
+        # each scaled by a jitter factor in [0.5, 1.5) (audit Q2.4).
         assert mock_sleep.call_count == 3
+        delays = [call.args[0] for call in mock_sleep.call_args_list]
+        for delay, base in zip(delays, [1.0, 2.0, 4.0], strict=True):
+            assert 0.5 * base <= delay <= 1.5 * base
+        # jitter must actually vary the delays: the odds of all three
+        # landing exactly on the base sequence are effectively zero
+        assert delays != [1.0, 2.0, 4.0]
+
+    @patch("brasa.engine.template.random.uniform", return_value=1.0)
+    @patch("brasa.engine.template.time.sleep")
+    def test_backoff_base_sequence_without_jitter(self, mock_sleep, _uniform):
+        dl = _make_downloader(
+            retry_attempts=3,
+            retry_delay=1.0,
+            retry_backoff=2.0,
+        )
+        call_count = 0
+
+        def _side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 3:
+                raise DownloadException("status_code = 503")
+            return io.BytesIO(b"data"), {"ok": True}
+
+        dl.download_function = _side_effect
+
+        dl.download()
         delays = [call.args[0] for call in mock_sleep.call_args_list]
         assert delays == [1.0, 2.0, 4.0]
 
