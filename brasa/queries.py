@@ -7,10 +7,11 @@ import pandas as pd
 import pyarrow
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
-from bizdays import Calendar, get_option, set_option
+from bizdays import Calendar
 
 from .engine import CacheManager, DatasetCatalog, DatasetInfo, retrieve_template
 from .fieldsets import PyArrowAdapter
+from .util import bizdays_mode
 
 __all__ = [
     "BrasaDB",
@@ -407,11 +408,9 @@ def get_returns(
     if df.empty:
         return df
 
-    bizdays_mode = get_option("mode")
-    set_option("mode", "pandas")
-    cal = Calendar.load(calendar)
-    idx = cal.seq(df.index[0], df.index[-1])
-    set_option("mode", bizdays_mode)
+    with bizdays_mode("pandas"):
+        cal = Calendar.load(calendar)
+        idx = cal.seq(df.index[0], df.index[-1])
     df = df.reindex(idx)
     return df
 
@@ -449,11 +448,9 @@ def get_prices(
     if df.empty:
         return df
 
-    bizdays_mode = get_option("mode")
-    set_option("mode", "pandas")
-    cal = Calendar.load(calendar)
-    idx = cal.seq(df.index[0], df.index[-1])
-    set_option("mode", bizdays_mode)
+    with bizdays_mode("pandas"):
+        cal = Calendar.load(calendar)
+        idx = cal.seq(df.index[0], df.index[-1])
     df = df.reindex(idx)
     return df
 

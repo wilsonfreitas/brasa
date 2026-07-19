@@ -7,12 +7,13 @@ import pyarrow
 import pyarrow.acero as ac
 import pyarrow.compute as pc
 from bcb import PTAX
-from bizdays import Calendar, get_option, set_option
+from bizdays import Calendar
 
 from .engine import MarketDataETL
 from .engine.pipeline.steps.shared_transforms import interp_ff
 from .parsers.b3.futures_settlement_prices import maturity2date
 from .queries import BrasaDB, get_dataset, write_dataset
+from .util import bizdays_mode
 
 
 def create_b3_rate_futures(handler: MarketDataETL):
@@ -1169,10 +1170,8 @@ def create_adjusted_prices(handler: MarketDataETL):
     )
     all_data = rets.set_index(["refdate", "symbol"]).join(ohlc).reset_index()
 
-    bizdays_mode = get_option("mode")
-    set_option("mode", "pandas")
-    cal = Calendar.load(handler.calendar)
-    set_option("mode", bizdays_mode)
+    with bizdays_mode("pandas"):
+        cal = Calendar.load(handler.calendar)
 
     def _(all_data):
         all_data = all_data.set_index("refdate").sort_index(ascending=False)

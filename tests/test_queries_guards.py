@@ -59,6 +59,21 @@ def test_get_prices_rejects_reversed_date_range(fake_returns_dataset):
         )
 
 
+def test_get_returns_restores_bizdays_mode_on_error(fake_returns_dataset, monkeypatch):
+    """Regression for audit Q7.5: the bizdays 'mode' option must be restored
+    even when calendar loading fails mid-block."""
+    from bizdays import get_option
+
+    def boom(name):
+        raise RuntimeError("no such calendar")
+
+    monkeypatch.setattr(brasa.queries.Calendar, "load", boom)
+    mode_before = get_option("mode")
+    with pytest.raises(RuntimeError):
+        brasa.queries.get_returns("PETR4")
+    assert get_option("mode") == mode_before
+
+
 def test_get_returns_known_symbol_still_works(fake_returns_dataset):
     df = brasa.queries.get_returns("PETR4")
     assert list(df.columns) == ["PETR4"]

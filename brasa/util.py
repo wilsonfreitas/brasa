@@ -6,16 +6,31 @@ import pickle
 import re
 import warnings
 import zipfile
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 from tempfile import gettempdir
 from typing import IO, Any
 
-from bizdays import Calendar, set_option
+from bizdays import Calendar, get_option, set_option
 from regexparser import TextParser
 
 set_option("mode.datetype", "datetime")
+
+
+@contextmanager
+def bizdays_mode(mode: str):
+    """Temporarily switch the bizdays global "mode" option.
+
+    Restores the previous mode on exit, even if the block raises.
+    """
+    previous = get_option("mode")
+    set_option("mode", mode)
+    try:
+        yield
+    finally:
+        set_option("mode", previous)
 
 
 class SuppressUserWarnings:
