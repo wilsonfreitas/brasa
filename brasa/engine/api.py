@@ -391,10 +391,12 @@ def download_marketdata(
 
     template = retrieve_template(template_name)
 
+    # Always remove `since` so it can never leak into template download kwargs
+    # (it is only meaningful under smart update). See WIL-96.
+    since = kwargs.pop("since", None)
+
     # Smart update: resolve kwargs from cache
     if smart_update:
-        # Extract since if provided (comes from CLI --since)
-        since = kwargs.pop("since", None)
         resolved = resolve_update(template_name, calendar=calendar, since=since)
         if resolved.strategy == UpdateStrategy.NO_AUTO_UPDATE:
             # Return empty report
