@@ -228,7 +228,8 @@ class B3FilesURLDownloader(DatetimeDownloader):
         )
         self.response = res
         if res.status_code != 200:
-            return None
+            msg = f"status_code = {res.status_code} url = {self.refdate.strftime(self._url)}"
+            raise DownloadException(msg)
         self._response1 = res.json()
         return super().download()
 
@@ -244,8 +245,10 @@ class BCBSGSDownloader:
                 start=self.args["start"],
                 end=self.args["end"],
             )
-        except Exception:
-            return None
+        except Exception as exc:
+            raise DownloadException(
+                f"SGS download failed for code {self.args['code']}: {exc}"
+            ) from exc
         temp = io.BytesIO(bytes(text, "utf8"))
         return temp
 
@@ -267,9 +270,9 @@ class BCBCurrencyDownloader:
                 )
                 .collect()
             )
-        except Exception:
-            return None
+        except Exception as exc:
+            raise DownloadException(
+                f"PTAX download failed for currency {self.args['currency']}: {exc}"
+            ) from exc
         text = df.to_json(orient="records", date_format="iso")
         return io.BytesIO(text.encode("utf8"))
-
-
