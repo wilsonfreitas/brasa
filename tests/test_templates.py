@@ -16,14 +16,14 @@ from brasa.fieldsets import Fieldset
 
 
 def test_load_template():
-    tpl = MarketDataTemplate("brasa/files/templates/legacy/bcb-sgs-data.yaml")
+    tpl = MarketDataTemplate("brasa/files/templates/bcb/bcb-sgs-data.yaml")
 
     assert tpl.has_downloader
     assert tpl.has_reader
 
 
 def test_template_load_fields():
-    tpl = MarketDataTemplate("brasa/files/templates/legacy/bcb-sgs-data.yaml")
+    tpl = MarketDataTemplate("brasa/files/templates/bcb/bcb-sgs-data.yaml")
 
     assert tpl.has_downloader
     assert tpl.has_reader
