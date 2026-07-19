@@ -137,3 +137,25 @@ class TestCLIDownloadIntegration:
         args = parser.parse_args(["download", "--plan", "daily-update.yaml"])
         assert args.plan == "daily-update.yaml"
         assert args.template == []
+
+
+# ---------------------------------------------------------------------------
+# WIL-96 — `since` must never leak into template download kwargs
+# ---------------------------------------------------------------------------
+
+from brasa.engine.api import download_marketdata  # noqa: E402
+from brasa.engine.reporting import Verbosity  # noqa: E402
+
+
+@patch("brasa.engine.api._run_acquisition")
+@patch("brasa.engine.dependency_resolver.resolve_dependencies", return_value={})
+def test_since_never_leaks_to_acquisition_without_smart_update(_mock_deps, mock_run):
+    download_marketdata(
+        "b3-bvbg028",
+        smart_update=False,
+        verbosity=Verbosity.QUIET,
+        since="2026-07-01",
+    )
+    # _run_acquisition receives kwargs as its 3rd positional arg
+    passed_kwargs = mock_run.call_args[0][2]
+    assert "since" not in passed_kwargs

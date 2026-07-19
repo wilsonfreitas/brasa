@@ -485,3 +485,22 @@ class TestRetryTelemetryInResult:
         assert result.retry_attempts_used is None
         assert result.retry_attempts_configured is None
         assert result.retry_success_on_attempt is None
+
+
+# ---------------------------------------------------------------------------
+# WIL-97 — NoDataException is non-retriable
+# ---------------------------------------------------------------------------
+
+from brasa.engine.exceptions import NoDataException  # noqa: E402
+
+
+def test_no_data_is_not_retriable():
+    assert (
+        _is_retriable_failure(
+            NoDataException("empty"),
+            status_code=None,
+            retry_on_status_codes=[500],
+            retry_on_download_exception=True,
+        )
+        is False
+    )

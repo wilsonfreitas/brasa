@@ -139,6 +139,25 @@ brasa download --plan daily-b3.yaml
 brasa download --plan daily-b3.yaml --arg refdate=@2026-01
 ```
 
+#### Flag precedence with `--plan`
+
+Under `--plan`, top-level CLI flags override the plan's YAML defaults for that
+run — a download plan behaves like the direct-template path, just with YAML
+syntax sugar:
+
+- `--force` / `--update` — when passed, apply to every task (one-directional:
+  they can only turn the behavior on; omit them to use the plan's YAML).
+- `--calendar NAME` — overrides `defaults.calendar` for date resolution.
+- `--arg KEY=VALUE` — a global override applied **only** to tasks whose template
+  declares `KEY`; it wins over that task's YAML value. If no task in the plan
+  accepts `KEY`, the run fails fast with an error (rather than silently doing
+  nothing).
+- `--since DATE` — requires smart update: either `--update`, or a plan that sets
+  `smart_update: true`. Passing `--since` when no task will run smart update
+  fails fast with an error.
+- `--update` and `--arg refdate=...` are mutually exclusive (smart update
+  auto-resolves dates), in both the plan and direct-template paths.
+
 **Download multiple templates at once:**
 
 ```bash

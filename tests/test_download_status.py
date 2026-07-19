@@ -551,3 +551,23 @@ class TestRetryStatusIntegration:
         # Last status is PASSED and files exist -> should NOT download
         result = _should_download(temp_cache, meta2, force=False)
         assert result is False
+
+
+# ---------------------------------------------------------------------------
+# WIL-97 — NO_DATA status
+# ---------------------------------------------------------------------------
+
+from brasa.engine.exceptions import NoDataException  # noqa: E402
+
+
+def test_no_data_status_members_and_glyphs():
+    assert DownloadAttemptStatus.NO_DATA.value == "no_data"
+    assert DownloadAttemptStatus.NO_DATA.symbol == "N"
+    assert DownloadAttemptStatus.NO_DATA.color == "yellow"
+    assert TaskStatus.NO_DATA.symbol == "N"
+
+
+def test_no_data_exception_maps_to_no_data_status():
+    status = map_exception_to_download_status(NoDataException("empty"))
+    assert status == DownloadAttemptStatus.NO_DATA
+    assert to_task_status(status) == TaskStatus.NO_DATA

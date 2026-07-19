@@ -142,8 +142,10 @@ class TestDownloadCommand:
         assert args.arg is None
 
     def test_download_calendar_default(self) -> None:
+        # Default is None so an explicit --calendar is distinguishable from the
+        # default; the command body falls back to "B3" (WIL-95).
         args = cli.parser.parse_args(["download", "tpl"])
-        assert args.calendar == "B3"
+        assert args.calendar is None
 
     def test_download_no_date_flag(self) -> None:
         """The old -d/--date flag should no longer exist."""
@@ -312,3 +314,54 @@ class TestDoctorDownloadsCategory:
 
         args = cli.parser.parse_args(["doctor", "--category", "downloads"])
         assert args.category == ["downloads"]
+
+
+# ---------------------------------------------------------------------------
+# WIL-95 — download CLI/plan flag wiring
+# ---------------------------------------------------------------------------
+
+from unittest.mock import Mock, patch  # noqa: E402
+
+from brasa.cli import main, parser  # noqa: E402
+
+
+def test_download_calendar_default_is_none():
+    args = parser.parse_args(["download", "b3-bvbg028"])
+    assert args.calendar is None
+
+
+def test_direct_since_without_update_errors(capsys):
+    with (
+        patch("sys.argv", ["brasa", "download", "b3-bvbg028", "--since", "2026-07-01"]),
+        pytest.raises(SystemExit) as exc,
+    ):
+        main()
+    assert exc.value.code == 1
+    assert "--since requires --update" in capsys.readouterr().err
+
+
+@patch("brasa.engine.download_plan.execute_download_plan")
+@patch("brasa.engine.download_plan.DownloadPlan.from_file")
+def test_plan_forwards_flags(mock_from_file, mock_exec, tmp_path):
+    plan_file = tmp_path / "p.yaml"
+    plan_file.write_text("name: p\ntasks:\n  - template: b3-bvbg028\n")
+    mock_from_file.return_value = Mock(validate=Mock(return_value=[]))
+    argv = [
+        "brasa",
+        "download",
+        "--plan",
+        str(plan_file),
+        "--force",
+        "--update",
+        "--since",
+        "2026-07-01",
+        "--calendar",
+        "ANBIMA",
+    ]
+    with patch("sys.argv", argv):
+        main()
+    kw = mock_exec.call_args[1]
+    assert kw["force_override"] is True
+    assert kw["smart_update_override"] is True
+    assert kw["since"] == "2026-07-01"
+    assert kw["calendar_override"] == "ANBIMA"

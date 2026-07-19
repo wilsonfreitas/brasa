@@ -183,8 +183,8 @@ parser_download.add_argument(
 )
 parser_download.add_argument(
     "--calendar",
-    help="specify calendar to be used for creating date range",
-    default="B3",
+    help="specify calendar to be used for creating date range (default: B3)",
+    default=None,
     choices=["B3", "ANBIMA"],
 )
 parser_download.add_argument(
@@ -865,6 +865,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915
         report_file = getattr(args, "report", None)
         smart_update = getattr(args, "update", False)
         since = getattr(args, "since", None)
+        calendar = args.calendar or "B3"
 
         if plan_file and templates:
             print(
@@ -879,6 +880,18 @@ def main() -> None:  # noqa: PLR0912, PLR0915
             )
             sys.exit(1)
 
+        # Parse --arg with the effective calendar (both paths use this).
+        download_kwargs = _parse_download_args(args.arg, calendar)
+
+        # Mutual exclusivity applies to BOTH paths: smart update auto-resolves
+        # dates, so an explicit refdate contradicts it.
+        if smart_update and "refdate" in download_kwargs:
+            print(
+                "Error: --update and --arg refdate=... are mutually exclusive",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
         if plan_file:
             from .engine.download_plan import DownloadPlan, execute_download_plan
 
@@ -888,21 +901,27 @@ def main() -> None:  # noqa: PLR0912, PLR0915
                 for err in errors:
                     print(f"Error: {err}", file=sys.stderr)
                 sys.exit(1)
-            download_kwargs = _parse_download_args(args.arg, args.calendar)
             refdate_override = download_kwargs.pop("refdate", None)
-            execute_download_plan(
-                plan,
-                refdate_override=refdate_override,
-                verbosity=verbosity,
-                report_file=report_file,
-            )
+            try:
+                execute_download_plan(
+                    plan,
+                    refdate_override=refdate_override,
+                    force_override=args.force,
+                    smart_update_override=(True if args.update else None),
+                    since=since,
+                    extra_args=download_kwargs,
+                    calendar_override=args.calendar,
+                    verbosity=verbosity,
+                    report_file=report_file,
+                )
+            except ValueError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                sys.exit(1)
         else:
-            download_kwargs = _parse_download_args(args.arg, args.calendar)
-
-            # Mutual exclusivity: --update vs --arg refdate=...
-            if smart_update and "refdate" in download_kwargs:
+            # Direct-template path.
+            if since and not smart_update:
                 print(
-                    "Error: --update and --arg refdate=... are mutually exclusive",
+                    "Error: --since requires --update",
                     file=sys.stderr,
                 )
                 sys.exit(1)
@@ -910,14 +929,14 @@ def main() -> None:  # noqa: PLR0912, PLR0915
             if verbosity != Verbosity.QUIET:
                 print(
                     "Status legend: .(passed) F(failed) E(error) "
-                    "S(skipped) D(duplicated) I(invalid) C(corrupted)"
+                    "S(skipped) D(duplicated) I(invalid) C(corrupted) N(no-data)"
                 )
             for template in templates:
                 download_marketdata(
                     template,
                     force=args.force,
                     smart_update=smart_update,
-                    calendar=args.calendar,
+                    calendar=calendar,
                     verbosity=verbosity,
                     report_file=report_file,
                     **({"since": since} if since else {}),

@@ -2,6 +2,7 @@ from .downloaders import DatetimeDownloader, FormatURLDownloader, SimpleDownload
 from .helpers import (
     b3_files_download,
     b3_paged_url_encoded_download,
+    b3_pregao_download,
     b3_url_encoded_download,
     bcb_currency_download,
     bcb_sgs_download,
@@ -20,6 +21,7 @@ __all__ = [
     "SimpleDownloader",
     "b3_files_download",
     "b3_paged_url_encoded_download",
+    "b3_pregao_download",
     "b3_url_encoded_download",
     "bcb_currency_download",
     "bcb_sgs_download",

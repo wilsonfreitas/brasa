@@ -492,7 +492,14 @@ class TestImplicitDependencyReports:
         dep_report = _make_task_report("dep-etl", [TaskStatus.PASSED])
 
         def fake_execute_task(
-            task, resolved_args, verbosity, plan_calendar="B3", plan_smart_update=False
+            task,
+            resolved_args,
+            verbosity,
+            plan_calendar="B3",
+            *,
+            smart_update=False,
+            force=False,
+            since=None,
         ):
             task_report = _make_task_report(task.template, [TaskStatus.PASSED])
             task_report.dependency_reports = [dep_report]
@@ -516,7 +523,14 @@ class TestImplicitDependencyReports:
         dep_report = _make_task_report("dep-etl", [TaskStatus.PASSED])
 
         def fake_execute_task(
-            task, resolved_args, verbosity, plan_calendar="B3", plan_smart_update=False
+            task,
+            resolved_args,
+            verbosity,
+            plan_calendar="B3",
+            *,
+            smart_update=False,
+            force=False,
+            since=None,
         ):
             task_report = _make_task_report(task.template, [TaskStatus.PASSED])
             task_report.dependency_reports = [dep_report]
@@ -609,3 +623,151 @@ class TestCliDownloadPlanArgs:
         ns = self._parse(["download", "--plan", "p.yaml", "--arg", "refdate=@2026-01"])
         assert ns.plan == "p.yaml"
         assert ns.arg == ["refdate=@2026-01"]
+
+
+# ---------------------------------------------------------------------------
+# WIL-95 — CLI/plan flag consistency
+# ---------------------------------------------------------------------------
+
+from brasa.engine.download_plan import (  # noqa: E402
+    _template_accepts_arg,
+    _template_requires_refdate,
+)
+
+
+def test_template_accepts_arg_true_for_declared_arg():
+    # bcb-sgs declares code/start/end in downloader.args
+    assert _template_accepts_arg("bcb-sgs", "code") is True
+
+
+def test_template_accepts_arg_false_for_undeclared_arg():
+    assert _template_accepts_arg("bcb-sgs", "no_such_arg") is False
+
+
+def test_template_accepts_arg_false_for_unknown_template():
+    assert _template_accepts_arg("no-such-template", "code") is False
+
+
+def test_template_requires_refdate_delegates():
+    # b3-bvbg028 declares refdate; bcb-sgs does not
+    assert _template_requires_refdate("b3-bvbg028") is True
+    assert _template_requires_refdate("bcb-sgs") is False
+
+
+from brasa.engine.download_plan import (  # noqa: E402
+    DownloadPlanDefaults,
+    DownloadPlanTask,
+    _effective_force,
+    _effective_smart_update,
+)
+
+
+def test_effective_smart_update_task_override_wins():
+    task = DownloadPlanTask(template="b3-bvbg028", smart_update=False)
+    assert _effective_smart_update(task, True, True) is False
+
+
+def test_effective_smart_update_cli_override_beats_plan_default():
+    task = DownloadPlanTask(template="b3-bvbg028")  # smart_update None
+    assert _effective_smart_update(task, True, False) is True
+
+
+def test_effective_smart_update_falls_back_to_plan_default():
+    task = DownloadPlanTask(template="b3-bvbg028")
+    assert _effective_smart_update(task, None, True) is True
+
+
+def test_effective_force_cli_or_task():
+    assert _effective_force(DownloadPlanTask(template="x", force=True), False) is True
+    assert _effective_force(DownloadPlanTask(template="x", force=False), True) is True
+    assert _effective_force(DownloadPlanTask(template="x", force=False), False) is False
+
+
+def _plan_one(template="b3-bvbg028", **defaults):
+    return DownloadPlan(
+        name="t",
+        description="",
+        defaults=DownloadPlanDefaults(**defaults),
+        tasks=[DownloadPlanTask(template=template)],
+    )
+
+
+@patch("brasa.engine.api.download_marketdata")
+def test_force_override_applies_to_all_tasks(mock_dl):
+    execute_download_plan(_plan_one(), force_override=True, verbosity=Verbosity.QUIET)
+    assert mock_dl.call_args[1]["force"] is True
+
+
+@patch("brasa.engine.api.download_marketdata")
+def test_smart_update_override_applies_to_all_tasks(mock_dl):
+    execute_download_plan(
+        _plan_one(), smart_update_override=True, verbosity=Verbosity.QUIET
+    )
+    assert mock_dl.call_args[1]["smart_update"] is True
+
+
+@patch("brasa.engine.api.download_marketdata")
+def test_since_passed_only_when_smart_update(mock_dl):
+    execute_download_plan(
+        _plan_one(smart_update=True),
+        since="2026-07-01",
+        verbosity=Verbosity.QUIET,
+    )
+    assert mock_dl.call_args[1]["since"] == "2026-07-01"
+
+
+@patch("brasa.engine.api.download_marketdata")
+def test_calendar_override_used(mock_dl):
+    execute_download_plan(
+        _plan_one(calendar="B3"),
+        calendar_override="ANBIMA",
+        verbosity=Verbosity.QUIET,
+    )
+    assert mock_dl.call_args[1]["calendar"] == "ANBIMA"
+
+
+@patch("brasa.engine.api.download_marketdata")
+def test_extra_arg_injected_only_into_declaring_template(mock_dl):
+    plan = DownloadPlan(
+        name="t",
+        description="",
+        defaults=DownloadPlanDefaults(),
+        tasks=[
+            DownloadPlanTask(template="bcb-sgs", args={"code": [1]}),
+            DownloadPlanTask(template="b3-bvbg028"),
+        ],
+    )
+    execute_download_plan(plan, extra_args={"code": [11]}, verbosity=Verbosity.QUIET)
+    calls = {c.args[0]: c.kwargs for c in mock_dl.call_args_list}
+    assert calls["bcb-sgs"]["code"] == [11]  # CLI overrides YAML
+    assert "code" not in calls["b3-bvbg028"]  # not injected
+
+
+@patch("brasa.engine.api.download_marketdata")
+def test_since_without_any_smart_update_fails_fast(mock_dl):
+    with pytest.raises(ValueError, match="since needs smart update"):
+        execute_download_plan(
+            _plan_one(smart_update=False),
+            since="2026-07-01",
+            verbosity=Verbosity.QUIET,
+        )
+    mock_dl.assert_not_called()
+
+
+@patch("brasa.engine.api.download_marketdata")
+def test_unknown_extra_arg_fails_fast(mock_dl):
+    with pytest.raises(ValueError, match="not accepted by any task"):
+        execute_download_plan(
+            _plan_one(),
+            extra_args={"no_such_arg": "x"},
+            verbosity=Verbosity.QUIET,
+        )
+    mock_dl.assert_not_called()
+
+
+def test_plan_success_true_when_only_no_data():
+    # A NO_DATA result is neither success nor failure — the plan stays green.
+    report = _make_task_report("t", [TaskStatus.NO_DATA])
+    plan_report = DownloadPlanReport(plan_name="p")
+    plan_report.task_reports["t"] = report
+    assert plan_report.success is True
