@@ -1143,12 +1143,14 @@ def _parse_refdate_partition(dir_name: str) -> date | None:
 def check_date_gaps(  # noqa: PLR0912
     since_days: int = 30,
     template_filter: list[str] | None = None,
+    calendar_name: str = "B3",
 ) -> list[Issue]:
-    """Find time-series datasets with missing B3 business days.
+    """Find time-series datasets with missing business days.
 
     Args:
         since_days: Only look back this many calendar days from today.
         template_filter: If given, only check datasets produced by these templates.
+        calendar_name: bizdays calendar name (default ``B3``).
 
     Returns:
         List of issues found.
@@ -1156,7 +1158,7 @@ def check_date_gaps(  # noqa: PLR0912
     try:
         from bizdays import Calendar
 
-        cal = Calendar.load("B3")
+        Calendar.load(calendar_name)
     except Exception:
         return []
 
@@ -1216,17 +1218,16 @@ def check_date_gaps(  # noqa: PLR0912
             if first_date >= last_date:
                 continue
 
-            # Get B3 business days in range
+            present_dates = set(refdate_values)
             try:
-                biz_days: list[date] = [
-                    d.date() if hasattr(d, "date") else d
-                    for d in cal.seq(first_date, last_date)
-                ]
+                missing_days = _calendar_completeness_gaps(
+                    present_dates,
+                    calendar_name,
+                    first_date.isoformat(),
+                    last_date.isoformat(),
+                )
             except Exception:
                 continue
-
-            present_dates = set(refdate_values)
-            missing_days = [d for d in biz_days if d not in present_dates]
 
             if not missing_days:
                 continue
@@ -1237,7 +1238,8 @@ def check_date_gaps(  # noqa: PLR0912
                     code="date-gaps",
                     severity="error",
                     description=(
-                        f"{dataset_dir.name}: {len(missing_days)} missing B3 business day(s) "
+                        f"{dataset_dir.name}: {len(missing_days)} missing "
+                        f"{calendar_name} business day(s) "
                         f"between {first_date} and {last_date}"
                     ),
                     details=[str(d) for d in missing_days],
@@ -1649,18 +1651,22 @@ def check_validations(
 
 
 def check_download_refdate_gaps(
-    template_filter: list[str] | None, calendar_name: str
+    template_filter: list[str] | None,
+    calendar_name: str,
+    since_days: int = 30,
 ) -> list[Issue]:
     """Verify downloaded refdate coverage for named templates (from meta).
 
     Reads ``cache_metadata`` for each template in ``template_filter``, collects
     the ``refdate`` values from ``download_args`` (skipping invalid downloads),
-    and compares the observed min->max window against the given business
+    and compares the observed window — clamped to the last ``since_days``
+    calendar days, mirroring ``check_date_gaps`` — against the given business
     calendar. Silent when no ``template_filter`` is given.
 
     Args:
         template_filter: Templates to check. ``None``/empty yields no issues.
         calendar_name: bizdays calendar name (e.g. ``B3``).
+        since_days: Only look back this many calendar days from today.
 
     Returns:
         Up to two issues per template: a ``download-refdate-gaps`` error and a
@@ -1669,8 +1675,6 @@ def check_download_refdate_gaps(
     """
     if not template_filter:
         return []
-
-    from bizdays import Calendar
 
     placeholders = ",".join("?" * len(template_filter))
     with closing(_get_meta_connection()) as conn, conn:
@@ -1698,9 +1702,8 @@ def check_download_refdate_gaps(
         except ValueError:
             continue
 
-    cal = Calendar.load(calendar_name)
-    cov_lo = _as_date(cal.startdate)
-    cov_hi = _as_date(cal.enddate)
+    today = date.today()
+    cutoff_date = date.fromordinal(today.toordinal() - since_days)
 
     issues: list[Issue] = []
     for template in template_filter:
@@ -1720,7 +1723,14 @@ def check_download_refdate_gaps(
             )
             continue
 
-        missing = _calendar_completeness_gaps(dates, calendar_name, None, None)
+        first_date = max(min(dates), cutoff_date)
+        last_date = max(dates)
+        if first_date > last_date:
+            continue  # no downloads inside the since window
+
+        missing = _calendar_completeness_gaps(
+            dates, calendar_name, first_date.isoformat(), last_date.isoformat()
+        )
         if missing:
             issues.append(
                 Issue(
@@ -1736,9 +1746,11 @@ def check_download_refdate_gaps(
                 )
             )
 
-        extra = sorted(
-            d for d in dates if cov_lo <= d <= cov_hi and not cal.isbizday(d)
-        )
+        extra = [
+            d
+            for d in _unexpected_observations(dates, calendar_name)
+            if first_date <= d <= last_date
+        ]
         if extra:
             issues.append(
                 Issue(
@@ -1790,15 +1802,16 @@ def run_doctor(
         categories: Optional list of category keys to restrict checks.
             Valid values: "raw", "db", "meta", "templates", "gaps",
             "validations", "downloads". If None, all checks are run.
-        template_filter: Restrict date-gap and stale-etl checks to these
-            template IDs.
-        since_days: For date-gap checks, only look back this many days.
+        template_filter: Restrict the date-gaps, stale-etl, missing-etl-source
+            and downloads checks to these template IDs.
+        since_days: For the gaps and downloads categories, only look back this
+            many days.
         validations_config: Path to a validations YAML file. Required for the
             "validations" category. If None and "validations" is explicitly
             requested, a ValueError is raised; if None during a broad run, the
             validation checks are skipped with an informational note.
-        calendar_name: Business calendar for the downloads category's
-            refdate-coverage check (default "B3").
+        calendar_name: Business calendar for the gaps and downloads
+            categories (default "B3").
 
     Returns:
         DoctorReport aggregating all issues found.
@@ -1850,9 +1863,11 @@ def run_doctor(
         "invalid-downloads": check_invalid_downloads,
         "stale-etl": lambda: check_stale_etl(template_filter),
         "missing-etl-source": lambda: check_missing_etl_source(template_filter),
-        "date-gaps": lambda: check_date_gaps(since_days, template_filter),
+        "date-gaps": lambda: check_date_gaps(
+            since_days, template_filter, calendar_name
+        ),
         "download-refdate-gaps": lambda: check_download_refdate_gaps(
-            template_filter, calendar_name
+            template_filter, calendar_name, since_days
         ),
     }
     if validations_config is not None:

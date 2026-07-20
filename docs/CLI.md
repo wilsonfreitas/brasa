@@ -26,6 +26,8 @@ brasa <command> [options]
 | Templates | `deps` | Show upstream/downstream dependencies |
 | Templates | `plan` | Show execution plan for a template |
 | Templates | `graph` | Export dependency graph (DOT, ASCII, PNG, SVG, PDF) |
+| Templates | `map` | Global dependency-ordered staleness report |
+| Templates | `list-templates` | List discovered templates and their source |
 | Datasets | `head` | Preview first N rows of a dataset |
 | Datasets | `list-datasets` | List all registered datasets |
 | Datasets | `describe-dataset` | Show schema and metadata for a dataset |
@@ -36,6 +38,7 @@ brasa <command> [options]
 | Database | `list-tables` | List available DuckDB tables/views |
 | Database | `query` | Execute SQL queries against the database |
 | Maintenance | `doctor` | Diagnose cache health issues |
+| Maintenance | `cache drop` | Drop a cache entry by meta id |
 
 ---
 
@@ -635,7 +638,7 @@ Note: Table names contain dots and hyphens, so they must be double-quoted in SQL
 
 ### `doctor`
 
-Diagnoses cache health: finds orphan files, missing data, schema drift, and date gaps.
+Diagnoses cache health: orphan files, missing data, schema drift, metadata errors, stale ETL outputs, date gaps, download coverage, and declarative data validations.
 
 ```bash
 brasa doctor [options]
@@ -647,9 +650,13 @@ brasa doctor [options]
 |------|-------------|
 | `--fix` | Apply all auto-fixable issues |
 | `--yes` | Skip confirmation prompt when using `--fix` |
-| `--category {raw,db,meta,templates,gaps,validations}` | Run only specific check categories |
-| `--template TEMPLATE [...]` | Restrict gap/stale checks to specific templates |
-| `--since DAYS` | Look back N days for gap checks (default: 30) |
+| `--category {raw,db,meta,templates,gaps,validations,downloads}` | Run only specific check categories |
+| `--template TEMPLATE [...]` | Restrict the `date-gaps`, `stale-etl`, `missing-etl-source` and `downloads` checks to specific templates |
+| `--calendar NAME` | Business calendar for the `gaps` and `downloads` categories (default: B3) |
+| `--since DAYS` | For the `gaps` and `downloads` categories, look back N days (default: 30) |
+| `--validations-file FILE` | Path to a validations YAML file (required for the `validations` category) |
+
+**Exit codes:** `0` when no error-severity issue is found, `1` when at least one is, `2` on usage errors (e.g. `--category validations` without `--validations-file`). Suitable for CI.
 
 **Use Cases:**
 
@@ -667,25 +674,40 @@ brasa doctor --category gaps --since 7
 brasa doctor --template b3-cotahist-daily b3-bvbg087
 
 # Check declarative completeness rules (e.g. CDI in staging.bcb-sgs)
-brasa doctor --category validations
+brasa doctor --category validations --validations-file validations.yaml
 ```
 
-#### Downloads category — refdate coverage
+The `validations` category always requires `--validations-file` — there is no packaged default rules file. On a broad run (no `--category`), validations are silently skipped with an info note when no file is given.
 
-Verify that every business day was actually **downloaded** for templates that
-download per `refdate` (reads the cache metadata, not `db/`):
+#### Coverage categories — `gaps` vs `downloads`
+
+Both categories answer "which business days are missing?", but they inspect different pipeline stages, so together they localize a failure:
+
+| | `gaps` | `downloads` |
+|---|---|---|
+| Inspects | `refdate=` partitions in `db/` (processed parquet) | `refdate` download args in the cache metadata |
+| Answers | was the day **processed**? | was the day **downloaded**? |
+| Scope | all refdate-partitioned datasets; `--template` optional | silent unless `--template` is given |
+
+A day missing from `downloads` means acquisition failed — re-download it. A day present in `downloads` but missing from `gaps` means processing failed — re-process it. Both categories honor `--calendar` and `--since`, so their reports can be compared directly.
 
 ```bash
-brasa doctor --category downloads --template b3-trades-intraday --calendar B3
+brasa doctor --category gaps downloads --template b3-trades-intraday --calendar B3
 ```
 
-- Requires `--template` (one or more); without it the category is silent.
-- `--calendar` selects the business calendar (default `B3`), applied to every
-  named template.
-- Reports, per template: missing business days in the observed range
-  (`error`), downloaded dates that are not business days of the calendar
-  (`info`, helps spot a wrong `--calendar`), or a `warning` when a template has
-  no downloaded refdates in the metadata.
+The `downloads` category reports, per template: missing business days in the window (`error`), downloaded dates that are not business days of the calendar (`info`, helps spot a wrong `--calendar`), or a `warning` when a template has no downloaded refdates in the metadata.
+
+---
+
+### `cache drop`
+
+Drops a single cache entry by its meta id: deletes the raw files, the metadata row, and any download trials. Prompts for confirmation unless `--yes` is given.
+
+```bash
+brasa cache drop <META_ID> [--yes]
+```
+
+Look up meta ids in the metadata database (`cache_metadata.id`) or via `CacheManager()`.
 
 ---
 

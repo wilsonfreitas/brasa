@@ -548,20 +548,25 @@ parser_doctor.add_argument(
     "--template",
     nargs="+",
     metavar="TEMPLATE",
-    help="restrict date-gaps and stale-etl checks to specific templates",
+    help=(
+        "restrict the date-gaps, stale-etl, missing-etl-source and downloads "
+        "checks to specific templates"
+    ),
 )
 parser_doctor.add_argument(
     "--calendar",
     metavar="NAME",
     default="B3",
-    help="business calendar for the downloads category refdate check (default: B3)",
+    help="business calendar for the gaps and downloads categories (default: B3)",
 )
 parser_doctor.add_argument(
     "--since",
     type=int,
     default=30,
     metavar="DAYS",
-    help="for date-gap checks, look back this many days (default: 30)",
+    help=(
+        "for the gaps and downloads categories, look back this many days (default: 30)"
+    ),
 )
 parser_doctor.add_argument(
     "--validations-file",
