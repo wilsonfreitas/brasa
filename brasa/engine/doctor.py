@@ -1140,15 +1140,23 @@ def _parse_refdate_partition(dir_name: str) -> date | None:
         return None
 
 
+def _cutoff_from_last_days(last_days: int) -> date:
+    """Return the earliest date of the last_days window; full history when < 0."""
+    if last_days < 0:
+        return date.min
+    return date.fromordinal(date.today().toordinal() - last_days)
+
+
 def check_date_gaps(  # noqa: PLR0912
-    since_days: int = 30,
+    last_days: int = 30,
     template_filter: list[str] | None = None,
     calendar_name: str = "B3",
 ) -> list[Issue]:
     """Find time-series datasets with missing business days.
 
     Args:
-        since_days: Only look back this many calendar days from today.
+        last_days: Only look back this many calendar days from today;
+            a negative value (-1) reviews the full history.
         template_filter: If given, only check datasets produced by these templates.
         calendar_name: bizdays calendar name (default ``B3``).
 
@@ -1171,8 +1179,7 @@ def check_date_gaps(  # noqa: PLR0912
     if not db_root.exists():
         return []
 
-    today = date.today()
-    cutoff_date = date.fromordinal(today.toordinal() - since_days)
+    cutoff_date = _cutoff_from_last_days(last_days)
 
     catalog_rows = _get_catalog_rows()
     # Build source_template lookup: dataset_id -> source_template
@@ -1653,20 +1660,21 @@ def check_validations(
 def check_download_refdate_gaps(
     template_filter: list[str] | None,
     calendar_name: str,
-    since_days: int = 30,
+    last_days: int = 30,
 ) -> list[Issue]:
     """Verify downloaded refdate coverage for named templates (from meta).
 
     Reads ``cache_metadata`` for each template in ``template_filter``, collects
     the ``refdate`` values from ``download_args`` (skipping invalid downloads),
-    and compares the observed window — clamped to the last ``since_days``
+    and compares the observed window — clamped to the last ``last_days``
     calendar days, mirroring ``check_date_gaps`` — against the given business
     calendar. Silent when no ``template_filter`` is given.
 
     Args:
         template_filter: Templates to check. ``None``/empty yields no issues.
         calendar_name: bizdays calendar name (e.g. ``B3``).
-        since_days: Only look back this many calendar days from today.
+        last_days: Only look back this many calendar days from today;
+            a negative value (-1) reviews the full history.
 
     Returns:
         Up to two issues per template: a ``download-refdate-gaps`` error and a
@@ -1702,8 +1710,7 @@ def check_download_refdate_gaps(
         except ValueError:
             continue
 
-    today = date.today()
-    cutoff_date = date.fromordinal(today.toordinal() - since_days)
+    cutoff_date = _cutoff_from_last_days(last_days)
 
     issues: list[Issue] = []
     for template in template_filter:
@@ -1792,7 +1799,7 @@ _CATEGORY_KEYS = {
 def run_doctor(
     categories: list[str] | None = None,
     template_filter: list[str] | None = None,
-    since_days: int = 30,
+    last_days: int = 30,
     validations_config: Path | None = None,
     calendar_name: str = "B3",
 ) -> DoctorReport:
@@ -1804,8 +1811,8 @@ def run_doctor(
             "validations", "downloads". If None, all checks are run.
         template_filter: Restrict the date-gaps, stale-etl, missing-etl-source
             and downloads checks to these template IDs.
-        since_days: For the gaps and downloads categories, only look back this
-            many days.
+        last_days: For the gaps and downloads categories, only look back this
+            many days; a negative value (-1) reviews the full history.
         validations_config: Path to a validations YAML file. Required for the
             "validations" category. If None and "validations" is explicitly
             requested, a ValueError is raised; if None during a broad run, the
@@ -1863,11 +1870,9 @@ def run_doctor(
         "invalid-downloads": check_invalid_downloads,
         "stale-etl": lambda: check_stale_etl(template_filter),
         "missing-etl-source": lambda: check_missing_etl_source(template_filter),
-        "date-gaps": lambda: check_date_gaps(
-            since_days, template_filter, calendar_name
-        ),
+        "date-gaps": lambda: check_date_gaps(last_days, template_filter, calendar_name),
         "download-refdate-gaps": lambda: check_download_refdate_gaps(
-            template_filter, calendar_name, since_days
+            template_filter, calendar_name, last_days
         ),
     }
     if validations_config is not None:

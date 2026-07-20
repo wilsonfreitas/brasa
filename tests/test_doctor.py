@@ -431,7 +431,7 @@ class TestDateGaps:
         ds_dir = Path(man.db_path("input/b3-no-dates"))
         ds_dir.mkdir(parents=True, exist_ok=True)
         # No refdate= subdirs
-        issues = check_date_gaps(since_days=365)
+        issues = check_date_gaps(last_days=365)
         assert all("b3-no-dates" not in i.description for i in issues)
 
     def test_complete_date_range_no_gaps(self):
@@ -444,7 +444,7 @@ class TestDateGaps:
             part_dir = ds_dir / f"refdate={d}"
             _write_dummy_parquet(part_dir / "part-0.parquet")
 
-        issues = check_date_gaps(since_days=365)
+        issues = check_date_gaps(last_days=365)
         # No gaps expected for these two consecutive B3 business days
         gap_issues = [i for i in issues if "b3-no-gaps" in i.description]
         # We only test that no issues reference our specific dataset
@@ -457,12 +457,12 @@ class TestDateGaps:
         ds_dir = Path(man.db_path("input/b3-with-gaps"))
 
         # Create first and last date but skip many business days in between.
-        # Use a large since_days so historical dates are included.
+        # Use a large last_days so historical dates are included.
         for d in ["2024-01-02", "2024-03-29"]:
             part_dir = ds_dir / f"refdate={d}"
             _write_dummy_parquet(part_dir / "part-0.parquet")
 
-        issues = check_date_gaps(since_days=9999)
+        issues = check_date_gaps(last_days=-1)
         gap_issues = [i for i in issues if "b3-with-gaps" in i.description]
         assert len(gap_issues) >= 1
         assert gap_issues[0].code == "date-gaps"
@@ -478,7 +478,7 @@ class TestDateGaps:
             part_dir = ds_dir / f"refdate={d}"
             _write_dummy_parquet(part_dir / "part-0.parquet")
 
-        issues = check_date_gaps(since_days=9999, calendar_name="ANBIMA")
+        issues = check_date_gaps(last_days=-1, calendar_name="ANBIMA")
         gap_issues = [i for i in issues if "b3-cal-gaps" in i.description]
         assert len(gap_issues) >= 1
         assert "ANBIMA business day(s)" in gap_issues[0].description
@@ -514,9 +514,9 @@ class TestRunDoctor:
         }
         assert not db_or_gap_codes
 
-    def test_since_days_parameter_accepted(self):
-        """run_doctor accepts since_days without error."""
-        report = run_doctor(since_days=7)
+    def test_last_days_parameter_accepted(self):
+        """run_doctor accepts last_days without error."""
+        report = run_doctor(last_days=7)
         assert isinstance(report, DoctorReport)
 
     def test_template_filter_accepted(self):
@@ -1359,7 +1359,7 @@ class TestDownloadRefdateGaps:
         ]
         present = days[:5] + days[10:]  # remove a run of 5 business days
         self._seed("dl-gap", present)
-        issues = check_download_refdate_gaps(["dl-gap"], "B3", since_days=9999)
+        issues = check_download_refdate_gaps(["dl-gap"], "B3", last_days=-1)
         gaps = [i for i in issues if i.code == "download-refdate-gaps"]
         assert len(gaps) == 1
         assert gaps[0].severity == "error"
@@ -1373,14 +1373,14 @@ class TestDownloadRefdateGaps:
             for d in cal.seq("2024-02-01", "2024-02-29")
         ]
         self._seed("dl-ok", days)
-        issues = check_download_refdate_gaps(["dl-ok"], "B3", since_days=9999)
+        issues = check_download_refdate_gaps(["dl-ok"], "B3", last_days=-1)
         assert not [i for i in issues if i.code == "download-refdate-gaps"]
 
     def test_out_of_calendar_date_is_info(self):
         # 2024-03-02 is a Saturday -> not a B3 business day.
         days = [date(2024, 3, 1), date(2024, 3, 2), date(2024, 3, 4)]
         self._seed("dl-extra", days)
-        issues = check_download_refdate_gaps(["dl-extra"], "B3", since_days=9999)
+        issues = check_download_refdate_gaps(["dl-extra"], "B3", last_days=-1)
         extra = [i for i in issues if i.code == "download-refdate-extra"]
         assert len(extra) == 1
         assert extra[0].severity == "info"
@@ -1403,7 +1403,7 @@ class TestDownloadRefdateGaps:
         self._seed("dl-inv", days[:3] + days[4:])
         # days[3] exists ONLY as an invalid download row
         self._seed("dl-inv", [days[3]], invalid=True)
-        issues = check_download_refdate_gaps(["dl-inv"], "B3", since_days=9999)
+        issues = check_download_refdate_gaps(["dl-inv"], "B3", last_days=-1)
         gaps = [i for i in issues if i.code == "download-refdate-gaps"]
         # invalid row must NOT count as coverage -> days[3] is a gap
         assert len(gaps) == 1
@@ -1421,10 +1421,10 @@ class TestDownloadRefdateGaps:
             for d in cal.seq("2024-01-02", "2024-01-31")
         ]
         self._seed("dl-old", days[:5] + days[10:])  # gap in Jan 2024
-        issues = check_download_refdate_gaps(["dl-old"], "B3", since_days=30)
+        issues = check_download_refdate_gaps(["dl-old"], "B3", last_days=30)
         assert not [i for i in issues if i.code == "download-refdate-gaps"]
         # widening the window brings the gap back
-        issues = check_download_refdate_gaps(["dl-old"], "B3", since_days=9999)
+        issues = check_download_refdate_gaps(["dl-old"], "B3", last_days=-1)
         assert [i for i in issues if i.code == "download-refdate-gaps"]
 
     def test_integration_via_run_doctor(self):
@@ -1438,7 +1438,7 @@ class TestDownloadRefdateGaps:
             categories=["downloads"],
             template_filter=["dl-int"],
             calendar_name="B3",
-            since_days=9999,
+            last_days=-1,
         )
         assert [i for i in report.issues if i.code == "download-refdate-gaps"]
         # no template filter -> this category is silent

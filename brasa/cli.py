@@ -559,13 +559,26 @@ parser_doctor.add_argument(
     default="B3",
     help="business calendar for the gaps and downloads categories (default: B3)",
 )
+
+
+def _last_value(value: str) -> int:
+    """Parse the doctor --last option: a number of days, -1, or 'all'."""
+    if value == "all":
+        return -1
+    n = int(value)  # argparse turns ValueError into a clean usage error
+    if n < -1:
+        raise argparse.ArgumentTypeError("must be a number of days, -1, or 'all'")
+    return n
+
+
 parser_doctor.add_argument(
-    "--since",
-    type=int,
+    "--last",
+    type=_last_value,
     default=30,
     metavar="DAYS",
     help=(
-        "for the gaps and downloads categories, look back this many days (default: 30)"
+        "for the gaps and downloads categories, look back this many days; "
+        "'all' or -1 reviews the full history (default: 30)"
     ),
 )
 parser_doctor.add_argument(
@@ -1410,7 +1423,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915
 
         categories = getattr(args, "category", None)
         template_filter = getattr(args, "template", None)
-        since_days = getattr(args, "since", 30)
+        last_days = getattr(args, "last", 30)
         do_fix = getattr(args, "fix", False)
         skip_confirm = getattr(args, "yes", False)
         validations_file = getattr(args, "validations_file", None)
@@ -1421,7 +1434,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915
             report = run_doctor(
                 categories=categories,
                 template_filter=template_filter,
-                since_days=since_days,
+                last_days=last_days,
                 validations_config=validations_config,
                 calendar_name=calendar_name,
             )

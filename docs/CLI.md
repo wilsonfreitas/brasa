@@ -653,7 +653,7 @@ brasa doctor [options]
 | `--category {raw,db,meta,templates,gaps,validations,downloads}` | Run only specific check categories |
 | `--template TEMPLATE [...]` | Restrict the `date-gaps`, `stale-etl`, `missing-etl-source` and `downloads` checks to specific templates |
 | `--calendar NAME` | Business calendar for the `gaps` and `downloads` categories (default: B3) |
-| `--since DAYS` | For the `gaps` and `downloads` categories, look back N days (default: 30) |
+| `--last N\|all` | For the `gaps` and `downloads` categories, look back N days; `all` (or `-1`) reviews the full history (default: 30) |
 | `--validations-file FILE` | Path to a validations YAML file (required for the `validations` category) |
 
 **Exit codes:** `0` when no error-severity issue is found, `1` when at least one is, `2` on usage errors (e.g. `--category validations` without `--validations-file`). Suitable for CI.
@@ -668,7 +668,10 @@ brasa doctor
 brasa doctor --fix
 
 # Check only date gaps for the last 7 days
-brasa doctor --category gaps --since 7
+brasa doctor --category gaps --last 7
+
+# Review the full history instead of the default 30-day window
+brasa doctor --category gaps downloads --template b3-cotahist-daily --last all
 
 # Check specific templates
 brasa doctor --template b3-cotahist-daily b3-bvbg087
@@ -689,7 +692,7 @@ Both categories answer "which business days are missing?", but they inspect diff
 | Answers | was the day **processed**? | was the day **downloaded**? |
 | Scope | all refdate-partitioned datasets; `--template` optional | silent unless `--template` is given |
 
-A day missing from `downloads` means acquisition failed — re-download it. A day present in `downloads` but missing from `gaps` means processing failed — re-process it. Both categories honor `--calendar` and `--since`, so their reports can be compared directly.
+A day missing from `downloads` means acquisition failed — re-download it. A day present in `downloads` but missing from `gaps` means processing failed — re-process it. Both categories honor `--calendar` and `--last`, so their reports can be compared directly.
 
 ```bash
 brasa doctor --category gaps downloads --template b3-trades-intraday --calendar B3
