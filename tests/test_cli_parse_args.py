@@ -21,3 +21,41 @@ def test_empty_args_returns_empty_dict():
 def test_invalid_format_raises_value_error():
     with pytest.raises(ValueError, match="KEY=VALUE"):
         _parse_download_args(["not-a-pair"], "B3")
+
+
+class TestDoctorLastOption:
+    def test_days(self):
+        from brasa import cli
+
+        args = cli.parser.parse_args(["doctor", "--last", "7"])
+        assert args.last == 7
+
+    def test_all_keyword(self):
+        from brasa import cli
+
+        args = cli.parser.parse_args(["doctor", "--last", "all"])
+        assert args.last == -1
+
+    def test_minus_one_alias(self):
+        from brasa import cli
+
+        args = cli.parser.parse_args(["doctor", "--last", "-1"])
+        assert args.last == -1
+
+    def test_default_is_30(self):
+        from brasa import cli
+
+        args = cli.parser.parse_args(["doctor"])
+        assert args.last == 30
+
+    def test_below_minus_one_is_usage_error(self):
+        from brasa import cli
+
+        with pytest.raises(SystemExit):
+            cli.parser.parse_args(["doctor", "--last", "-5"])
+
+    def test_non_numeric_is_usage_error(self):
+        from brasa import cli
+
+        with pytest.raises(SystemExit):
+            cli.parser.parse_args(["doctor", "--last", "everything"])
