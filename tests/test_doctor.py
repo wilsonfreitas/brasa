@@ -463,7 +463,11 @@ class TestDateGaps:
             _write_dummy_parquet(part_dir / "part-0.parquet")
 
         issues = check_date_gaps(last_days=-1)
-        gap_issues = [i for i in issues if "b3-with-gaps" in i.description]
+        gap_issues = [
+            i
+            for i in issues
+            if "b3-with-gaps" in i.description and i.code == "date-gaps"
+        ]
         assert len(gap_issues) >= 1
         assert gap_issues[0].code == "date-gaps"
         assert gap_issues[0].severity == "error"
@@ -479,9 +483,96 @@ class TestDateGaps:
             _write_dummy_parquet(part_dir / "part-0.parquet")
 
         issues = check_date_gaps(last_days=-1, calendar_name="ANBIMA")
-        gap_issues = [i for i in issues if "b3-cal-gaps" in i.description]
+        gap_issues = [
+            i
+            for i in issues
+            if "b3-cal-gaps" in i.description and i.code == "date-gaps"
+        ]
         assert len(gap_issues) >= 1
         assert "ANBIMA business day(s)" in gap_issues[0].description
+
+    def test_coverage_info_emitted_when_clean(self):
+        man = CacheManager()
+        ds_dir = Path(man.db_path("input/b3-cov-ok"))
+        for d in ["2024-01-02", "2024-01-03"]:
+            _write_dummy_parquet(ds_dir / f"refdate={d}" / "part-0.parquet")
+        issues = check_date_gaps(last_days=-1)
+        cov = [
+            i
+            for i in issues
+            if i.code == "date-gaps-coverage" and "input/b3-cov-ok" in i.description
+        ]
+        assert len(cov) == 1
+        assert cov[0].severity == "info"
+        assert cov[0].description == (
+            "input/b3-cov-ok: checked 2024-01-02 → 2024-01-03 "
+            "(2/2 B3 business days present)"
+        )
+
+    def test_coverage_ratio_reflects_gaps(self):
+        man = CacheManager()
+        ds_dir = Path(man.db_path("input/b3-cov-gaps"))
+        for d in ["2024-01-02", "2024-01-03", "2024-01-05"]:
+            _write_dummy_parquet(ds_dir / f"refdate={d}" / "part-0.parquet")
+        issues = check_date_gaps(last_days=-1)
+        cov = [
+            i
+            for i in issues
+            if i.code == "date-gaps-coverage" and "input/b3-cov-gaps" in i.description
+        ]
+        # 2024-01-04 is a Thursday business day -> 3 present / 4 expected
+        assert len(cov) == 1
+        assert "(3/4 B3 business days present)" in cov[0].description
+
+    def test_coverage_empty_window_message(self):
+        man = CacheManager()
+        ds_dir = Path(man.db_path("input/b3-cov-old"))
+        for d in ["2024-01-02", "2024-01-03"]:
+            _write_dummy_parquet(ds_dir / f"refdate={d}" / "part-0.parquet")
+        issues = check_date_gaps(last_days=30)
+        cov = [
+            i
+            for i in issues
+            if i.code == "date-gaps-coverage" and "input/b3-cov-old" in i.description
+        ]
+        assert len(cov) == 1
+        assert cov[0].description == (
+            "input/b3-cov-old: no dates within the evaluated window "
+            "(last 30 days; most recent date 2024-01-03)"
+        )
+        assert not [
+            i for i in issues if i.code == "date-gaps" and "b3-cov-old" in i.description
+        ]
+
+    def test_one_day_window_is_evaluated(self):
+        man = CacheManager()
+        ds_dir = Path(man.db_path("input/b3-cov-oneday"))
+        newest = date.fromordinal(date.today().toordinal() - 30)
+        # Walk back to a business day so the single-day window is on-calendar.
+        cal = Calendar.load("B3")
+        while not cal.isbizday(newest):
+            newest = date.fromordinal(newest.toordinal() - 1)
+        older = date.fromordinal(newest.toordinal() - 90)
+        for d in [older, newest]:
+            _write_dummy_parquet(ds_dir / f"refdate={d}" / "part-0.parquet")
+        last_days = (date.today() - newest).days
+        issues = check_date_gaps(last_days=last_days)
+        cov = [
+            i
+            for i in issues
+            if i.code == "date-gaps-coverage" and "input/b3-cov-oneday" in i.description
+        ]
+        assert len(cov) == 1
+        assert f"checked {newest} → {newest} (1/1 B3 business days present)" in (
+            cov[0].description
+        )
+
+    def test_single_refdate_partition_emits_nothing(self):
+        man = CacheManager()
+        ds_dir = Path(man.db_path("input/b3-cov-single"))
+        _write_dummy_parquet(ds_dir / "refdate=2024-01-02" / "part-0.parquet")
+        issues = check_date_gaps(last_days=-1)
+        assert not [i for i in issues if "b3-cov-single" in i.description]
 
 
 # ---------------------------------------------------------------------------
@@ -523,6 +614,29 @@ class TestRunDoctor:
         """run_doctor accepts template_filter without error."""
         report = run_doctor(template_filter=["b3-cotahist-daily"])
         assert isinstance(report, DoctorReport)
+
+    def test_coverage_infos_do_not_affect_summary_or_errors(self):
+        report = DoctorReport(
+            issues=[
+                Issue(
+                    category="Downloads",
+                    code="download-refdate-coverage",
+                    severity="info",
+                    description="t: checked 2024-01-02 → 2024-01-31 "
+                    "(21/21 B3 business days downloaded)",
+                ),
+                Issue(
+                    category="Date Gaps",
+                    code="date-gaps-coverage",
+                    severity="info",
+                    description="input/d: checked 2024-01-02 → 2024-01-31 "
+                    "(21/21 B3 business days present)",
+                ),
+            ]
+        )
+        assert report.errors() == []
+        assert report.summary() == "no issues"
+        assert len(report.infos()) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -1412,6 +1526,72 @@ class TestDownloadRefdateGaps:
     def test_no_template_filter_yields_nothing(self):
         assert check_download_refdate_gaps(None, "B3") == []
         assert check_download_refdate_gaps([], "B3") == []
+
+    def test_coverage_info_emitted_when_clean(self):
+        cal = Calendar.load("B3")
+        days = [
+            d.date() if hasattr(d, "date") else d
+            for d in cal.seq("2024-06-03", "2024-06-28")
+        ]
+        self._seed("dl-cov", days)
+        issues = check_download_refdate_gaps(["dl-cov"], "B3", last_days=-1)
+        cov = [i for i in issues if i.code == "download-refdate-coverage"]
+        assert len(cov) == 1
+        assert cov[0].severity == "info"
+        assert cov[0].details == []
+        n = len(days)
+        assert (
+            f"dl-cov: checked {days[0]} → {days[-1]} "
+            f"({n}/{n} B3 business days downloaded)"
+        ) == cov[0].description
+
+    def test_coverage_ratio_reflects_gaps_and_precedes_gap_issue(self):
+        cal = Calendar.load("B3")
+        days = [
+            d.date() if hasattr(d, "date") else d
+            for d in cal.seq("2024-06-03", "2024-06-28")
+        ]
+        present = days[:5] + days[10:]
+        self._seed("dl-cov-gap", present)
+        issues = check_download_refdate_gaps(["dl-cov-gap"], "B3", last_days=-1)
+        codes = [i.code for i in issues]
+        assert codes.index("download-refdate-coverage") < codes.index(
+            "download-refdate-gaps"
+        )
+        cov = next(i for i in issues if i.code == "download-refdate-coverage")
+        assert f"({len(present)}/{len(days)} B3 business days downloaded)" in (
+            cov.description
+        )
+
+    def test_coverage_excludes_off_calendar_dates(self):
+        # 2024-03-02 is a Saturday -> off-calendar, excluded from the ratio.
+        days = [date(2024, 3, 1), date(2024, 3, 2), date(2024, 3, 4)]
+        self._seed("dl-cov-extra", days)
+        issues = check_download_refdate_gaps(["dl-cov-extra"], "B3", last_days=-1)
+        cov = next(i for i in issues if i.code == "download-refdate-coverage")
+        assert "(2/2 B3 business days downloaded)" in cov.description
+        assert [i for i in issues if i.code == "download-refdate-extra"]
+
+    def test_coverage_empty_window_message(self):
+        cal = Calendar.load("B3")
+        days = [
+            d.date() if hasattr(d, "date") else d
+            for d in cal.seq("2024-01-02", "2024-01-31")
+        ]
+        self._seed("dl-cov-old", days)
+        issues = check_download_refdate_gaps(["dl-cov-old"], "B3", last_days=30)
+        assert len(issues) == 1
+        assert issues[0].code == "download-refdate-coverage"
+        assert issues[0].severity == "info"
+        assert (
+            f"dl-cov-old: no downloaded dates within the evaluated window "
+            f"(last 30 days; most recent download {days[-1]})"
+        ) == issues[0].description
+
+    def test_no_dates_template_has_no_coverage_line(self):
+        _insert_meta("dl-cov-none-0", "dl-cov-none", download_checksum="dlcovnone0")
+        issues = check_download_refdate_gaps(["dl-cov-none"], "B3")
+        assert [i.code for i in issues] == ["download-refdate-missing-template"]
 
     def test_since_window_excludes_old_gaps(self):
         """Gaps older than the --since window are not reported."""

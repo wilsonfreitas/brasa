@@ -709,6 +709,24 @@ brasa doctor --category gaps downloads --template b3-trades-intraday --calendar 
 
 The `downloads` category reports, per template: missing business days in the window (`error`), downloaded dates that are not business days of the calendar (`info`, helps spot a wrong `--calendar`), or a `warning` when a template has no downloaded refdates in the metadata.
 
+#### Coverage lines
+
+The coverage categories (`downloads` and `gaps`) always report the evaluated
+window per template/dataset as `info` entries, even when no problems are found:
+
+```
+i  b3-equity-options: checked 2019-05-13 → 2026-07-22 (1780/1795 B3 business days downloaded)
+i  staging/b3-cotahist: checked 2019-05-13 → 2026-07-22 (1780/1795 B3 business days present)
+```
+
+The window start is clamped by `--last`, so `--last 30` and `--last all` show
+different ranges. The ratio counts observed on-calendar dates over expected
+business days in the window — the difference is the number of gaps. When all
+observed dates fall before the `--last` cutoff, the line reads
+`no ... dates within the evaluated window (last N days; most recent ... DATE)`
+instead. Issue codes: `download-refdate-coverage`, `date-gaps-coverage`.
+These entries never affect the exit code.
+
 ---
 
 ### `cache drop`
