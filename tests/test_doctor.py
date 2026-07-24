@@ -615,6 +615,29 @@ class TestRunDoctor:
         report = run_doctor(template_filter=["b3-cotahist-daily"])
         assert isinstance(report, DoctorReport)
 
+    def test_coverage_infos_do_not_affect_summary_or_errors(self):
+        report = DoctorReport(
+            issues=[
+                Issue(
+                    category="Downloads",
+                    code="download-refdate-coverage",
+                    severity="info",
+                    description="t: checked 2024-01-02 → 2024-01-31 "
+                    "(21/21 B3 business days downloaded)",
+                ),
+                Issue(
+                    category="Date Gaps",
+                    code="date-gaps-coverage",
+                    severity="info",
+                    description="input/d: checked 2024-01-02 → 2024-01-31 "
+                    "(21/21 B3 business days present)",
+                ),
+            ]
+        )
+        assert report.errors() == []
+        assert report.summary() == "no issues"
+        assert len(report.infos()) == 2
+
 
 # ---------------------------------------------------------------------------
 # Calendar-completeness validation (WIL-6)
