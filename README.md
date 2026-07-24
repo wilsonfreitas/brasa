@@ -17,27 +17,25 @@ With `uv`:
     uv add brasa-marketdata
     uv add git+https://github.com/wilsonfreitas/brasa.git
 
-## Cache location (`BRASA_DATA_PATH`)
+## Data directory (`brasa init` / `BRASA_DATA_PATH`)
 
 brasa stores everything — raw downloads, parsed parquet, and the metadata DB —
-under a single *brasa home*, resolved from the `BRASA_DATA_PATH` environment
-variable (falling back to `./.brasa-cache`).
+under a single *brasa home*. On a fresh install, configure it once:
 
-A common setup keeps one central home exported globally (e.g. in `~/.env.local`).
-For a one-off, project-local dataset, create a separate home and point at it for
-the current shell only — a per-shell `export` shadows the global value:
+    brasa init
 
-    BRASA_DATA_PATH=./brasa-home uv run python -m brasa.cli setup
+This suggests a platform default (e.g. `~/.local/share/brasa` on Linux),
+lets you confirm or type another path, and persists the choice in
+`~/.config/brasa/config.toml`. Non-interactive variants:
 
-`setup` then prints the exact line to activate that home:
+    brasa init --data-path /data/brasa   # explicit path, no prompt
+    brasa init --yes                     # accept the default, no prompt
 
-    Brasa home ready at /abs/path/to/brasa-home
-
-    To use this home in your shell:
-      export BRASA_DATA_PATH="/abs/path/to/brasa-home"
-
-Run that `export` and every `brasa` command in the session uses the project-local
-home; open a new shell to return to the central one.
+The `BRASA_DATA_PATH` environment variable, when set, always takes
+precedence over the config file — useful for CI, containers, tests, and
+one-off overrides. Commands that read or write data fail with a clear
+error until one of the two is configured; template introspection commands
+(`list-templates`, `deps`, `graph`) work without any configuration.
 
 ## Changelog
 

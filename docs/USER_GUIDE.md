@@ -403,7 +403,7 @@ print(f"Is ETL: {template.is_etl}")
 ### Cache Directory Layout
 
 ```
-.brasa-cache/  (or $BRASA_DATA_PATH)
+<brasa home>/  (from `brasa init` config or $BRASA_DATA_PATH)
 ├── raw/                    # Downloaded raw files
 │   ├── b3-cotahist-daily/
 │   │   └── {checksum}/
@@ -914,8 +914,8 @@ You can also run the migration manually:
 uv run python scripts/migrate_download_trials_status.py [CACHE_PATH]
 ```
 
-If `CACHE_PATH` is omitted, the script uses `$BRASA_DATA_PATH` or
-`./.brasa-cache`.
+If `CACHE_PATH` is omitted, the script uses `$BRASA_DATA_PATH` or the
+`data_path` persisted by `brasa init`.
 
 **Rollback**: The migration only adds columns and backfills NULLs. It does not
 remove or modify the legacy `downloaded` column. Reverting requires manually

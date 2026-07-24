@@ -18,7 +18,7 @@ brasa <command> [options]
 
 | Group | Command | Purpose |
 |-------|---------|---------|
-| Setup | `setup` | Initialize cache directories and metadata database |
+| Setup | `init` | Choose the data directory and persist it |
 | Execution | `download` | Download raw market data files |
 | Execution | `import` | Import local files into a template (no download) |
 | Execution | `process` | Parse raw files into Parquet datasets |
@@ -44,13 +44,22 @@ brasa <command> [options]
 
 ## Setup
 
-### `setup`
+### `init`
 
-Creates the `.brasa-cache/` directory structure and initializes `metadata.db`. Run this once before using other commands, or set `BRASA_DATA_PATH` to change the cache location.
+Chooses the brasa data directory and persists it in `~/.config/brasa/config.toml`. Run this once on a fresh install — data-touching commands fail with an actionable error until brasa is configured (either via `init` or the `BRASA_DATA_PATH` environment variable, which always takes precedence over the config file).
 
 ```bash
-brasa setup
+brasa init [--data-path PATH] [--yes]
 ```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--data-path PATH` | Use `PATH` directly, without prompting (scripts/CI) |
+| `-y`, `--yes` | Accept the suggested default without prompting |
+
+Without flags in an interactive terminal, `init` suggests a default (the previously persisted path, or the platform data dir such as `~/.local/share/brasa`) and asks for confirmation or a custom path. With non-interactive stdin it accepts the default automatically. Re-running `init` reconfigures: the current persisted value becomes the suggestion. The cache substructure (`raw/`, `db/`, `meta/`, metadata DB) is created lazily on first use.
 
 ---
 
@@ -58,7 +67,7 @@ brasa setup
 
 ### `download`
 
-Downloads raw market data files for one or more templates. Files are stored in `.brasa-cache/raw/`.
+Downloads raw market data files for one or more templates. Files are stored in `raw/` under the brasa home.
 
 ```bash
 brasa download <template> [<template> ...] [options]
@@ -248,7 +257,7 @@ brasa import b3-cotahist-daily --path /data/corrected/file.txt --arg refdate=202
 
 ### `process`
 
-Parses downloaded raw files into Parquet datasets stored in `.brasa-cache/db/`. Handles both regular templates (raw-to-input) and ETL templates (input-to-staging or staging-to-curated).
+Parses downloaded raw files into Parquet datasets stored in `db/` under the brasa home. Handles both regular templates (raw-to-input) and ETL templates (input-to-staging or staging-to-curated).
 
 ```bash
 brasa process <template> [<template> ...] [options]
@@ -778,4 +787,4 @@ brasa sync-catalog --dry-run
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `BRASA_DATA_PATH` | Root directory for the brasa cache | `.brasa-cache/` |
+| `BRASA_DATA_PATH` | Root directory for the brasa cache; overrides the `data_path` persisted by `brasa init` | unset (falls back to `~/.config/brasa/config.toml`; error if neither is configured) |

@@ -16,7 +16,7 @@ Brasa's behavior can be configured through:
 
 Controls where brasa stores cached data.
 
-**Default**: `.brasa-cache` in current working directory. But always check for the environment variable BRASA_DATA_PATH.
+**Resolution order**: (1) the `BRASA_DATA_PATH` environment variable, if set; (2) the `data_path` entry in `~/.config/brasa/config.toml`, written by `brasa init`. There is no implicit fallback — data-touching commands raise `BrasaNotConfiguredError` (the CLI prints an actionable message pointing to `brasa init`) until one of the two is configured.
 
 **Usage**:
 ```bash
@@ -749,7 +749,7 @@ for template in EQUITY_TEMPLATES:
 
 ## Best Practices
 
-1. **Set BRASA_DATA_PATH**: Don't use default `.brasa-cache` in production
+1. **Configure the data path**: run `brasa init` once (or set `BRASA_DATA_PATH` in CI/containers)
 2. **Use appropriate calendars**: B3 for equities, ANBIMA for fixed income
 3. **Partition by date**: Always include `refdate` in partitioning
 4. **Define schemas**: Explicit schemas prevent type issues

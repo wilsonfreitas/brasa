@@ -52,10 +52,10 @@ YAML Template → Download → Cache (raw/) → Parse/Read → Parquet (db/) →
 
 1. **Templates** (`brasa/files/templates/**/*.yaml`): Declarative pipeline configs defining how to download, parse, and store each dataset. SQL DDL lives in `brasa/files/sql/`. Use pipeline-based templates (not legacy function-based).
 2. **Downloaders** (`brasa/downloaders/`): HTTP/API clients that fetch raw data files.
-3. **Cache** (`brasa/engine/`): `CacheManager` singleton manages file storage, metadata (SQLite), and checksum-based deduplication. Cache lives in `.brasa-cache/` (override with `BRASA_DATA_PATH` env var).
+3. **Cache** (`brasa/engine/`): `CacheManager` singleton manages file storage, metadata (SQLite), and checksum-based deduplication. Data path resolved via `BRASA_DATA_PATH` env var or `~/.config/brasa/config.toml` (written by `brasa init`); no implicit default — see `brasa/engine/config.py`.
 4. **Parsers/Readers** (`brasa/parsers/`, `brasa/readers/`): Parse raw files (CSV, FWF, XML, JSON) into DataFrames.
 5. **Field System** (`brasa/fieldsets/`): Declarative type system for fields — `date(format='%Y%m%d')`, `numeric(dec=2.0)`, `character`, `category`. Adapters for pandas and pyarrow.
-6. **Storage Layers** in `.brasa-cache/db/`: `input/` (raw parsed) → `staging/` (intermediate) → `curated/` (analytical).
+6. **Storage Layers** in `db/` under the brasa home: `input/` (raw parsed) → `staging/` (intermediate) → `curated/` (analytical).
 7. **ETL** (`brasa/etl.py`): Transformations that load from one layer and write to another.
 8. **Queries** (`brasa/queries.py`): Query interface via PyArrow datasets, helper functions (`get_returns`, `get_prices`, `get_symbols`), and DuckDB (`BrasaDB`).
 

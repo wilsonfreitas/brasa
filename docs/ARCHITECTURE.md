@@ -38,7 +38,7 @@ Brasa follows a modular, template-driven architecture that separates concerns ac
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
 │                    Storage Layer                             │
-│  - Cache: .brasa-cache/ (configurable via BRASA_DATA_PATH)  │
+│  - Cache: brasa home (brasa init / BRASA_DATA_PATH)         │
 │    - raw/: Downloaded files                                 │
 │    - db/: Parquet datasets                                  │
 │    - meta/: SQLite metadata DB                              │
@@ -77,7 +77,7 @@ Brasa follows a modular, template-driven architecture that separates concerns ac
 
 **Directory Structure**:
 ```
-.brasa-cache/  (or $BRASA_DATA_PATH)
+<brasa home>/  (from `brasa init` config or $BRASA_DATA_PATH)
 ├── raw/          # Downloaded files organized by template
 │   └── {template_id}/
 │       └── {checksum}/
@@ -433,7 +433,7 @@ show(dataset_name, n=10) -> pd.DataFrame
    b. Check if already cached (has_meta)
    c. If not cached or reprocess=True:
       - MarketDataDownloader.download(**args)
-      - Save files to .brasa-cache/raw/{template}/{checksum}/
+      - Save files to <brasa home>/raw/{template}/{checksum}/
       - Update metadata in SQLite
 
 5. Process Request
@@ -445,7 +445,7 @@ show(dataset_name, n=10) -> pd.DataFrame
    b. MarketDataReader.read(meta)
    c. Parse files to DataFrame(s)
    d. Apply field handlers (date parsing, numeric conversion)
-   e. Write to .brasa-cache/db/{template}/*.parquet
+   e. Write to <brasa home>/db/{template}/*.parquet
    f. Update processed_files in metadata
 ```
 
@@ -502,8 +502,9 @@ show(dataset_name, n=10) -> pd.DataFrame
 
 ### Environment Variables
 
-- **BRASA_DATA_PATH**: Override default cache location
-  - Default: `.brasa-cache` in current working directory
+- **BRASA_DATA_PATH**: Override the cache location
+  - Takes precedence over the `data_path` persisted by `brasa init`
+    in `~/.config/brasa/config.toml`; no implicit default
   - Example: `export BRASA_DATA_PATH=/data/brasa`
 
 ### Calendars (via bizdays)
