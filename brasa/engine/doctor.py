@@ -1147,7 +1147,7 @@ def _cutoff_from_last_days(last_days: int) -> date:
     return date.fromordinal(date.today().toordinal() - last_days)
 
 
-def check_date_gaps(  # noqa: PLR0912
+def check_date_gaps(  # noqa: PLR0912, PLR0915
     last_days: int = 30,
     template_filter: list[str] | None = None,
     calendar_name: str = "B3",
@@ -1161,7 +1161,8 @@ def check_date_gaps(  # noqa: PLR0912
         calendar_name: bizdays calendar name (default ``B3``).
 
     Returns:
-        List of issues found.
+        List of issues found (always includes a ``date-gaps-coverage`` info
+        per evaluated dataset).
     """
     try:
         from bizdays import Calendar
@@ -1222,7 +1223,22 @@ def check_date_gaps(  # noqa: PLR0912
             first_date = max(refdate_values[0], cutoff_date)
             last_date = refdate_values[-1]
 
-            if first_date >= last_date:
+            if first_date > last_date:
+                # Dates exist, but all fall before the --last cutoff.
+                issues.append(
+                    Issue(
+                        category="Date Gaps",
+                        code="date-gaps-coverage",
+                        severity="info",
+                        description=(
+                            f"{dataset_id}: no dates within the evaluated "
+                            f"window (last {last_days} days; most recent date "
+                            f"{last_date})"
+                        ),
+                        details=[],
+                        fixable=False,
+                    )
+                )
                 continue
 
             present_dates = set(refdate_values)
@@ -1233,8 +1249,31 @@ def check_date_gaps(  # noqa: PLR0912
                     first_date.isoformat(),
                     last_date.isoformat(),
                 )
+                extra_days = [
+                    d
+                    for d in _unexpected_observations(present_dates, calendar_name)
+                    if first_date <= d <= last_date
+                ]
             except Exception:
                 continue
+
+            in_window = sum(1 for d in present_dates if first_date <= d <= last_date)
+            observed = in_window - len(extra_days)
+            expected = observed + len(missing_days)
+            issues.append(
+                Issue(
+                    category="Date Gaps",
+                    code="date-gaps-coverage",
+                    severity="info",
+                    description=(
+                        f"{dataset_id}: checked {first_date} → {last_date} "
+                        f"({observed}/{expected} {calendar_name} business days "
+                        f"present)"
+                    ),
+                    details=[],
+                    fixable=False,
+                )
+            )
 
             if not missing_days:
                 continue
