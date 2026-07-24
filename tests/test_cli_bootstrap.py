@@ -54,3 +54,43 @@ def test_stateful_command_creates_no_brasa_cache(clean_dirs):
     cwd, home = clean_dirs
     run_cli(["list-datasets"], cwd, home)
     assert not (cwd / ".brasa-cache").exists()
+
+
+STATELESS = [
+    ["--help"],
+    ["list-templates"],
+    ["deps", "b3-cotahist-daily"],
+    ["graph"],
+]
+
+STATEFUL_NO_ARGS = [
+    ["list-datasets"],
+    ["list-tables"],
+    ["list-unprocessed"],
+    ["map"],
+]
+
+
+@pytest.mark.parametrize("argv", STATELESS, ids=lambda a: a[0])
+def test_stateless_commands_work_unconfigured(clean_dirs, argv):
+    cwd, home = clean_dirs
+    result = run_cli(argv, cwd, home)
+    assert result.returncode == 0, result.stderr
+    assert "not configured" not in result.stderr
+
+
+@pytest.mark.parametrize("argv", STATELESS, ids=lambda a: a[0])
+def test_stateless_commands_create_nothing(clean_dirs, argv):
+    cwd, home = clean_dirs
+    run_cli(argv, cwd, home)
+    assert list(cwd.iterdir()) == []
+    assert not (home / ".config" / "brasa").exists()
+    assert not (home / ".local" / "share" / "brasa").exists()
+
+
+@pytest.mark.parametrize("argv", STATEFUL_NO_ARGS, ids=lambda a: a[0])
+def test_stateful_commands_fail_unconfigured(clean_dirs, argv):
+    cwd, home = clean_dirs
+    result = run_cli(argv, cwd, home)
+    assert result.returncode == 1
+    assert "brasa is not configured yet" in result.stderr

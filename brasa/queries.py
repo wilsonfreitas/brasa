@@ -11,6 +11,7 @@ import pyarrow.dataset as ds
 from bizdays import Calendar
 
 from .engine import CacheManager, DatasetCatalog, DatasetInfo, retrieve_template
+from .engine.exceptions import BrasaNotConfiguredError
 from .fieldsets import PyArrowAdapter
 from .util import bizdays_mode
 
@@ -284,6 +285,8 @@ class BrasaDB:
             )
             df = result.df()
             return df["table_name"].tolist()
+        except BrasaNotConfiguredError:
+            raise
         except Exception as exc:
             logger.warning("list_tables failed, returning empty list: %s", exc)
             return []
