@@ -4,9 +4,9 @@ Extract finance market data from brazillian financial institutions: B3, ANBIMA, 
 
 ## Installation
 
-Install from PyPI:
+Install from PyPI (published as `brasa-marketdata`; the import name is still `brasa`):
 
-    pip install brasa
+    pip install brasa-marketdata
 
 Or directly from GitHub (latest `main`):
 
@@ -14,7 +14,7 @@ Or directly from GitHub (latest `main`):
 
 With `uv`:
 
-    uv add brasa
+    uv add brasa-marketdata
     uv add git+https://github.com/wilsonfreitas/brasa.git
 
 ## Cache location (`BRASA_DATA_PATH`)
@@ -92,11 +92,13 @@ and [docs/TEMPLATES.md](docs/TEMPLATES.md#importing-local-files-importer) for fu
 
 ## Publishing to PyPI
 
-brasa is built with [hatchling](https://hatch.pypa.io/) and published manually.
+brasa is built with [hatchling](https://hatch.pypa.io/) and published manually
+under the distribution name `brasa-marketdata` (the PyPI name `brasa` was
+already taken by an unrelated project; `import brasa` is unaffected).
 Templates and SQL DDL are bundled inside the package (`brasa/files/`), so the
 built wheel is self-contained.
 
-1. Bump `version` in `pyproject.toml` (the repo ships a `0.0.1` placeholder).
+1. Bump `version` in `pyproject.toml`.
 2. Build the wheel and sdist:
 
    ```bash
@@ -115,7 +117,7 @@ built wheel is self-contained.
 
    ```bash
    python -m venv /tmp/brasa-smoke
-   /tmp/brasa-smoke/bin/pip install dist/brasa-*.whl
+   /tmp/brasa-smoke/bin/pip install dist/brasa_marketdata-*.whl
    /tmp/brasa-smoke/bin/python -c "import brasa; from brasa.engine.template import list_templates; print(len(list_templates()))"
    ```
 
