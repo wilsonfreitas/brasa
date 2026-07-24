@@ -76,6 +76,7 @@ from .download_plan import (
 
 # Exceptions
 from .exceptions import (
+    BrasaNotConfiguredError,
     CorruptedContentException,
     DownloadException,
     DuplicatedFolderException,
@@ -146,6 +147,7 @@ __all__ = [
     "DEFAULT_ETL_LAYER",
     "DEFAULT_LAYER",
     "LAYER_ORDER",
+    "BrasaNotConfiguredError",
     "CacheManager",
     "CacheMetadata",
     "CharacterFieldHandler",

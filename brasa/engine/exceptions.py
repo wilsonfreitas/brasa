@@ -63,6 +63,17 @@ class NoDataException(Exception):
     pass
 
 
+class BrasaNotConfiguredError(Exception):
+    """Raised when no data path is configured.
+
+    Neither the ``BRASA_DATA_PATH`` environment variable is set nor a
+    ``data_path`` entry exists in the user config file. Fixed by running
+    ``brasa init`` or exporting ``BRASA_DATA_PATH``.
+    """
+
+    pass
+
+
 #: Domain exceptions that carry classification meaning for the engine.
 #: Pipeline executors re-raise these unwrapped so callers can match on type.
 DOMAIN_EXCEPTIONS: tuple[type[Exception], ...] = (
