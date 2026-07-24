@@ -97,6 +97,7 @@ dependencies = [
     { name = "numpy", version = "2.4.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "openpyxl" },
     { name = "pandas" },
+    { name = "platformdirs" },
     { name = "progressbar2" },
     { name = "pyarrow" },
     { name = "python-bcb" },
@@ -104,6 +105,7 @@ dependencies = [
     { name = "regexparser" },
     { name = "requests" },
     { name = "rich" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
     { name = "xlrd" },
 ]
 
@@ -140,6 +142,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.0.0" },
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pandas", specifier = ">=2.0.0" },
+    { name = "platformdirs", specifier = ">=4.0.0" },
     { name = "progressbar2", specifier = ">=4.3.2" },
     { name = "pyarrow", specifier = ">=19.0.0" },
     { name = "python-bcb", specifier = ">=0.3.2" },
@@ -147,6 +150,7 @@ requires-dist = [
     { name = "regexparser", specifier = ">=0.1.0" },
     { name = "requests", specifier = ">=2.28.0" },
     { name = "rich", specifier = ">=13.0.0" },
+    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0.1" },
     { name = "xlrd", specifier = ">=2.0.1" },
 ]
 

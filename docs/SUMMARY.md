@@ -131,7 +131,7 @@ python -m brasa.cli query "SELECT * FROM 'b3-cotahist-daily'"
 #### Configuration
 
 **Environment Variables**:
-- `BRASA_DATA_PATH`: Cache location (default: `.brasa-cache`)
+- `BRASA_DATA_PATH`: Cache location (overrides the `data_path` persisted by `brasa init`; no implicit default)
 
 **Calendars**:
 - B3: Brazilian stock exchange
@@ -140,7 +140,7 @@ python -m brasa.cli query "SELECT * FROM 'b3-cotahist-daily'"
 
 **Storage Structure**:
 ```
-.brasa-cache/
+<brasa home>/
 ├── raw/          # Downloaded files by template/checksum
 ├── db/           # Parquet datasets partitioned by date
 ├── meta/         # SQLite metadata

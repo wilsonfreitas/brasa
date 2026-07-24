@@ -81,43 +81,42 @@ also installed:
 brasa --help
 ```
 
-## 5. Choose where data is stored (`BRASA_DATA_PATH`)
+## 5. Initialize brasa (`brasa init`)
 
 brasa keeps everything — raw downloads, parsed parquet files, and the metadata
-database — under a single **brasa home** directory. It is resolved from the
-`BRASA_DATA_PATH` environment variable, falling back to `./.brasa-cache` in the
-current directory if unset.
-
-To use a fixed location, export the variable (add it to `~/.bashrc`,
-`~/.zshrc`, or a project `.env` to make it permanent):
+database — under a single **brasa home** directory. On a fresh install,
+configure it once:
 
 ```bash
-export BRASA_DATA_PATH="$HOME/brasa-home"
+brasa init
 ```
 
-## 6. Run setup
+This suggests a platform default (e.g. `~/.local/share/brasa` on Linux), lets
+you confirm or type another path, and persists the choice in
+`~/.config/brasa/config.toml`:
 
-Initialize the cache directories and the metadata database:
+```
+Brasa home ready at /home/you/.local/share/brasa
+Configuration saved to /home/you/.config/brasa/config.toml
+```
+
+Non-interactive variants for scripts and CI:
 
 ```bash
-brasa setup
+brasa init --data-path /data/brasa   # explicit path, no prompt
+brasa init --yes                     # accept the default, no prompt
 ```
 
-This prints the resolved home and the exact `export` line to activate it:
-
-```
-Brasa home ready at /home/you/brasa-home
-
-To use this home in your shell:
-  export BRASA_DATA_PATH="/home/you/brasa-home"
-```
-
-For a one-off, **project-local** dataset, set the variable just for that
-command instead of globally:
+The `BRASA_DATA_PATH` environment variable, when set, always takes precedence
+over the config file. Use it for a one-off, **project-local** dataset without
+touching your persisted default:
 
 ```bash
-BRASA_DATA_PATH=./brasa-home brasa setup
+BRASA_DATA_PATH=./brasa-home brasa download ...
 ```
+
+Until brasa is configured (via `init` or the env var), data-touching commands
+fail with an actionable error.
 
 ## 7. First download and process
 
@@ -172,5 +171,6 @@ deactivate
   active environment. Activate `.venv`, then reinstall.
 - **Wrong Python version** — if `python` is older than 3.10, try `python3.10`
   (or newer) explicitly when creating the venv: `python3.10 -m venv .venv`.
-- **Data goes to an unexpected place** — check `echo $BRASA_DATA_PATH`. When
-  unset, brasa uses `./.brasa-cache` relative to your current directory.
+- **Data goes to an unexpected place** — check `echo $BRASA_DATA_PATH` (it
+  overrides the config file). When unset, brasa uses the `data_path` persisted
+  in `~/.config/brasa/config.toml` by `brasa init`.
