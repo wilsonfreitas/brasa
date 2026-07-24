@@ -8,7 +8,6 @@ SQLite-based metadata persistence.
 from __future__ import annotations
 
 import json
-import os
 import re
 import shutil
 import sqlite3
@@ -23,6 +22,7 @@ import pandas as pd
 
 from brasa.util import DownloadArgs, generate_checksum_for_template
 
+from .config import resolve_data_path
 from .core import Singleton, json_convert_from_object, json_convert_to_object
 from .resources import package_path
 
@@ -213,9 +213,7 @@ class CacheManager(Singleton):
 
     def init(self) -> None:
         """Initialize the cache manager and create necessary directories."""
-        self._cache_folder = os.environ.get(
-            "BRASA_DATA_PATH", str(Path.cwd() / ".brasa-cache")
-        )
+        self._cache_folder = resolve_data_path()
         Path(self._cache_folder).mkdir(parents=True, exist_ok=True)
         Path(self.cache_path(self._meta_folder)).mkdir(parents=True, exist_ok=True)
         Path(self.cache_path(self._db_folder)).mkdir(parents=True, exist_ok=True)

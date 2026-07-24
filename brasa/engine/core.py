@@ -60,8 +60,8 @@ class Singleton(abc.ABC):
         if it is not None:
             return it
         it = object.__new__(cls)
-        cls.__it__ = it
         it.init(*args, **kwds)
+        cls.__it__ = it
         return it
 
     @abc.abstractmethod
