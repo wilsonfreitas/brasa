@@ -16,6 +16,7 @@ from . import (
     retrieve_template,
 )
 from .engine import CacheManager, Verbosity, sync_catalog_from_disk
+from .engine.exceptions import BrasaNotConfiguredError
 from .queries import BrasaDB, describe_dataset, get_dataset, list_datasets
 from .util import parse_arg_value
 
@@ -919,11 +920,24 @@ def _cmd_init(args) -> None:
         )
 
 
-def main() -> None:  # noqa: PLR0912, PLR0915
+def main() -> None:
     args = parser.parse_args()
     if args.command == "init":
         _cmd_init(args)
-    elif args.command == "download":
+        return
+    try:
+        _run_command(args)
+    except BrasaNotConfiguredError:
+        print("Error: brasa is not configured yet.", file=sys.stderr)
+        print(
+            "Run `brasa init` to set up your data directory, or set BRASA_DATA_PATH.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
+def _run_command(args) -> None:  # noqa: PLR0912, PLR0915
+    if args.command == "download":
         plan_file = getattr(args, "plan", None)
         templates = list(args.template or [])
         verbosity = get_verbosity(args)
