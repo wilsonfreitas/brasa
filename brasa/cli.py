@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -20,7 +21,7 @@ from .util import parse_arg_value
 
 # Command groups for organized help display
 _COMMAND_GROUPS = {
-    "Setup": ["setup"],
+    "Setup": ["init"],
     "Execution": ["download", "import", "process", "run", "run-all"],
     "Templates": ["deps", "plan", "graph", "map"],
     "Datasets": [
@@ -165,8 +166,18 @@ parser = argparse.ArgumentParser(
 
 subparsers = parser.add_subparsers(dest="command", title="Commands")
 
-parser_setup = subparsers.add_parser(
-    "setup", help="setup brasa: create cache directories and metadata.db"
+parser_init = subparsers.add_parser(
+    "init", help="initialize brasa: choose the data directory and persist it"
+)
+parser_init.add_argument(
+    "--data-path",
+    help="data directory to use (skips the prompt)",
+)
+parser_init.add_argument(
+    "-y",
+    "--yes",
+    action="store_true",
+    help="accept the suggested default without prompting",
 )
 
 parser_download = subparsers.add_parser("download", help="download market data")
@@ -867,14 +878,51 @@ def _parse_download_args(raw_args: list[str] | None, calendar: str) -> dict:
     return kwargs
 
 
+def _cmd_init(args) -> None:
+    """Handle `brasa init`: choose, create, and persist the data directory.
+
+    Args:
+        args: Parsed CLI namespace with ``data_path`` and ``yes`` attributes.
+    """
+    from .engine.config import (
+        config_file_path,
+        default_data_path,
+        load_config,
+        save_data_path,
+    )
+
+    current = load_config().get("data_path")
+    suggested = args.data_path or current or default_data_path()
+    interactive = (
+        args.data_path is None
+        and not args.yes
+        and sys.stdin is not None
+        and sys.stdin.isatty()
+    )
+    if interactive:
+        answer = input(f"Data directory [{suggested}]: ").strip()
+        chosen = answer or suggested
+    else:
+        chosen = suggested
+
+    chosen_path = Path(chosen).expanduser().resolve()
+    chosen_path.mkdir(parents=True, exist_ok=True)
+    save_data_path(str(chosen_path))
+
+    print(f"Brasa home ready at {chosen_path}")
+    print(f"Configuration saved to {config_file_path()}")
+    env_override = os.environ.get("BRASA_DATA_PATH")
+    if env_override:
+        print(
+            f"Note: BRASA_DATA_PATH is set ({env_override}) "
+            "and takes precedence over the config file."
+        )
+
+
 def main() -> None:  # noqa: PLR0912, PLR0915
     args = parser.parse_args()
-    if args.command == "setup":
-        cm = CacheManager()
-        root = Path(cm.cache_folder).resolve()
-        print(f"Brasa home ready at {root}")
-        print("\nTo use this home in your shell:")
-        print(f'  export BRASA_DATA_PATH="{root}"')
+    if args.command == "init":
+        _cmd_init(args)
     elif args.command == "download":
         plan_file = getattr(args, "plan", None)
         templates = list(args.template or [])
