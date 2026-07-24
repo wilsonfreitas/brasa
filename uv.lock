@@ -84,8 +84,8 @@ wheels = [
 ]
 
 [[package]]
-name = "brasa"
-version = "0.0.1"
+name = "brasa-marketdata"
+version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },

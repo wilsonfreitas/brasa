@@ -1,6 +1,6 @@
 [project]
-name = "brasa"
-version = "0.0.1"
+name = "brasa-marketdata"
+version = "0.1.0"
 description = "Python library to extract finance market data from brazillian financial institutions: B3, ANBIMA, Tesouro Direto, CVM."
 authors = [
     { name = "wilsonfreitas", email = "wilson.freitas@gmail.com" },
@@ -60,6 +60,14 @@ packages = ["brasa"]
 
 [tool.hatch.build]
 exclude = ["**/legacy/**"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/brasa",
+    "/README.md",
+    "/LICENSE",
+    "/pyproject.toml",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
