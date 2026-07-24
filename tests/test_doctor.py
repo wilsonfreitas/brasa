@@ -1413,6 +1413,72 @@ class TestDownloadRefdateGaps:
         assert check_download_refdate_gaps(None, "B3") == []
         assert check_download_refdate_gaps([], "B3") == []
 
+    def test_coverage_info_emitted_when_clean(self):
+        cal = Calendar.load("B3")
+        days = [
+            d.date() if hasattr(d, "date") else d
+            for d in cal.seq("2024-06-03", "2024-06-28")
+        ]
+        self._seed("dl-cov", days)
+        issues = check_download_refdate_gaps(["dl-cov"], "B3", last_days=-1)
+        cov = [i for i in issues if i.code == "download-refdate-coverage"]
+        assert len(cov) == 1
+        assert cov[0].severity == "info"
+        assert cov[0].details == []
+        n = len(days)
+        assert (
+            f"dl-cov: checked {days[0]} → {days[-1]} "
+            f"({n}/{n} B3 business days downloaded)"
+        ) == cov[0].description
+
+    def test_coverage_ratio_reflects_gaps_and_precedes_gap_issue(self):
+        cal = Calendar.load("B3")
+        days = [
+            d.date() if hasattr(d, "date") else d
+            for d in cal.seq("2024-06-03", "2024-06-28")
+        ]
+        present = days[:5] + days[10:]
+        self._seed("dl-cov-gap", present)
+        issues = check_download_refdate_gaps(["dl-cov-gap"], "B3", last_days=-1)
+        codes = [i.code for i in issues]
+        assert codes.index("download-refdate-coverage") < codes.index(
+            "download-refdate-gaps"
+        )
+        cov = next(i for i in issues if i.code == "download-refdate-coverage")
+        assert f"({len(present)}/{len(days)} B3 business days downloaded)" in (
+            cov.description
+        )
+
+    def test_coverage_excludes_off_calendar_dates(self):
+        # 2024-03-02 is a Saturday -> off-calendar, excluded from the ratio.
+        days = [date(2024, 3, 1), date(2024, 3, 2), date(2024, 3, 4)]
+        self._seed("dl-cov-extra", days)
+        issues = check_download_refdate_gaps(["dl-cov-extra"], "B3", last_days=-1)
+        cov = next(i for i in issues if i.code == "download-refdate-coverage")
+        assert "(2/2 B3 business days downloaded)" in cov.description
+        assert [i for i in issues if i.code == "download-refdate-extra"]
+
+    def test_coverage_empty_window_message(self):
+        cal = Calendar.load("B3")
+        days = [
+            d.date() if hasattr(d, "date") else d
+            for d in cal.seq("2024-01-02", "2024-01-31")
+        ]
+        self._seed("dl-cov-old", days)
+        issues = check_download_refdate_gaps(["dl-cov-old"], "B3", last_days=30)
+        assert len(issues) == 1
+        assert issues[0].code == "download-refdate-coverage"
+        assert issues[0].severity == "info"
+        assert (
+            f"dl-cov-old: no downloaded dates within the evaluated window "
+            f"(last 30 days; most recent download {days[-1]})"
+        ) == issues[0].description
+
+    def test_no_dates_template_has_no_coverage_line(self):
+        _insert_meta("dl-cov-none-0", "dl-cov-none", download_checksum="dlcovnone0")
+        issues = check_download_refdate_gaps(["dl-cov-none"], "B3")
+        assert [i.code for i in issues] == ["download-refdate-missing-template"]
+
     def test_since_window_excludes_old_gaps(self):
         """Gaps older than the --since window are not reported."""
         cal = Calendar.load("B3")

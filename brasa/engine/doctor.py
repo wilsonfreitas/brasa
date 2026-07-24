@@ -1677,8 +1677,9 @@ def check_download_refdate_gaps(
             a negative value (-1) reviews the full history.
 
     Returns:
-        Up to two issues per template: a ``download-refdate-gaps`` error and a
-        ``download-refdate-extra`` info; or a single
+        Per template: a ``download-refdate-coverage`` info (always, when any
+        refdate exists), plus a ``download-refdate-gaps`` error and a
+        ``download-refdate-extra`` info when applicable; or a single
         ``download-refdate-missing-template`` warning. Never fixable.
     """
     if not template_filter:
@@ -1733,10 +1734,47 @@ def check_download_refdate_gaps(
         first_date = max(min(dates), cutoff_date)
         last_date = max(dates)
         if first_date > last_date:
-            continue  # no downloads inside the since window
+            # Dates exist, but all fall before the --last cutoff.
+            issues.append(
+                Issue(
+                    category="Downloads",
+                    code="download-refdate-coverage",
+                    severity="info",
+                    description=(
+                        f"{template}: no downloaded dates within the evaluated "
+                        f"window (last {last_days} days; most recent download "
+                        f"{last_date})"
+                    ),
+                    details=[],
+                    fixable=False,
+                )
+            )
+            continue
 
         missing = _calendar_completeness_gaps(
             dates, calendar_name, first_date.isoformat(), last_date.isoformat()
+        )
+        extra = [
+            d
+            for d in _unexpected_observations(dates, calendar_name)
+            if first_date <= d <= last_date
+        ]
+        in_window = sum(1 for d in dates if first_date <= d <= last_date)
+        observed = in_window - len(extra)
+        expected = observed + len(missing)
+        issues.append(
+            Issue(
+                category="Downloads",
+                code="download-refdate-coverage",
+                severity="info",
+                description=(
+                    f"{template}: checked {first_date} → {last_date} "
+                    f"({observed}/{expected} {calendar_name} business days "
+                    f"downloaded)"
+                ),
+                details=[],
+                fixable=False,
+            )
         )
         if missing:
             issues.append(
@@ -1753,11 +1791,6 @@ def check_download_refdate_gaps(
                 )
             )
 
-        extra = [
-            d
-            for d in _unexpected_observations(dates, calendar_name)
-            if first_date <= d <= last_date
-        ]
         if extra:
             issues.append(
                 Issue(
