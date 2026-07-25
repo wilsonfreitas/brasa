@@ -11,7 +11,6 @@ from bcb.http import _CLIENT
 
 from brasa.engine.exceptions import (
     DownloadException,
-    InvalidContentException,
     NoDataException,
 )
 
@@ -163,17 +162,13 @@ class B3PagedURLEncodedDownloader(B3URLEncodedDownloader):
     def download(self) -> IO | None:
         fp = super().download()
         obj = json.load(fp)
-        total_pages = obj["page"]["totalPages"]
-        results = obj["results"]
-        if len(results) == 0:
-            raise InvalidContentException(
-                "No results returned for the given query parameters"
-            )
+        total_pages = obj["page"]["totalPages"] or 0
+        results = obj["results"] or []
         while self.page < total_pages:
             self.page += 1
             fp = super().download()
             obj = json.load(fp)
-            results.extend(obj["results"])
+            results.extend(obj["results"] or [])
         data = {"results": results}
         if "header" in obj:
             data["header"] = obj["header"]

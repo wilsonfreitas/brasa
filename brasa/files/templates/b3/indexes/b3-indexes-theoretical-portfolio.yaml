@@ -13,6 +13,7 @@ downloader:
   function: brasa.downloaders.b3_paged_url_encoded_download
   url: https://sistemaswebb3-listados.b3.com.br/indexProxy/indexCall/GetTheoricalPortfolio
   format: json
+  validator: brasa.downloaders.validate_json_empty_file
   encoding: latin1
   download_delay: 1
   retry_attempts: 3

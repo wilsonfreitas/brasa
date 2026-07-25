@@ -153,6 +153,8 @@ def validate_json_empty_file(fname: str) -> None:
         obj = json.load(fp)
         if len(obj) == 0:
             raise InvalidContentException("JSON file is empty")
+        if isinstance(obj, dict) and "results" in obj and not obj["results"]:
+            raise InvalidContentException("JSON 'results' is empty")
 
 
 def _render_import_path(raw_path: str, kwargs: dict) -> str:
