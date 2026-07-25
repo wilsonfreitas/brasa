@@ -352,6 +352,10 @@ class ProgressDisplay:
             )
 
             if should_show_symbol:
+                retries = int(result.extra_info.get("retry_attempts_used") or 0)
+                if retries:
+                    self.console.print(Text("r" * retries, style="yellow dim"), end="")
+                    self._line_length += retries
                 symbol = Text(result.status.symbol, style=result.status.color)
                 self.console.print(symbol, end="")
                 self._line_length += 1
