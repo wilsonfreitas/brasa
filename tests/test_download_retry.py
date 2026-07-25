@@ -490,6 +490,26 @@ class TestRetryTelemetryInResult:
         assert result.retry_attempts_configured is None
         assert result.retry_success_on_attempt is None
 
+    def test_failed_download_carries_retry_count(self, temp_cache, monkeypatch):
+        """Exhausted retries must still report retry_attempts_used."""
+        from brasa.engine import download as download_mod
+        from brasa.util import DownloadArgs
+
+        meta = CacheMetadata("test-template")
+        meta.download_args = DownloadArgs({"refdate": "2025-01-03"})
+
+        def _mock_download(meta_obj, on_attempt_failure=None, **kwargs):
+            err = DownloadException("status_code = 503")
+            for attempt in (1, 2):
+                if on_attempt_failure:
+                    on_attempt_failure(attempt, err, 503)
+            raise err
+
+        monkeypatch.setattr(download_mod, "_download_marketdata", _mock_download)
+        result = temp_cache.download_marketdata(meta)
+        assert result.status_name == "FAILED"
+        assert result.retry_attempts_used == 2
+
 
 # ---------------------------------------------------------------------------
 # WIL-97 — NoDataException is non-retriable

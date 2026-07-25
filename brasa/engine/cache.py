@@ -798,10 +798,14 @@ class CacheManager(Singleton):
             NoDataException,
         )
 
+        retry_count = 0
+
         # Build per-attempt callback for intermediate retry failures
         def _on_attempt_failure(
             attempt: int, err: Exception, status_code: int | None
         ) -> None:
+            nonlocal retry_count
+            retry_count += 1
             http_st = status_code
             if http_st is None:
                 http_st = _extract_http_status(err)
@@ -851,6 +855,7 @@ class CacheManager(Singleton):
                 status_code="D",
                 status_name="DUPLICATED",
                 reason=str(e),
+                retry_attempts_used=retry_count,
                 exception=e,
             )
         except InvalidContentException as e:
@@ -869,6 +874,7 @@ class CacheManager(Singleton):
                 reason=str(e),
                 is_success=False,
                 is_expected_error=True,
+                retry_attempts_used=retry_count,
                 exception=e,
             )
         except CorruptedContentException as e:
@@ -887,6 +893,7 @@ class CacheManager(Singleton):
                 reason=str(e),
                 is_success=False,
                 is_expected_error=True,
+                retry_attempts_used=retry_count,
                 exception=e,
             )
         except NoDataException as e:
@@ -908,6 +915,7 @@ class CacheManager(Singleton):
                 reason=str(e),
                 is_success=False,
                 is_expected_error=True,
+                retry_attempts_used=retry_count,
                 exception=e,
             )
         except DownloadException as e:
@@ -927,6 +935,7 @@ class CacheManager(Singleton):
                 http_status=http_status,
                 is_success=False,
                 is_expected_error=True,
+                retry_attempts_used=retry_count,
                 exception=e,
             )
         except Exception as e:
@@ -945,6 +954,7 @@ class CacheManager(Singleton):
                 reason=str(e),
                 is_success=False,
                 is_expected_error=False,
+                retry_attempts_used=retry_count,
                 exception=e,
             )
         return result  # type: ignore[return-value]

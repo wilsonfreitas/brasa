@@ -352,6 +352,10 @@ class ProgressDisplay:
             )
 
             if should_show_symbol:
+                retries = int(result.extra_info.get("retry_attempts_used") or 0)
+                if retries:
+                    self.console.print(Text("r" * retries, style="yellow dim"), end="")
+                    self._line_length += retries
                 symbol = Text(result.status.symbol, style=result.status.color)
                 self.console.print(symbol, end="")
                 self._line_length += 1
@@ -648,29 +652,27 @@ class TaskReport:
         warnings_count = sum(
             1 for r in self.results if r.status == TaskStatus.WARNING or r.warnings
         )
+        retries = sum(
+            int(r.extra_info.get("retry_attempts_used") or 0) for r in self.results
+        )
 
         elapsed = 0.0
         if self._start_time and self._end_time:
             elapsed = (self._end_time - self._start_time).total_seconds()
 
         # Build summary parts
-        parts = []
-        if passed:
-            parts.append(f"[green]{passed} passed[/green]")
-        if failed:
-            parts.append(f"[red]{failed} failed[/red]")
-        if errors:
-            parts.append(f"[red bold]{errors} error[/red bold]")
-        if skipped:
-            parts.append(f"[yellow]{skipped} skipped[/yellow]")
-        if duplicated:
-            parts.append(f"[cyan]{duplicated} duplicated[/cyan]")
-        if invalid:
-            parts.append(f"[magenta]{invalid} invalid[/magenta]")
-        if corrupted:
-            parts.append(f"[yellow]{corrupted} corrupted[/yellow]")
-        if warnings_count:
-            parts.append(f"[yellow]{warnings_count} warning[/yellow]")
+        counts = [
+            (passed, f"[green]{passed} passed[/green]"),
+            (failed, f"[red]{failed} failed[/red]"),
+            (errors, f"[red bold]{errors} error[/red bold]"),
+            (skipped, f"[yellow]{skipped} skipped[/yellow]"),
+            (duplicated, f"[cyan]{duplicated} duplicated[/cyan]"),
+            (invalid, f"[magenta]{invalid} invalid[/magenta]"),
+            (corrupted, f"[yellow]{corrupted} corrupted[/yellow]"),
+            (warnings_count, f"[yellow]{warnings_count} warning[/yellow]"),
+            (retries, f"[yellow]{retries} retries[/yellow]"),
+        ]
+        parts = [text for count, text in counts if count]
 
         # Format elapsed time
         if elapsed >= 60:

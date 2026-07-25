@@ -535,7 +535,7 @@ class MarketDataDownloader:
                 if on_attempt_failure is not None:
                     on_attempt_failure(attempt, wrapped, status_code)
 
-                logger.warning(
+                logger.info(
                     "Download attempt %d/%d failed "
                     "(status_code=%s), retrying in %.1fs: %s",
                     attempt,

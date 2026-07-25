@@ -234,6 +234,9 @@ class DownloadPlanReport:
         )
         skipped = sum(1 for r in report.results if r.status == TaskStatus.SKIPPED)
         duplicated = sum(1 for r in report.results if r.status == TaskStatus.DUPLICATED)
+        retries = sum(
+            int(r.extra_info.get("retry_attempts_used") or 0) for r in report.results
+        )
         parts = []
         if passed:
             parts.append(f"{passed} passed")
@@ -243,6 +246,8 @@ class DownloadPlanReport:
             parts.append(f"{skipped} skipped")
         if include_duplicated and duplicated:
             parts.append(f"{duplicated} duplicated")
+        if retries:
+            parts.append(f"{retries} retries")
         return ", ".join(parts) if parts else "no results"
 
     def _implicit_summary_lines(self) -> list[str]:
@@ -644,7 +649,7 @@ def execute_download_plan(
 
         Console(stderr=True).print(
             "Status legend: .(passed) F(failed) E(error) "
-            "S(skipped) D(duplicated) I(invalid) C(corrupted) N(no-data)"
+            "S(skipped) D(duplicated) I(invalid) C(corrupted) N(no-data) r(retry)"
         )
 
     extra_args = extra_args or {}
