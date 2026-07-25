@@ -227,8 +227,7 @@ See: [API Reference - Query API](API_REFERENCE.md#query-api)
 ### Fixed Income Workflow
 ```
 1. Consolidate futures → process_etl("b3-futures-settlement-prices-consolidated")
-2. Consolidate DI1 → process_etl("b3-futures-di1-consolidated")
-3. Analyze → get_dataset("b3-futures-di1-consolidated")
+2. Analyze → get_dataset("b3-futures-settlement-prices")
 ```
 
 > **Note**: `b3-futures-settlement-prices` is frozen (no longer updated; historical
@@ -298,8 +297,7 @@ result = con.execute("""
 
 **Futures**:
 - `b3-futures-settlement-prices`: Futures settlement (frozen — historical data only)
-- `b3-futures-di1-consolidated`: DI1 futures consolidated (ETL)
-- `b3-futures-dap`: DAP inflation futures (ETL)
+- `b3-futures-dap-sp`: DAP inflation futures (ETL)
 
 **Indexes**:
 - `b3-indexes-composition`: Index compositions

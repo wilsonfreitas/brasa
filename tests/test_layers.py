@@ -120,10 +120,10 @@ class TestTemplateLayer:
 
     def test_template_with_explicit_writer_layer(self):
         """Test that templates respect explicit layer in writer."""
-        # b3-futures-di1-consolidated has writer section and is an ETL template
-        tpl = retrieve_template("b3-futures-di1-consolidated")
+        # b3-futures-settlement-prices-consolidated has an explicit
+        # writer section (layer: staging) and is an ETL template
+        tpl = retrieve_template("b3-futures-settlement-prices-consolidated")
         assert hasattr(tpl, "writer")
-        # This template is ETL so defaults to staging
         assert tpl.writer.layer == DataLayer.STAGING
 
 

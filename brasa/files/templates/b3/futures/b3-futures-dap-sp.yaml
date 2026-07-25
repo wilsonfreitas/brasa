@@ -1,4 +1,4 @@
-id: b3-futures-dap
+id: b3-futures-dap-sp
 description: Futuros de Juros Real (Cupom de IPCA) - DAP
 
 etl:

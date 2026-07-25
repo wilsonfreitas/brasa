@@ -41,7 +41,7 @@ Brasa supports **four distinct template types** based on their purpose and outpu
 |------|---------|----------|--------|----------|
 | **Download & Read (Single)** | Extract raw data → one dataset | `downloader:`, `reader:`, `fields:` | Single parquet dataset | `b3-futures-settlement-prices` |
 | **Download & Read (Multi)** | Extract raw data → multiple datasets | `downloader:`, `reader:`, `datasets:` | Multiple independent datasets | `b3-bvbg087` (indexes, IOPV, BDR) |
-| **ETL (Single)** | Transform dataset → derived dataset | `etl:`, `writer:`, `fields:` | Single parquet dataset | `b3-futures-dap` |
+| **ETL (Single)** | Transform dataset → derived dataset | `etl:`, `writer:`, `fields:` | Single parquet dataset | `b3-futures-dap-sp` |
 | **ETL (Multi)** | Transform → multiple datasets | `etl:`, `writer:`, `datasets:` | Multiple independent datasets | (rare, custom use) |
 
 **Key distinction:** Templates using `fields:` produce **one dataset**. Templates using `datasets:` produce **multiple datasets** with independent schemas.
@@ -384,10 +384,10 @@ fields:
 
 ### Example 1: Simple ETL Pipeline
 
-**Template:** `b3-futures-dap` (simplified)
+**Template:** `b3-futures-dap-sp` (simplified)
 
 ```yaml
-id: b3-futures-dap
+id: b3-futures-dap-sp
 description: Futuros de Juros Real (Cupom de IPCA) - DAP
 
 etl:
@@ -453,7 +453,7 @@ etl:
 
 writer:
   layer: staging
-  dataset: b3-futures-dap
+  dataset: b3-futures-dap-sp
   partitioning: [refdate]
 
 fields:

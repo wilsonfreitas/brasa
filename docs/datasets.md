@@ -165,6 +165,10 @@ Settlement, open interest, and option pricing/volatility.
 
 Futures daily data, settlement, and interest-rate/inflation curves.
 
+Datasets suffixed **`-sp`** derive from the frozen `b3-futures-settlement-prices`
+feed (pre-2018 tail; no maturity/OI at the source). They are special-purpose —
+reach for them only when the bvbg-based canonical datasets can't cover the need.
+
 **Futures daily data.** For **>2018**, `staging.b3-futures` is canonical — it is the
 `b3-bvbg086` prices/OI + `b3-bvbg028-future_contracts` contract metadata already
 joined and cleaned (settlement via `adjusted_quote`/`adjusted_tax`, **not**
@@ -178,7 +182,6 @@ for simple standardized contracts like DI1, DOL, DAP.
 | `staging.b3-futures-register` | Processed futures contract registry (maturity, multiplier) | refdate, symbol, maturity_date, contract_multiplier | **canonical** (contract registry) |
 | `input.b3-futures-settlement-prices` | Raw settlement prices; frozen. Pre-2018 tail only; incomplete (no maturity/OI) | refdate, symbol, commodity, price, settlement_value | raw source (pre-2018 tail; simple contracts only) |
 | `staging.b3-futures-settlement-prices` | Processed settlement prices, built on the frozen raw feed | refdate, symbol, commodity, maturity_code, price, settlement_value | ⚠️ **outdated** — ships **2× duplicate rows** (dedup before use); prefer `staging.b3-futures` |
-| `staging.b3-futures-di1-consolidated` | DI1 futures, consolidated (legacy) | refdate, symbol, maturity_code, price, settlement_value | ⚠️ **deprecated** — use `staging.b3-curves-di1` / `-standard` |
 
 ### Curves (nominal DI1 & real DAP)
 
@@ -191,8 +194,8 @@ only the business-day calendar convention). The rate is `adjusted_tax` (annualiz
 | `staging.b3-curves-di1` | DI1 nominal curve at **actual contract maturities** (+ CDI overnight vertex) | refdate, symbol, maturity_date, business_days, adjusted_tax | **canonical** (nominal curve, contract vertices) |
 | `staging.b3-curves-di1-standard` | DI1 nominal curve at **standardized fixed-term vertices** (fixed-tenor time series) | refdate, symbol, maturity_date, business_days, adjusted_tax | **canonical** (nominal curve, standard vertices) |
 | `staging.b3-curves-di1-standard-returns` | Returns of a fixed-tenor DI1 vertex | refdate, symbol, returns | **canonical** (nominal vertex returns) |
-| `staging.b3-futures-dap` | DAP (inflation) real-rate futures with implied tax | refdate, symbol, maturity_date, price, adjusted_tax, business_days, calendar_days | outdated (built on the frozen settlement feed) — current real-rate source until DAP curves are materialized |
-| `staging.b3-curves-dap` / `-standard` / `-standard-returns` | Real-rate curves mirroring the DI1 family | *(as DI1)* | ⏳ **planned — not yet materialized** in the DB (templates exist) |
+| `staging.b3-futures-dap-sp` | DAP (inflation) real-rate futures with implied tax | refdate, symbol, maturity_date, price, adjusted_tax, business_days, calendar_days | outdated (built on the frozen settlement feed) — current real-rate source until DAP curves are materialized |
+| `staging.b3-curves-dap-sp` / `-standard-sp` / `-standard-returns-sp` | Real-rate curves mirroring the DI1 family | *(as DI1)* | ⏳ **planned — not yet materialized** in the DB (templates exist) |
 
 ## Macro & FX (BCB / ANBIMA)
 
