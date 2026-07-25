@@ -15,9 +15,18 @@ etl:
         -- type A). On inversion high/low are swapped so high >= low holds
         -- (agreed fix of the legacy in-place-inversion wart).
         -- Symbols: BRLUSD for USD; {currency}USD otherwise (legacy naming).
-        with dedup as (
-          select * from (
-            select *,
+        -- currency_type is computed from the RAW table, not from dedup:
+        -- count(ask) = 0 is invariant to duplicate downloads, and having two
+        -- CTEs scan the windowed dedup CTE triggers a DuckDB binder bug
+        -- (INTERNAL Error: inequal types TIMESTAMP != VARCHAR).
+        with currency_type as (
+          select currency, count(ask) = 0 as is_type_b
+          from 'input.bcb-currency'
+          group by currency
+        ),
+        dedup as (
+          select refdate, currency, ask, parity_ask from (
+            select refdate, currency, ask, parity_ask,
               row_number() over (
                 partition by currency, refdate, bulletin_type
                 order by downloaded_at desc
@@ -26,15 +35,10 @@ etl:
           )
           where rn = 1
         ),
-        currency_type as (
-          select currency, count(ask) = 0 as is_type_b
-          from dedup
-          group by currency
-        ),
         bulletin_values as (
           select
             d.refdate as ts,
-            cast(d.refdate as date) as refdate,
+            cast(d.refdate as date) as rd,
             d.currency,
             case when d.currency = 'USD' then d.ask else d.parity_ask end as value,
             (d.currency = 'USD') or t.is_type_b as invert
@@ -43,7 +47,7 @@ etl:
         ),
         candles as (
           select
-            refdate,
+            rd,
             currency,
             invert,
             arg_min(value, ts) as open,
@@ -52,10 +56,10 @@ etl:
             arg_max(value, ts) as close
           from bulletin_values
           where value is not null
-          group by refdate, currency, invert
+          group by rd, currency, invert
         )
         select
-          refdate,
+          rd as refdate,
           case when currency = 'USD' then 'BRLUSD'
                else currency || 'USD' end as symbol,
           case when invert then 1.0 / open  else open  end as open,
