@@ -194,8 +194,7 @@ only the business-day calendar convention). The rate is `adjusted_tax` (annualiz
 | `staging.b3-curves-di1` | DI1 nominal curve at **actual contract maturities** (+ CDI overnight vertex) | refdate, symbol, maturity_date, business_days, adjusted_tax | **canonical** (nominal curve, contract vertices) |
 | `staging.b3-curves-di1-standard` | DI1 nominal curve at **standardized fixed-term vertices** (fixed-tenor time series) | refdate, symbol, maturity_date, business_days, adjusted_tax | **canonical** (nominal curve, standard vertices) |
 | `staging.b3-curves-di1-standard-returns` | Returns of a fixed-tenor DI1 vertex | refdate, symbol, returns | **canonical** (nominal vertex returns) |
-| `staging.b3-futures-dap-sp` | DAP (inflation) real-rate futures with implied tax | refdate, symbol, maturity_date, price, adjusted_tax, business_days, calendar_days | outdated (built on the frozen settlement feed) — current real-rate source until DAP curves are materialized |
-| `staging.b3-curves-dap-sp` / `-standard-sp` / `-standard-returns-sp` | Real-rate curves mirroring the DI1 family | *(as DI1)* | ⏳ **planned — not yet materialized** in the DB (templates exist) |
+| `staging.b3-curves-dap` / `-standard` / `-standard-returns` | Real-rate curves mirroring the DI1 family, sourced from `staging.b3-futures` (commodity DAP) | *(as DI1)* | canonical |
 
 ## Macro & FX (BCB / ANBIMA)
 
