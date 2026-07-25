@@ -470,3 +470,73 @@ def standard_terms_interpolation(
         )
 
     return pd.concat(frames, ignore_index=True)
+
+
+def adjust_prices_by_returns(
+    data: ds.Dataset | pd.DataFrame,
+    returns_column: str = "returns",
+    price_columns: list[str] | None = None,
+    anchor_column: str = "close",
+    calendar: str = "B3",
+    fill_calendar_gaps: bool = False,
+) -> pd.DataFrame:
+    """Back-adjust price columns from log returns, anchored at the latest close.
+
+    Per symbol, the adjustment factor is the shifted reverse cumulative
+    product of ``exp(returns)``; the latest ``anchor_column`` value is kept
+    as-is and earlier prices are scaled so consecutive adjusted closes obey
+    the given returns.
+
+    Args:
+        data: Frame with refdate, symbol, price columns and a returns column.
+        returns_column: Log-returns column name.
+        price_columns: Price columns to adjust (default: open/high/low/close).
+        anchor_column: Column anchoring the adjustment (default: close).
+        calendar: bizdays calendar name used when filling gaps.
+        fill_calendar_gaps: When True, emit synthetic rows for business days
+            missing from the source (returns 0, prices backfilled) —
+            replicating the legacy create_adjusted_prices behavior. When
+            False (default), only source rows are emitted.
+
+    Returns:
+        DataFrame with refdate, symbol and the adjusted price columns.
+    """
+    from bizdays import Calendar
+
+    from brasa.util import bizdays_mode
+
+    if price_columns is None:
+        price_columns = ["open", "high", "low", "close"]
+    df = to_dataframe(data)
+    with bizdays_mode("pandas"):
+        cal: Any = Calendar.load(calendar)
+
+    def _adjust(group: pd.DataFrame) -> pd.DataFrame:
+        group = group.set_index("refdate").sort_index(ascending=False)
+        rets = group[returns_column].copy()
+        if fill_calendar_gaps:
+            # Descending calendar sequence spanning the symbol's date range.
+            seq = list(cal.seq(rets.index[-1], rets.index[0]))
+            idx = pd.DatetimeIndex(sorted(seq, reverse=True))
+            rets = rets.reindex(idx, fill_value=0.0)
+            group = group.reindex(idx, method="bfill")
+        factor = np.exp(rets).cumprod().shift()
+        factor.iloc[0] = 1
+        latest_anchor = group[anchor_column].iloc[0].item()
+        adj_anchor = latest_anchor / factor
+        scale = adj_anchor / group[anchor_column]
+        adjusted = pd.DataFrame(
+            {col: group[col] * scale for col in price_columns},
+            index=group.index,
+        )
+        adjusted[anchor_column] = adj_anchor
+        adjusted.index.name = "refdate"
+        return adjusted[price_columns].reset_index()
+
+    result = (
+        df.groupby("symbol", group_keys=True)
+        .apply(_adjust, include_groups=False)
+        .reset_index(level=0)
+        .reset_index(drop=True)
+    )
+    return result[["refdate", "symbol", *price_columns]]
