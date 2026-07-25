@@ -1,7 +1,42 @@
 id: bcb-currencies-returns
-description: >
-  | Dataset com retornos de moedas do BCB/PTAX
+description: Retornos de moedas do BCB/PTAX
+
 etl:
-  function: brasa.etl.create_returns_for_long_datasets
-  dataset_name: bcb-currency-data
-  dataset_columns: [refdate, symbol, close]
+  pipeline:
+    - step: sql_query
+      datasets:
+        - staging.bcb-currency
+      query: |+
+        -- Daily pct/log returns per currency symbol. qualify drops each
+        -- symbol's first row (no prior close), matching the legacy dropna.
+        select
+          refdate,
+          symbol,
+          close / lag(close) over (partition by symbol order by refdate) - 1
+            as pct_return,
+          ln(close / lag(close) over (partition by symbol order by refdate))
+            as log_return
+        from 'staging.bcb-currency'
+        qualify lag(close) over (partition by symbol order by refdate) is not null
+        order by refdate, symbol
+
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+  partitioning: []
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Currency pair symbol (e.g. BRLUSD, EURUSD)
+    type: string
+  - name: pct_return
+    description: Daily percentage return of the close
+    type: numeric
+  - name: log_return
+    description: Daily log return of the close
+    type: numeric
