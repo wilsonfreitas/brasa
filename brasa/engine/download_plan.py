@@ -649,7 +649,7 @@ def execute_download_plan(
 
         Console(stderr=True).print(
             "Status legend: .(passed) F(failed) E(error) "
-            "S(skipped) D(duplicated) I(invalid) C(corrupted) N(no-data)"
+            "S(skipped) D(duplicated) I(invalid) C(corrupted) N(no-data) r(retry)"
         )
 
     extra_args = extra_args or {}
