@@ -1,0 +1,60 @@
+id: b3-futures-dap-first-generic
+description: Primeiro Futuro de Cupom de Inflação (DAPT01)
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - staging.b3-futures
+      query: |+
+        -- Front DAP contract per refdate. The maturity_date > refdate filter
+        -- encodes the legacy business_days_to_ignore=[0] rule: on the maturity
+        -- day the front contract is skipped and the 2nd contract is taken.
+        select
+          refdate,
+          'DAPT01' as symbol,
+          symbol as ref,
+          maturity_date,
+          adjusted_quote,
+          adjusted_tax / 100.0 as adjusted_tax
+        from (
+          select
+            *,
+            row_number() over (
+              partition by refdate order by maturity_date
+            ) as rn
+          from 'staging.b3-futures'
+          where
+            commodity = 'DAP'
+            and maturity_date > refdate
+        )
+        where rn = 1
+        order by refdate
+
+    - step: select_fields
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+  partitioning: []
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Continuous front-contract symbol (constant DAPT01)
+    type: string
+  - name: ref
+    description: Original contract ticker backing the generic on this date
+    type: string
+  - name: maturity_date
+    description: Maturity date of the backing contract
+    type: date
+  - name: adjusted_quote
+    description: Settlement quote of the backing contract
+    type: numeric
+  - name: adjusted_tax
+    description: Published settlement rate of the backing contract, decimal form
+    type: numeric

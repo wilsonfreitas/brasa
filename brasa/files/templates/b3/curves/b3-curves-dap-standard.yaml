@@ -1,0 +1,48 @@
+id: b3-curves-dap-standard
+description: Curva de juros reais com vértices padronizados
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - staging.b3-curves-dap
+      query: |+
+        select
+          refdate,
+          business_days,
+          adjusted_tax
+        from
+          'staging.b3-curves-dap'
+
+    - step: standard_terms
+      standard_terms: [252, 504]
+      symbol_prefix: DAPT
+      calendar: ANBIMA
+
+    - step: sort
+      by: [refdate, business_days]
+
+    - step: select_fields
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+  partitioning: []
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Standard-term vertex symbol (e.g. DAPT252)
+    type: string
+  - name: maturity_date
+    description: Vertex maturity date (refdate offset by the standard term, ANBIMA)
+    type: date
+  - name: business_days
+    description: Standard term in business days
+    type: integer
+  - name: adjusted_tax
+    description: Flat-forward interpolated annualized real rate in decimal form
+    type: numeric

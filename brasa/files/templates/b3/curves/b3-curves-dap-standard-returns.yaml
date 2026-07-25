@@ -1,0 +1,39 @@
+id: b3-curves-dap-standard-returns
+description: Retornos dos juros reais com vértices padronizados
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - staging.b3-curves-dap-standard
+      query: |+
+        -- First difference of the standard-term rate per vertex symbol.
+        -- The first refdate of each symbol has a NULL return (no prior rate),
+        -- matching the legacy create_rate_returns leading NaN.
+        select
+          refdate,
+          symbol,
+          adjusted_tax - lag(adjusted_tax)
+            over (partition by symbol order by refdate) as returns
+        from
+          'staging.b3-curves-dap-standard'
+        order by
+          refdate, symbol
+
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+  partitioning: []
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Standard-term vertex symbol (e.g. DAPT252)
+    type: string
+  - name: returns
+    description: First difference of the annualized rate (rate_t - rate_{t-1}), decimal form
+    type: numeric

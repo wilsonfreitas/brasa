@@ -9,7 +9,6 @@ from bcb import PTAX
 from bizdays import Calendar
 
 from .engine import MarketDataETL
-from .engine.pipeline.steps.shared_transforms import interp_ff
 from .parsers.b3.futures_settlement_prices import maturity2date
 from .queries import BrasaDB, get_dataset, write_dataset
 from .util import bizdays_mode
@@ -287,106 +286,6 @@ def create_b3_curves_di1(handler: MarketDataETL):
     my_schema = pyarrow.schema(fields)
 
     write_dataset(tb_di1_curve.to_pandas(), handler.template_id, schema=my_schema)
-
-
-def create_b3_curves(handler: MarketDataETL):
-    tb = (
-        get_dataset(handler.futures_dataset)
-        .filter(pc.field("business_days") > 0)
-        .to_table()
-    )
-    tb_curve = tb.select(
-        ["refdate", "symbol", "maturity_date", "business_days", "adjusted_tax"]
-    ).sort_by([("refdate", "ascending"), ("business_days", "ascending")])
-    write_dataset(tb_curve.to_pandas(), handler.template_id)
-
-
-def create_b3_curves_standard_terms(handler: MarketDataETL):
-    tb_curve = get_dataset(handler.curves_dataset).to_table()
-    business_days_standard = np.array(handler.standard_terms)
-    symbols_standard = pyarrow.array(
-        [f"{handler.symbol_prefix}{d}" for d in business_days_standard],
-        type=pyarrow.string(),
-    )
-    cal = Calendar.load(handler.calendar)
-    tables = []
-    for date in tb_curve.column("refdate").unique():
-        rates = (
-            tb_curve.filter(pc.field("refdate") == date)
-            .column("adjusted_tax")
-            .to_numpy()
-        )
-        terms = (
-            tb_curve.filter(pc.field("refdate") == date)
-            .column("business_days")
-            .to_numpy()
-        )
-        interp_rates = pyarrow.array(
-            interp_ff(business_days_standard, rates, terms), type=pyarrow.float64()
-        )
-        mat_dates = pyarrow.array(
-            cal.offset(date.as_py(), business_days_standard),
-            type=pyarrow.timestamp("ns"),
-        )
-        ta = pyarrow.table(
-            [
-                pyarrow.array(
-                    [date.as_py()] * len(interp_rates), type=pyarrow.timestamp("us")
-                ),
-                symbols_standard,
-                mat_dates,
-                pyarrow.array(business_days_standard, type=pyarrow.int64()),
-                interp_rates,
-            ],
-            names=[
-                "refdate",
-                "symbol",
-                "maturity_date",
-                "business_days",
-                "adjusted_tax",
-            ],
-        )
-        tables.append(ta)
-    tb_curve_standard = pyarrow.concat_tables(tables).sort_by(
-        [("refdate", "ascending"), ("business_days", "ascending")]
-    )
-    fields = [
-        pyarrow.field("refdate", pyarrow.timestamp("us")),
-        pyarrow.field("symbol", pyarrow.string()),
-        pyarrow.field("maturity_date", pyarrow.timestamp("ns")),
-        pyarrow.field("business_days", pyarrow.int64()),
-        pyarrow.field("adjusted_tax", pyarrow.float64()),
-    ]
-
-    my_schema = pyarrow.schema(fields)
-
-    write_dataset(tb_curve_standard.to_pandas(), handler.template_id, schema=my_schema)
-
-
-def create_rate_returns(handler: MarketDataETL):
-    tb_curve_standard = get_dataset(handler.curves_dataset).to_table()
-    tables = []
-    for symbol in tb_curve_standard.column("symbol").unique():
-        rates = (
-            tb_curve_standard.filter(pc.field("symbol") == symbol)
-            .column("adjusted_tax")
-            .to_numpy()
-        )
-        dates = tb_curve_standard.filter(pc.field("symbol") == symbol).column("refdate")
-        symbols = tb_curve_standard.filter(pc.field("symbol") == symbol).column(
-            "symbol"
-        )
-        returns = np.concatenate([np.array([np.nan]), np.diff(rates)])
-        ta = pyarrow.table(
-            [dates, symbols, pyarrow.array(returns, type=pyarrow.float64())],
-            names=["refdate", "symbol", "returns"],
-        )
-        tables.append(ta)
-
-    tb_curve_standard_returns = pyarrow.concat_tables(tables).sort_by(
-        [("refdate", "ascending"), ("symbol", "ascending")]
-    )
-    write_dataset(tb_curve_standard_returns.to_pandas(), handler.template_id)
 
 
 def create_cotahist_dataset(handler: MarketDataETL):

@@ -297,7 +297,7 @@ result = con.execute("""
 
 **Futures**:
 - `b3-futures-settlement-prices`: Futures settlement (frozen — historical data only)
-- `b3-futures-dap-sp`: DAP inflation futures (ETL)
+- `b3-curves-dap`: DAP real-rate curve (ETL)
 
 **Indexes**:
 - `b3-indexes-composition`: Index compositions

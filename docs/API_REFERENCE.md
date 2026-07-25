@@ -694,8 +694,7 @@ python -m brasa.cli query "SELECT * FROM 'b3-cotahist-daily'" -o output.parquet
 - `b3-futures`: Futures contracts with prices and settlement rates (bvbg028 + bvbg086)
 - `b3-futures-settlement-prices-consolidated`: Settlement prices repartitioned by commodity
 - `b3-futures-settlement-prices-consolidated`: DI1 futures consolidated
-- `b3-futures-dap-sp`: DAP futures
-- `b3-futures-dap-sp-first-generic-sp`: DAP front-month contract
+- `b3-futures-dap-first-generic`: DAP front-month contract
 
 > The legacy futures ETLs (`b3-futures-{di1,ddi,dol,wdo,win,frc}` and their
 > first-generic/adjusted chains) were moved to `brasa/files/templates/legacy/` and are no
@@ -705,9 +704,9 @@ python -m brasa.cli query "SELECT * FROM 'b3-cotahist-daily'" -o output.parquet
 - `b3-curves-di1`: DI1 prefixed yield curve (b3-futures + b3-economic-indicators)
 - `b3-curves-di1-standard`: Interpolated DI1 curve
 - `b3-curves-di1-standard-returns`: DI1 curve returns
-- `b3-curves-dap-sp`: DAP term structure
-- `b3-curves-dap-sp-standard-sp`: Interpolated DAP curve
-- `b3-curves-dap-sp-standard-sp-returns-sp`: DAP curve returns
+- `b3-curves-dap`: DAP term structure
+- `b3-curves-dap-standard`: Interpolated DAP curve
+- `b3-curves-dap-standard-returns`: DAP curve returns
 
 **Equities**:
 - `b3-cotahist`: Merged COTAHIST (yearly + daily)
