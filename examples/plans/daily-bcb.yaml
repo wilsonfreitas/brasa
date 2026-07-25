@@ -1,0 +1,20 @@
+# daily-bcb.yaml
+name: daily-bcb
+description: Daily BCB market data download
+
+defaults:
+  # merged into every task
+  calendar: B3
+  force: false
+  smart_update: true
+
+tasks:
+  # bcb SGS data
+  - template: bcb-sgs
+    args:
+      code: [4389, 1178, 432, 433, 189] # CDI, SELIC, SETA, IPCA, IGPM
+
+  # bcb PTAX intraday quotes
+  - template: bcb-currency
+    args:
+      currency: [AUD, CAD, CHF, EUR, GBP, JPY, USD]
