@@ -55,3 +55,22 @@ def test_gap_fill_emits_synthetic_row():
     out = adjust_prices_by_returns(df, fill_calendar_gaps=True)
     assert len(out) == 3
     assert pd.Timestamp("2024-01-03") in set(out["refdate"])
+
+
+def test_step_is_registered_and_delegates():
+    from brasa.engine.pipeline.registry import StepRegistry
+
+    step = StepRegistry.create(
+        "adjust_prices_by_returns",
+        {
+            "step": "adjust_prices_by_returns",
+            "returns_column": "returns",
+            "price_columns": ["open", "high", "low", "close"],
+            "anchor_column": "close",
+            "calendar": "B3",
+            "fill_calendar_gaps": True,
+        },
+    )
+    out = step.execute(make_frame(), None)
+    assert list(out.columns) == ["refdate", "symbol", "open", "high", "low", "close"]
+    assert len(out) == 3
