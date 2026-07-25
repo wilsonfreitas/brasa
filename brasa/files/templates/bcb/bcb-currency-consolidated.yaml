@@ -1,0 +1,98 @@
+id: bcb-currency-consolidated
+description: Candles diários de moedas (PTAX) consolidados a partir dos boletins intradiários
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - input.bcb-currency
+      query: |+
+        -- Daily currency candles from stored PTAX bulletins.
+        -- Dedup: latest download wins per (currency, bulletin timestamp, type).
+        -- Value: ask for USD; parity_ask for every other currency (legacy rule).
+        -- Inversion (1/x): USD and type-B currencies; type B is inferred as
+        -- currencies whose ask is entirely NULL (PTAX fills bid/ask only for
+        -- type A). On inversion high/low are swapped so high >= low holds
+        -- (agreed fix of the legacy in-place-inversion wart).
+        -- Symbols: BRLUSD for USD; {currency}USD otherwise (legacy naming).
+        -- currency_type is computed from the RAW table, not from dedup:
+        -- count(ask) = 0 is invariant to duplicate downloads, and having two
+        -- CTEs scan the windowed dedup CTE triggers a DuckDB binder bug
+        -- (INTERNAL Error: inequal types TIMESTAMP != VARCHAR).
+        with currency_type as (
+          select currency, count(ask) = 0 as is_type_b
+          from 'input.bcb-currency'
+          group by currency
+        ),
+        dedup as (
+          select refdate, currency, ask, parity_ask from (
+            select refdate, currency, ask, parity_ask,
+              row_number() over (
+                partition by currency, refdate, bulletin_type
+                order by downloaded_at desc
+              ) as rn
+            from 'input.bcb-currency'
+          )
+          where rn = 1
+        ),
+        bulletin_values as (
+          select
+            d.refdate as ts,
+            cast(d.refdate as date) as rd,
+            d.currency,
+            case when d.currency = 'USD' then d.ask else d.parity_ask end as value,
+            (d.currency = 'USD') or t.is_type_b as invert
+          from dedup d
+          join currency_type t using (currency)
+        ),
+        candles as (
+          select
+            rd,
+            currency,
+            invert,
+            arg_min(value, ts) as open,
+            max(value) as high,
+            min(value) as low,
+            arg_max(value, ts) as close
+          from bulletin_values
+          where value is not null
+          group by rd, currency, invert
+        )
+        select
+          rd as refdate,
+          case when currency = 'USD' then 'BRLUSD'
+               else currency || 'USD' end as symbol,
+          case when invert then 1.0 / open  else open  end as open,
+          case when invert then 1.0 / low   else high  end as high,
+          case when invert then 1.0 / high  else low   end as low,
+          case when invert then 1.0 / close else close end as close
+        from candles
+        order by refdate, symbol
+
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+  dataset: bcb-currency
+  partitioning: [symbol]
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Currency pair symbol (BRLUSD for USD; e.g. EURUSD otherwise)
+    type: string
+  - name: open
+    description: First bulletin value of the day (inverted where applicable)
+    type: numeric
+  - name: high
+    description: Daily high (inverted series use 1/min)
+    type: numeric
+  - name: low
+    description: Daily low (inverted series use 1/max)
+    type: numeric
+  - name: close
+    description: Last bulletin value of the day (inverted where applicable)
+    type: numeric

@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import pyarrow
 import pyarrow.compute as pc
-from bcb import PTAX
 from bizdays import Calendar
 
 from .engine import MarketDataETL
@@ -122,119 +121,6 @@ def create_b3_futures_first_generic(handler: MarketDataETL):
     first_contracts.reset_index(inplace=True)
 
     write_dataset(first_contracts, handler.template_id)
-
-
-def create_bcb_data(handler: MarketDataETL):
-    code_to_symbol = {
-        4389: "CDI",
-        1178: "SELIC",
-        432: "SETA",
-        433: "IPCA",
-        189: "IGPM",
-    }
-
-    ds = get_dataset("bcb-sgs", layer="input")
-    df = ds.to_table().to_pandas()
-    df = df[df["code"].isin(code_to_symbol.keys())].copy()
-    df["symbol"] = df["code"].map(code_to_symbol)
-    df = df[["refdate", "value", "symbol"]].copy()
-    df["refdate"] = pd.to_datetime(df["refdate"])
-
-    fields = [
-        pyarrow.field("refdate", pyarrow.timestamp("us")),
-        pyarrow.field("value", pyarrow.float64()),
-        pyarrow.field("symbol", pyarrow.string()),
-    ]
-    my_schema = pyarrow.schema(fields)
-
-    write_dataset(df, handler.template_id, schema=my_schema)
-
-
-def _create_currency_candle(df: pd.DataFrame) -> pd.DataFrame:
-    d = {
-        "refdate": df["refdate"].iloc[0],
-        "symbol": df["symbol"].iloc[0],
-        "close": df["value"].iloc[-1],
-        "open": df["value"].iloc[0],
-        "high": df["value"].max().item(),
-        "low": df["value"].min().item(),
-    }
-    return pd.DataFrame([d])
-
-
-def _get_currency_data(
-    ep: PTAX,
-    currency: str,
-    parity: str,
-    start=datetime(2000, 1, 1),
-    end=None,
-) -> pd.DataFrame:
-    if end is None:
-        end = datetime.today()
-    if currency == "USD":
-        dd = ep.query().select(ep.dataHoraCotacao, ep.cotacaoVenda, ep.tipoBoletim)
-        symbol = "BRLUSD"
-    else:
-        dd = ep.query().select(ep.dataHoraCotacao, ep.paridadeVenda, ep.tipoBoletim)
-        symbol = f"{currency}USD"
-    dd = dd.parameters(
-        moeda=currency,
-        dataInicial=start.strftime("%m/%d/%Y"),
-        dataFinalCotacao=end.strftime("%m/%d/%Y"),
-    ).collect()
-
-    dd_cur = dd.copy()
-    dd_cur = dd_cur.rename(
-        columns={
-            "dataHoraCotacao": "refdate",
-            "paridadeVenda": "value",
-            "cotacaoVenda": "value",
-        }
-    )
-    dd_cur["symbol"] = symbol
-    dd_cur["trade_date"] = dd_cur["refdate"]
-    dd_cur["refdate"] = dd_cur["refdate"]
-    dd_cur = dd_cur.sort_values("trade_date")
-    dd_cur = (
-        dd_cur.groupby("refdate").apply(_create_currency_candle).reset_index(drop=True)
-    )
-    dd_cur = dd_cur.loc[:, ["refdate", "symbol", "open", "high", "low", "close"]]
-    if parity == "B" or currency == "USD":
-        dd_cur[["open", "high", "low", "close"]] = (
-            1 / dd_cur[["open", "high", "low", "close"]]
-        )
-    return dd_cur
-
-
-def create_bcb_currency_data(handler: MarketDataETL):
-    ptax = PTAX()
-    moedas = ptax.get_endpoint("Moedas").query().collect()
-    ep = ptax.get_endpoint("CotacaoMoedaPeriodo")
-    # tipo A
-    dsa = [
-        _get_currency_data(ep, moeda, "A")
-        for moeda in moedas.query("tipoMoeda == 'A'")["simbolo"]
-    ]
-    # tipo B
-    dsb = [
-        _get_currency_data(ep, moeda, "B")
-        for moeda in moedas.query("tipoMoeda == 'B'")["simbolo"]
-    ]
-
-    dd_dol = pd.concat(dsa + dsb)
-
-    fields = [
-        pyarrow.field("refdate", pyarrow.timestamp("us")),
-        pyarrow.field("symbol", pyarrow.string()),
-        pyarrow.field("open", pyarrow.float64()),
-        pyarrow.field("high", pyarrow.float64()),
-        pyarrow.field("low", pyarrow.float64()),
-        pyarrow.field("close", pyarrow.float64()),
-    ]
-
-    my_schema = pyarrow.schema(fields)
-
-    write_dataset(dd_dol, handler.template_id, schema=my_schema)
 
 
 def create_b3_curves_di1(handler: MarketDataETL):
