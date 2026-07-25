@@ -36,6 +36,30 @@ def test_validate_json_empty_file_passes_on_content(tmp_path):
     validate_json_empty_file(str(f))
 
 
+def test_validate_json_empty_results_raises_invalid_content(tmp_path):
+    for content in (
+        b'{"page": {"totalPages": 1}, "results": []}',
+        b'{"page": {"totalPages": 1}, "results": null}',
+    ):
+        f = tmp_path / "data.json"
+        f.write_bytes(content)
+        with pytest.raises(InvalidContentException):
+            validate_json_empty_file(str(f))
+
+
+def test_validate_json_non_empty_results_passes(tmp_path):
+    f = tmp_path / "data.json"
+    f.write_bytes(b'{"results": [{"a": 1}]}')
+    validate_json_empty_file(str(f))
+
+
+def test_validate_json_without_results_key_passes(tmp_path):
+    for content in (b'{"a": 1}', b'[{"a": 1}]'):
+        f = tmp_path / "data.json"
+        f.write_bytes(content)
+        validate_json_empty_file(str(f))
+
+
 def test_bvbg086_parser_raises_corrupted_content_on_missing_tag():
     xml = (
         b'<?xml version="1.0"?>'
