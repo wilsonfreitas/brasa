@@ -432,6 +432,33 @@ class StandardTermsInterpolation(PipelineStep):
         )
 
 
+@StepRegistry.register("adjust_prices_by_returns")
+class AdjustPricesByReturnsStep(PipelineStep):
+    """Back-adjust price columns from log returns, anchored at the latest close.
+
+    Parameters:
+        returns_column: Log-returns column name (default: returns).
+        price_columns: Price columns to adjust (default: [open, high, low, close]).
+        anchor_column: Column anchoring the adjustment (default: close).
+        calendar: bizdays calendar for gap filling (default: B3).
+        fill_calendar_gaps: Emit synthetic rows for business days missing from
+            the source — returns 0, prices backfilled (default: false).
+    """
+
+    def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
+        """Back-adjust the configured price columns."""
+        return shared_transforms.adjust_prices_by_returns(
+            data,
+            returns_column=self.get_param("returns_column", "returns"),
+            price_columns=self.get_param(
+                "price_columns", ["open", "high", "low", "close"]
+            ),
+            anchor_column=self.get_param("anchor_column", "close"),
+            calendar=self.get_param("calendar", "B3"),
+            fill_calendar_gaps=self.get_param("fill_calendar_gaps", False),
+        )
+
+
 @StepRegistry.register("flatten_columns")
 class FlattenStep(PipelineStep):
     """Flatten columns by splitting delimited values into separate rows.
