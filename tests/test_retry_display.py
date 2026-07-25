@@ -41,3 +41,40 @@ def test_no_retries_render_plain_symbol():
     out = _render(_make_result(retries=None))
     assert "r" not in out.split("[")[0]
     assert "F" in out
+
+
+def test_task_report_summary_counts_retries():
+    from brasa.engine.reporting import TaskReport
+
+    buf = io.StringIO()
+    console = Console(file=buf, force_terminal=False, width=200)
+    report = TaskReport(
+        operation="download",
+        template_name="tpl",
+        verbosity=Verbosity.NORMAL,
+        console=console,
+    )
+    report.start(total=2)
+    report.add_result(_make_result(retries=3))
+    report.add_result(_make_result(status=TaskStatus.PASSED, retries=2))
+    report.finish()
+    assert "5 retries" in buf.getvalue()
+
+
+def test_plan_report_status_str_counts_retries():
+    from brasa.engine.download_plan import DownloadPlanReport
+    from brasa.engine.reporting import TaskReport
+
+    report = TaskReport(operation="download", template_name="tpl")
+    report.results = [_make_result(retries=2), _make_result(retries=None)]
+    line = DownloadPlanReport._report_status_str(report)
+    assert "2 retries" in line
+
+
+def test_summary_omits_retries_when_zero():
+    from brasa.engine.download_plan import DownloadPlanReport
+    from brasa.engine.reporting import TaskReport
+
+    report = TaskReport(operation="download", template_name="tpl")
+    report.results = [_make_result(retries=None)]
+    assert "retries" not in DownloadPlanReport._report_status_str(report)
