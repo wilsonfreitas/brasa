@@ -3,10 +3,7 @@
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from brasa.downloaders.downloaders import B3PagedURLEncodedDownloader
-from brasa.engine.exceptions import InvalidContentException
 
 
 def _make_response(data: dict, status_code: int = 200) -> MagicMock:
@@ -18,8 +15,8 @@ def _make_response(data: dict, status_code: int = 200) -> MagicMock:
 
 
 class TestB3PagedURLEncodedDownloaderEmptyResults:
-    def test_empty_results_raises_invalid_content_exception(self):
-        """When the first page has no results, raise InvalidContentException."""
+    def test_empty_results_returns_empty_results_file(self):
+        """Empty results download cleanly; rejection is the validator's job."""
         response_data = {"page": {"totalPages": 1}, "results": []}
         mock_response = _make_response(response_data)
 
@@ -27,8 +24,36 @@ class TestB3PagedURLEncodedDownloaderEmptyResults:
             downloader = B3PagedURLEncodedDownloader(
                 "http://example.com/api", verify_ssl=False
             )
-            with pytest.raises(InvalidContentException):
-                downloader.download()
+            result = downloader.download()
+
+        assert result is not None
+        assert json.loads(result.read())["results"] == []
+
+    def test_null_results_returns_empty_results_file(self):
+        """B3 returns "results": null for indexes with no portfolio."""
+        response_data = {"page": {"totalPages": 1}, "results": None}
+        mock_response = _make_response(response_data)
+
+        with patch("requests.get", return_value=mock_response):
+            downloader = B3PagedURLEncodedDownloader(
+                "http://example.com/api", verify_ssl=False
+            )
+            result = downloader.download()
+
+        assert result is not None
+        assert json.loads(result.read())["results"] == []
+
+    def test_null_total_pages_does_not_crash(self):
+        response_data = {"page": {"totalPages": None}, "results": None}
+        mock_response = _make_response(response_data)
+
+        with patch("requests.get", return_value=mock_response):
+            downloader = B3PagedURLEncodedDownloader(
+                "http://example.com/api", verify_ssl=False
+            )
+            result = downloader.download()
+
+        assert json.loads(result.read())["results"] == []
 
 
 class TestB3PagedURLEncodedDownloaderSinglePage:
