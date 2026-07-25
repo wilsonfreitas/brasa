@@ -36,6 +36,17 @@ staging.b3-indexes-historical-prices:
       ICON: { calendar: B3 }
       IDIV: { calendar: B3 }
 
+staging.b3-equities-etfs-returns:
+  - rule: calendar-completeness
+    date_column: refdate
+    group_column: symbol
+    series:
+      BOVA11: { calendar: B3 }
+      IVVB11: { calendar: B3 }
+      SMAL11: { calendar: B3 }
+      DIVO11: { calendar: B3 }
+      XBOV11: { calendar: B3 }
+
 staging.b3-cotahist:
   - rule: calendar-completeness
     date_column: refdate
@@ -81,7 +92,7 @@ input.b3-bvbg086-nonbiz:
 
 # Content rules (dataset-wide column checks).
 staging.b3-futures-settlement-prices:
-  - rule: no-duplicates          # this dataset is known to ship 2x rows
+  - rule: no-duplicates # this dataset is known to ship 2x rows
     key: [refdate, symbol]
 staging.b3-cotahist-content:
   - rule: value-range
