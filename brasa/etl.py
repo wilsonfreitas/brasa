@@ -3,7 +3,6 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 import pyarrow
-import pyarrow.acero as ac
 import pyarrow.compute as pc
 from bcb import PTAX
 from bizdays import Calendar
@@ -11,7 +10,6 @@ from bizdays import Calendar
 from .engine import MarketDataETL
 from .parsers.b3.futures_settlement_prices import maturity2date
 from .queries import BrasaDB, get_dataset, write_dataset
-from .util import bizdays_mode
 
 
 def create_b3_rate_futures(handler: MarketDataETL):
@@ -457,20 +455,6 @@ def create_etf_returns_before_20180101(handler: MarketDataETL):
     )
     ix = df_cotahist_etfs_returns["refdate"] < datetime(2018, 1, 1)
     write_dataset(df_cotahist_etfs_returns[ix], handler.template_id)
-
-
-def create_indexes_returns(handler: MarketDataETL):
-    cols = [
-        "refdate",
-        "symbol",
-        "oscillation_val",
-    ]
-    df_index = get_dataset(handler.indexes_dataset).to_table(columns=cols).to_pandas()
-    df_index["pct_return"] = df_index["oscillation_val"]
-    df_index["log_return"] = np.log(1 + df_index["pct_return"])
-    write_dataset(
-        df_index[["refdate", "symbol", "pct_return", "log_return"]], handler.template_id
-    )
 
 
 def _calc_returns(df: pd.DataFrame, value_column: str) -> pd.DataFrame:
@@ -976,94 +960,6 @@ def create_b3_companies_subscriptions(handler: MarketDataETL):
     su0_ = pd.merge(su0_, sp[["isin", "symbol"]], on="isin").drop(columns="isin")
 
     write_dataset(su0_, handler.template_id)
-
-
-def create_adjusted_prices(handler: MarketDataETL):
-    ds_md = get_dataset(handler.quotes_dataset)
-    if handler.quotes_dataset == "b3-bvbg086":
-        seq = [
-            ac.Declaration("scan", ac.ScanNodeOptions(ds_md)),
-            ac.Declaration(
-                "filter",
-                ac.FilterNodeOptions(pc.field("refdate") == pc.field("creation_date")),
-            ),
-            ac.Declaration(
-                "aggregate",
-                ac.AggregateNodeOptions([("refdate", "max", None, "max_refdate")]),
-            ),
-        ]
-    else:
-        seq = [
-            ac.Declaration("scan", ac.ScanNodeOptions(ds_md)),
-            ac.Declaration(
-                "aggregate",
-                ac.AggregateNodeOptions([("refdate", "max", None, "max_refdate")]),
-            ),
-        ]
-    t = ac.Declaration.from_sequence(seq).to_table()
-    refdate = t.column("max_refdate")[0].as_py()
-    symbols = (
-        get_dataset(handler.returns_dataset)
-        .filter(pc.field("refdate") == refdate)
-        .scanner(columns=["symbol"])
-        .to_table()
-    )
-    ohlc = (
-        get_dataset(handler.quotes_dataset)
-        .filter(pc.field("symbol").isin(symbols.columns[0].to_pylist()))
-        .scanner(columns=handler.dataset_names)
-        .to_table()
-        .to_pandas()
-    )
-    ohlc = ohlc.set_index(["refdate", "symbol"])
-    ohlc.columns = handler.candle_names
-    symbols = ohlc.index.get_level_values("symbol").unique()
-    rets = (
-        get_dataset(handler.returns_dataset)
-        .filter(pc.field("symbol").isin(symbols))
-        .to_table()
-        .to_pandas()
-    )
-    all_data = rets.set_index(["refdate", "symbol"]).join(ohlc).reset_index()
-
-    with bizdays_mode("pandas"):
-        cal = Calendar.load(handler.calendar)
-
-    def _(all_data):
-        all_data = all_data.set_index("refdate").sort_index(ascending=False)
-        rets = all_data["returns"].copy()
-        idx = cal.seq(rets.index[0], rets.index[-1])
-        rets = rets.reindex(idx, fill_value=0.0)
-        all_data = all_data.reindex(idx, method="bfill")
-        f = np.exp(rets).cumprod().shift()
-        f.iloc[0] = 1
-        close = all_data[handler.candle_names[-1]].iloc[0].item()
-        adj_close = close / f
-        fc = adj_close / all_data[handler.candle_names[-1]]
-        adj_open = all_data[handler.candle_names[0]] * fc
-        adj_high = all_data[handler.candle_names[1]] * fc
-        adj_low = all_data[handler.candle_names[2]] * fc
-        adj = pd.concat([adj_open, adj_high, adj_low, adj_close], axis=1)
-        adj.columns = handler.candle_names
-
-        return adj.reset_index()
-
-    names = ["refdate", "symbol"]
-    names.extend(handler.candle_names)
-    adj = all_data.groupby("symbol").apply(_).reset_index()[names]
-
-    fields = [
-        pyarrow.field("refdate", pyarrow.timestamp("us")),
-        pyarrow.field("symbol", pyarrow.string()),
-        pyarrow.field("open", pyarrow.float64()),
-        pyarrow.field("high", pyarrow.float64()),
-        pyarrow.field("low", pyarrow.float64()),
-        pyarrow.field("close", pyarrow.float64()),
-    ]
-
-    my_schema = pyarrow.schema(fields)
-
-    write_dataset(adj, handler.template_id, schema=my_schema)
 
 
 def rename_symbols_in_equities_returns(handler: MarketDataETL):
