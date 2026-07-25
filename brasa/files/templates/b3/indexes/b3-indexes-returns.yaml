@@ -1,5 +1,41 @@
 id: b3-indexes-returns
 description: Dataset de retornos de índices de ações da B3
+
 etl:
-  function: brasa.etl.create_indexes_returns
-  indexes_dataset: b3-bvbg087-indexes_info
+  pipeline:
+    - step: sql_query
+      datasets:
+        - input.b3-bvbg087-indexes_info
+      query: |+
+        -- pct_return is B3's published oscillation; log_return = ln(1 + pct).
+        -- NULL oscillation propagates as NULL returns (legacy kept NaNs).
+        select
+          refdate,
+          symbol,
+          oscillation_val as pct_return,
+          ln(1 + oscillation_val) as log_return
+        from
+          'input.b3-bvbg087-indexes_info'
+        order by
+          refdate, symbol
+
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+  partitioning: []
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Index symbol
+    type: string
+  - name: pct_return
+    description: Daily percentage return (B3 published oscillation)
+    type: numeric
+  - name: log_return
+    description: Daily log return, ln(1 + pct_return)
+    type: numeric
