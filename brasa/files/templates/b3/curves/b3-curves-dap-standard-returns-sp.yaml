@@ -1,5 +1,0 @@
-id: b3-curves-dap-standard-returns-sp
-description: Retornos dos juros reais com vértices padronizados
-etl:
-  function: brasa.etl.create_rate_returns
-  curves_dataset: b3-curves-dap-standard-sp

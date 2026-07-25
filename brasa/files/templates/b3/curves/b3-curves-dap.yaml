@@ -1,0 +1,63 @@
+id: b3-curves-dap
+description: Curva de juros reais baseada nos futuros de DAP
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - staging.b3-futures
+      query: |+
+        -- DAP real-rate curve: contract vertices from canonical staging.b3-futures.
+        -- adjusted_tax is B3's published settlement rate in percent; divide by 100
+        -- to store decimals (same convention as b3-curves-di1). No short-end
+        -- vertex: real rates have no overnight analog to DI1's CDI vertex.
+        select
+          refdate,
+          symbol,
+          maturity_date as maturity_date_raw,
+          adjusted_tax / 100.0 as adjusted_tax
+        from
+          'staging.b3-futures'
+        where
+          commodity = 'DAP'
+          and maturity_date > refdate
+          and adjusted_tax is not null
+
+    - step: following_bizday
+      date_column: maturity_date_raw
+      adjusted_column: maturity_date
+      calendar: ANBIMA
+
+    - step: bizdays
+      from_column: refdate
+      to_column: maturity_date
+      output_column: business_days
+      calendar: ANBIMA
+
+    - step: sort
+      by: [refdate, maturity_date]
+
+    - step: select_fields
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+  partitioning: []
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Vertex symbol — DAP contract ticker
+    type: string
+  - name: maturity_date
+    description: Vertex maturity date, adjusted to the next ANBIMA business day
+    type: date
+  - name: business_days
+    description: Business days from refdate to maturity (ANBIMA calendar)
+    type: integer
+  - name: adjusted_tax
+    description: Annualized real rate in decimal form (e.g. 0.0614)
+    type: numeric
