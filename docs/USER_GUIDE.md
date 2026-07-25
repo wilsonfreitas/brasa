@@ -908,14 +908,10 @@ Existing cache databases are migrated automatically on startup. The
 - `downloaded=1` → `status_code='.'`, `status_name='PASSED'`
 - `downloaded=0` → `status_code='F'`, `status_name='FAILED'`
 
-You can also run the migration manually:
-
-```bash
-uv run python scripts/migrate_download_trials_status.py [CACHE_PATH]
-```
-
-If `CACHE_PATH` is omitted, the script uses `$BRASA_DATA_PATH` or the
-`data_path` persisted by `brasa init`.
+The standalone migration script (`scripts/migrate_download_trials_status.py`)
+has been removed after being applied; recover it from git history if an
+old, never-migrated cache ever needs it. The automatic on-startup migration
+remains in place.
 
 **Rollback**: The migration only adds columns and backfills NULLs. It does not
 remove or modify the legacy `downloaded` column. Reverting requires manually
