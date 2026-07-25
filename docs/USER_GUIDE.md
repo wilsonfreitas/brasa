@@ -81,7 +81,7 @@ Create derived datasets:
 from brasa import process_etl
 
 # Consolidate DI1 futures
-process_etl("b3-futures-di1-consolidated")
+process_etl("b3-futures-settlement-prices-consolidated")
 
 # Create equity returns dataset
 process_etl("b3-equities-returns")
@@ -163,12 +163,12 @@ import pyarrow.compute as pc
 process_etl("b3-futures-settlement-prices-consolidated")
 
 # 2. Create the DAP futures dataset with implied rates
-process_etl("b3-futures-dap")
+process_etl("b3-futures-dap-sp")
 
 # 3. Query specific date
 date = datetime(2024, 12, 31)
 curve = (
-    get_dataset("b3-futures-dap")
+    get_dataset("b3-futures-dap-sp")
     .filter(pc.field("refdate") == date)
     .to_table()
     .to_pandas()
