@@ -120,18 +120,16 @@ def test_bcb_sgs_download_multiple_codes():
 
 
 @pytest.mark.integration
-def test_bcb_data_etl_reads_from_input():
-    """Integration test: bcb-data ETL reads from input.bcb-sgs instead of calling python-bcb directly."""
-    # First, download SGS data for the codes used by bcb-data
+def test_bcb_sgs_consolidated_etl_reads_from_input():
+    """Integration test: bcb-sgs-consolidated ETL reads from input.bcb-sgs."""
     codes = [4389, 1178, 432, 433, 189]
     download_marketdata(
         "bcb-sgs", code=codes, start=date(2025, 1, 2), end=date(2025, 1, 10)
     )
     process_marketdata("bcb-sgs")
 
-    # Then run the ETL
-    process_etl("bcb-data")
+    process_etl("bcb-sgs-consolidated")
 
     man = CacheManager()
-    ds_path = Path(man.db_path("staging/bcb-data"))
+    ds_path = Path(man.db_path("staging/bcb-sgs"))
     assert ds_path.exists(), f"Expected dataset at {ds_path}"
