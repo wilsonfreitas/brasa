@@ -56,11 +56,8 @@ persisted in the `download_trials` table:
 
 **DB migration**: Existing caches are upgraded automatically on startup.
 Legacy `downloaded=1` rows become `PASSED`; `downloaded=0` become `FAILED`.
-A standalone migration script is also available:
-
-```bash
-uv run python scripts/migrate_download_trials_status.py
-```
+(The standalone migration script has been removed after being applied; it is
+recoverable from git history if ever needed.)
 
 See [docs/USER_GUIDE.md](docs/USER_GUIDE.md#download-status-codes) for full details.
 
