@@ -183,6 +183,22 @@ for simple standardized contracts like DI1, DOL, DAP.
 | `input.b3-futures-settlement-prices` | Raw settlement prices; frozen. Pre-2018 tail only; incomplete (no maturity/OI) | refdate, symbol, commodity, price, settlement_value | raw source (pre-2018 tail; simple contracts only) |
 | `staging.b3-futures-settlement-prices` | Processed settlement prices, built on the frozen raw feed | refdate, symbol, commodity, maturity_code, price, settlement_value | ⚠️ **outdated** — ships **2× duplicate rows** (dedup before use); prefer `staging.b3-futures` |
 
+**First-generic (continuous front-contract) series.** One row per refdate, tracking
+the front contract for a commodity in `staging.b3-futures`; `ref` holds the original
+ticker of the contract backing that day. The front contract rolls the day after
+maturity (`maturity_date > refdate`), except DDI which additionally requires at
+least 2 ANBIMA business days to maturity (`business_days_to_ignore=[0, 1]`, computed
+via the `bizdays` step since `days_to_settlement` is null at the source). History
+starts 2016-02-01. Quote/tax nulls at the source pass through unfiltered.
+
+| Dataset | Description | Key Columns | Status |
+|---------|-------------|-------------|--------|
+| `staging.b3-futures-win-first-generic` | Mini-index (WIN) front contract, symbol WINT01 | refdate, symbol, ref, maturity_date, adjusted_quote | **canonical** |
+| `staging.b3-futures-wdo-first-generic` | Mini-dollar (WDO) front contract, symbol WDOT01 | refdate, symbol, ref, maturity_date, adjusted_quote | **canonical** |
+| `staging.b3-futures-dol-first-generic` | Full-dollar (DOL) front contract, symbol DOLT01 | refdate, symbol, ref, maturity_date, adjusted_quote | **canonical** |
+| `staging.b3-futures-ind-first-generic` | Full-index (IND) front contract, symbol INDT01 | refdate, symbol, ref, maturity_date, adjusted_quote | **canonical** |
+| `staging.b3-futures-ddi-first-generic` | Cupom cambial (DDI) front contract, symbol DDIT01; requires ≥2 business days to maturity | refdate, symbol, ref, maturity_date, adjusted_quote, adjusted_tax | **canonical** |
+
 ### Curves (nominal DI1 & real DAP)
 
 Vertex-level yield curves. `-standard` variants interpolate the curve to
