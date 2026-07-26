@@ -1,12 +1,50 @@
 id: brasa-ohlc-prices
-description: All prices dataset
+description: Todos os preços OHLC (formato longo)
+
 etl:
-  function: brasa.etl.concat_datasets
-  dataset_names: [refdate, symbol, open, high, low, close]
-  datasets:
-    - name: b3-equities-adjusted-prices
-      columns: [refdate, symbol, open, high, low, close]
-    - name: b3-indexes-adjusted-prices
-      columns: [refdate, symbol, open, high, low, close]
-    - name: bcb-currency-data
-      columns: [refdate, symbol, open, high, low, close]
+  pipeline:
+    - step: sql_query
+      datasets:
+        - staging.b3-equities-adjusted-prices
+        - staging.b3-indexes-adjusted-prices
+        - staging.bcb-currency
+      query: |+
+        -- Long-format union of canonical OHLC prices. Futures adjusted
+        -- series carry only a single price column and are excluded,
+        -- as in the legacy template.
+        select refdate, symbol, open, high, low, close
+        from 'staging.b3-equities-adjusted-prices'
+        union all
+        select refdate, symbol, open, high, low, close
+        from 'staging.b3-indexes-adjusted-prices'
+        union all
+        select refdate, symbol, open, high, low, close
+        from 'staging.bcb-currency'
+        order by refdate, symbol
+
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+  partitioning: []
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Instrument symbol (namespaced by source convention)
+    type: string
+  - name: open
+    description: Opening price
+    type: numeric
+  - name: high
+    description: Highest price
+    type: numeric
+  - name: low
+    description: Lowest price
+    type: numeric
+  - name: close
+    description: Closing price
+    type: numeric
