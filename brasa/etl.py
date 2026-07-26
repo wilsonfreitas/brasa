@@ -305,21 +305,6 @@ def create_etf_returns_before_20180101(handler: MarketDataETL):
     write_dataset(df_cotahist_etfs_returns[ix], handler.template_id)
 
 
-def concat_datasets(handler: MarketDataETL):
-    names = handler.dataset_names
-    tables = []
-    for ds in handler.datasets:
-        tb = (
-            get_dataset(ds["name"])
-            .scanner(columns=ds["columns"])
-            .to_table()
-            .rename_columns(names)
-        )
-        tables.append(tb)
-    rets = pyarrow.concat_tables(tables)
-    write_dataset(rets.to_pandas(), handler.template_id)
-
-
 def create_b3_companies_details(handler: MarketDataETL):
     df = (
         get_dataset(handler.companies_dataset)
