@@ -1,5 +1,5 @@
-id: b3-indexes-adjusted-prices
-description: Preços ajustados dos índices de ações da B3
+id: b3-indexes-adjusted-prices-filled
+description: Preços ajustados dos índices de ações da B3 — grade de calendário preenchida (retorno 0, preços carregados)
 
 etl:
   pipeline:
@@ -38,7 +38,7 @@ etl:
       price_columns: [open, high, low, close]
       anchor_column: close
       calendar: B3
-      fill_calendar_gaps: false
+      fill_calendar_gaps: true
 
     - step: sort
       by: [refdate, symbol]

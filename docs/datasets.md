@@ -86,8 +86,14 @@ Brazilian ETFs pay no dividends) **except `NDIV11`, `DIVD11`, `SPYI11`**.
 |---------|-------------|-------------|--------|
 | `staging.b3-cotahist` | Unified COTAHIST quotations — deepest history for stocks/ETFs/options; volume, nº de negócios, nº de trades | refdate, symbol, open, high, low, average, close, volume, trade_quantity, traded_contracts, isin | **canonical** (daily stock/ETF/option OHLC & volume) |
 | `staging.b3-equities-spot-market` | Which stocks trade on the spot market (non-fractional); a filtered summary of `b3-bvbg028-equities` | refdate, symbol, isin, corporation_name, close, open | canonical (spot-market membership) |
+| `staging.b3-equities-adjusted-prices` | **Adjusted equity OHLC** — back-adjusted continuous price series built from `staging.b3-equities-returns`; real trading rows only (no calendar gap-filling) | refdate, symbol, open, high, low, close | **canonical** (adjusted equity OHLC) |
+| `staging.b3-equities-adjusted-prices-filled` | Same series, calendar-dense: gap days within each symbol's own [first, last] range get return 0 / carried-forward prices | refdate, symbol, open, high, low, close | calendar-dense variant |
 | `input.b3-cotahist-daily` | Daily stock quotations (COTAHIST) | refdate, symbol, open, high, low, average, close, volume | raw source (use `staging.b3-cotahist`) |
 | `input.b3-cotahist-yearly` | Yearly historical stock quotations (COTAHIST) | refdate, symbol, open, high, low, average, close, volume | raw source (use `staging.b3-cotahist`) |
+
+**Convention:** canonical `*-adjusted-prices` datasets contain only real trading rows;
+`-filled` siblings densify each symbol's own calendar range (synthetic rows carry
+return 0 and backfilled/carried prices) for consumers that need a gap-free grid.
 
 ## Returns
 
@@ -108,6 +114,8 @@ Index compositions, portfolios, prices, and index/IOPV/BDR reference info.
 | `staging.b3-indexes-theoretical-portfolio` | **Official quarterly rebalance target weights** (valid for the quarter) | refdate, index, symbol, weight | **canonical** (target weights) |
 | `staging.b3-indexes-current-portfolio` | **Live/drifted weights** as of a given day | refdate, index, symbol, weight | **canonical** (live weights) |
 | `staging.b3-indexes-historical-prices` | Index **level** over time (long format) | refdate, symbol, value | **canonical** (index level) |
+| `staging.b3-indexes-adjusted-prices` | Adjusted index OHLC — back-adjusted continuous price series from `staging.b3-indexes-returns`; real trading rows only (no calendar gap-filling, changed from a prior version that filled gaps) | refdate, symbol, open, high, low, close | **canonical** (adjusted index OHLC) |
+| `staging.b3-indexes-adjusted-prices-filled` | Same series, calendar-dense: gap days within each symbol's own [first, last] range get return 0 / carried-forward prices | refdate, symbol, open, high, low, close | calendar-dense variant |
 | `input.b3-indexes-composition` | Index compositions (raw) | refdate, indexes, symbol, corporation_name | raw source |
 | `input.b3-indexes-current-portfolio` | Current index portfolio (raw) | refdate, index, symbol, weight | raw source |
 | `input.b3-indexes-theoretical-portfolio` | Theoretical index portfolio (raw) | refdate, index, symbol, weight | raw source |
