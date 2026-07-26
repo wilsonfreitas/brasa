@@ -1,9 +1,64 @@
 id: b3-equities-adjusted-prices
-description: All prices dataset
+description: Preços ajustados das ações da B3
+
 etl:
-  function: brasa.etl.create_adjusted_prices
-  quotes_dataset: b3-bvbg086
-  calendar: B3
-  dataset_names: [symbol, refdate, open, high, low, close]
-  candle_names: [open, high, low, close]
-  returns_dataset: brasa-returns
+  pipeline:
+    - step: sql_query
+      datasets:
+        - staging.b3-equities-returns
+        - input.b3-bvbg086
+      query: |+
+        -- Base rows come from the canonical returns dataset (universe and
+        -- gap-day patches already embedded there); raw OHLC attaches via
+        -- left join. No latest-refdate universe cut: delisted symbols keep
+        -- their history and simply stop at their last trading day.
+        select
+          r.refdate,
+          r.symbol,
+          q.open,
+          q.high,
+          q.low,
+          q.close,
+          r.log_return as returns
+        from 'staging.b3-equities-returns' r
+        left join 'input.b3-bvbg086' q
+          on q.refdate = r.refdate and q.symbol = r.symbol
+        order by r.symbol, r.refdate
+
+    - step: adjust_prices_by_returns
+      returns_column: returns
+      price_columns: [open, high, low, close]
+      anchor_column: close
+      calendar: B3
+      fill_calendar_gaps: false
+
+    - step: sort
+      by: [refdate, symbol]
+
+    - step: select_fields
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+  partitioning: []
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Equity symbol
+    type: string
+  - name: open
+    description: Back-adjusted open price
+    type: numeric
+  - name: high
+    description: Back-adjusted high price
+    type: numeric
+  - name: low
+    description: Back-adjusted low price
+    type: numeric
+  - name: close
+    description: Back-adjusted close price
+    type: numeric
