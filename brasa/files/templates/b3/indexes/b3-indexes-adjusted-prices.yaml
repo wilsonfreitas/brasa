@@ -38,7 +38,7 @@ etl:
       price_columns: [open, high, low, close]
       anchor_column: close
       calendar: B3
-      fill_calendar_gaps: true
+      fill_calendar_gaps: false
 
     - step: sort
       by: [refdate, symbol]
