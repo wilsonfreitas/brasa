@@ -199,6 +199,21 @@ starts 2016-02-01. Quote/tax nulls at the source pass through unfiltered.
 | `staging.b3-futures-ind-first-generic` | Full-index (IND) front contract, symbol INDT01 | refdate, symbol, ref, maturity_date, adjusted_quote | **canonical** |
 | `staging.b3-futures-ddi-first-generic` | Cupom cambial (DDI) front contract, symbol DDIT01; requires ≥2 business days to maturity | refdate, symbol, ref, maturity_date, adjusted_quote, adjusted_tax | **canonical** |
 
+**Roll-adjusted (back-adjusted continuous) series.** Continuous front-contract price
+series for WIN and WDO, back-adjusted by the roll ratio (second contract settlement
+÷ front contract settlement on the maturity day) so historical levels are consistent
+with today's front contract — unlike the first-generic series above, which simply
+splices raw quotes across rolls. History starts 2016-02-01; nulls at the source pass
+through (a null front quote produces a null price, and the returns series drops both
+that row and its successor via the standard lag filter).
+
+| Dataset | Description | Key Columns | Status |
+|---------|-------------|-------------|--------|
+| `staging.b3-futures-win-adjusted` | Mini-index (WIN) back-adjusted continuous price, symbol WINADJ | refdate, symbol, price | **canonical** |
+| `staging.b3-futures-wdo-adjusted` | Mini-dollar (WDO) back-adjusted continuous price, symbol WDOADJ | refdate, symbol, price | **canonical** |
+| `staging.b3-futures-win-adjusted-returns` | Daily pct/log returns of WINADJ | refdate, symbol, pct_return, log_return | **canonical** |
+| `staging.b3-futures-wdo-adjusted-returns` | Daily pct/log returns of WDOADJ | refdate, symbol, pct_return, log_return | **canonical** |
+
 ### Curves (nominal DI1 & real DAP)
 
 Vertex-level yield curves. `-standard` variants interpolate the curve to

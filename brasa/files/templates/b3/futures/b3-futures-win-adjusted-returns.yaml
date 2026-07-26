@@ -1,7 +1,44 @@
 id: b3-futures-win-adjusted-returns
-description: >
-  | Retornos de preços futuros WIN ajustados
+description: Retornos de preços futuros WIN ajustados
+
 etl:
-  function: brasa.etl.create_returns_for_long_datasets
-  dataset_name: b3-futures-win-adjusted
-  dataset_columns: [refdate, symbol, price]
+  pipeline:
+    - step: sql_query
+      datasets:
+        - staging.b3-futures-win-adjusted
+      query: |+
+        -- Daily pct/log returns. qualify drops each symbol's first row
+        -- (no prior price), matching the legacy dropna. Null prices pass
+        -- through: the null day keeps a null-return row and its successor
+        -- is dropped by the lag filter (source nulls fixed separately).
+        select
+          refdate,
+          symbol,
+          price / lag(price) over (partition by symbol order by refdate) - 1
+            as pct_return,
+          ln(price / lag(price) over (partition by symbol order by refdate))
+            as log_return
+        from 'staging.b3-futures-win-adjusted'
+        qualify lag(price) over (partition by symbol order by refdate) is not null
+        order by refdate, symbol
+
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+  partitioning: []
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Continuous adjusted-price symbol (constant WINADJ)
+    type: string
+  - name: pct_return
+    description: Daily percentage return of the adjusted price
+    type: numeric
+  - name: log_return
+    description: Daily log return of the adjusted price
+    type: numeric
