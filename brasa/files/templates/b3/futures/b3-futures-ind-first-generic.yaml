@@ -1,5 +1,5 @@
-id: b3-futures-wdo-first-generic
-description: Primeiro Mini Futuro de Dólar (WDOT01)
+id: b3-futures-ind-first-generic
+description: Primeiro Futuro de Índice (INDT01)
 
 etl:
   pipeline:
@@ -7,12 +7,12 @@ etl:
       datasets:
         - staging.b3-futures
       query: |+
-        -- Front WDO contract per refdate. The maturity_date > refdate filter
+        -- Front IND contract per refdate. The maturity_date > refdate filter
         -- encodes the legacy business_days_to_ignore=[0] rule: on the maturity
         -- day the front contract is skipped and the 2nd contract is taken.
         select
           refdate,
-          'WDOT01' as symbol,
+          'INDT01' as symbol,
           symbol as ref,
           maturity_date,
           adjusted_quote
@@ -24,7 +24,7 @@ etl:
             ) as rn
           from 'staging.b3-futures'
           where
-            commodity = 'WDO'
+            commodity = 'IND'
             and maturity_date > refdate
         )
         where rn = 1
@@ -43,7 +43,7 @@ fields:
     description: Reference date
     type: date
   - name: symbol
-    description: Continuous front-contract symbol (constant WDOT01)
+    description: Continuous front-contract symbol (constant INDT01)
     type: string
   - name: ref
     description: Original contract ticker backing the generic on this date
