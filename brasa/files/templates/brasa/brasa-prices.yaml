@@ -1,16 +1,48 @@
 id: brasa-prices
-description: All closing prices dataset
+description: Todos os preços de fechamento (formato longo)
+
 etl:
-  function: brasa.etl.concat_datasets
-  dataset_names: [refdate, symbol, close]
-  datasets:
-    - name: b3-equities-adjusted-prices
-      columns: [refdate, symbol, close]
-    - name: b3-indexes-adjusted-prices
-      columns: [refdate, symbol, close]
-    - name: bcb-currency-data
-      columns: [refdate, symbol, close]
-    - name: b3-futures-win-adjusted
-      columns: [refdate, symbol, price]
-    - name: b3-futures-wdo-adjusted
-      columns: [refdate, symbol, price]
+  pipeline:
+    - step: sql_query
+      datasets:
+        - staging.b3-equities-adjusted-prices
+        - staging.b3-indexes-adjusted-prices
+        - staging.bcb-currency
+        - staging.b3-futures-win-adjusted
+        - staging.b3-futures-wdo-adjusted
+      query: |+
+        -- Long-format union of canonical closing prices. Symbol sets are
+        -- disjoint across sources; no dedup (legacy semantics).
+        select refdate, symbol, close
+        from 'staging.b3-equities-adjusted-prices'
+        union all
+        select refdate, symbol, close
+        from 'staging.b3-indexes-adjusted-prices'
+        union all
+        select refdate, symbol, close
+        from 'staging.bcb-currency'
+        union all
+        select refdate, symbol, price as close
+        from 'staging.b3-futures-win-adjusted'
+        union all
+        select refdate, symbol, price as close
+        from 'staging.b3-futures-wdo-adjusted'
+        order by refdate, symbol
+
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+  partitioning: []
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Instrument symbol (namespaced by source convention)
+    type: string
+  - name: close
+    description: Closing price
+    type: numeric
