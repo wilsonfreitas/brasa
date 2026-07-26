@@ -1,0 +1,72 @@
+id: b3-indexes-adjusted-prices-filled
+description: Preços ajustados dos índices de ações da B3 — grade de calendário preenchida (retorno 0, preços carregados)
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - input.b3-bvbg087-indexes_info
+        - staging.b3-indexes-returns
+      query: |+
+        -- Universe: symbols still present in the returns dataset at the latest
+        -- quotes refdate (legacy semantics: discontinued indexes drop out).
+        -- Base rows come from the returns dataset (legacy joined OHLC onto
+        -- returns); quotes attach via left join.
+        with universe as (
+          select distinct symbol
+          from 'staging.b3-indexes-returns'
+          where refdate = (
+            select max(refdate) from 'input.b3-bvbg087-indexes_info'
+          )
+        )
+        select
+          r.refdate,
+          r.symbol,
+          q.open_price  as open,
+          q.max_price   as high,
+          q.min_price   as low,
+          q.close_price as close,
+          r.log_return  as returns
+        from 'staging.b3-indexes-returns' r
+        join universe u on u.symbol = r.symbol
+        left join 'input.b3-bvbg087-indexes_info' q
+          on q.refdate = r.refdate and q.symbol = r.symbol
+        order by r.symbol, r.refdate
+
+    - step: adjust_prices_by_returns
+      returns_column: returns
+      price_columns: [open, high, low, close]
+      anchor_column: close
+      calendar: B3
+      fill_calendar_gaps: true
+
+    - step: sort
+      by: [refdate, symbol]
+
+    - step: select_fields
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+  partitioning: []
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Index symbol
+    type: string
+  - name: open
+    description: Back-adjusted open price
+    type: numeric
+  - name: high
+    description: Back-adjusted high price
+    type: numeric
+  - name: low
+    description: Back-adjusted low price
+    type: numeric
+  - name: close
+    description: Back-adjusted close price
+    type: numeric
