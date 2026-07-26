@@ -87,14 +87,12 @@ def test_etl_pipeline_template_loading():
     from brasa.engine.template import retrieve_template
 
     # Load a legacy function-based ETL template
-    template = retrieve_template("brasa-prices")
-    assert template.id == "brasa-prices"
+    template = retrieve_template("brasa-returns-symbols-changes")
+    assert template.id == "brasa-returns-symbols-changes"
     assert template.is_etl
     assert not template.etl.is_pipeline
     assert template.etl.process_function is not None
-    assert any(
-        d["name"] == "b3-equities-adjusted-prices" for d in template.etl.datasets
-    )
+    assert template.etl.source_dataset_name == "b3-equities-returns"
 
     # Load a new pipeline-based ETL template
     template = retrieve_template("b3-futures-settlement-prices-consolidated")
