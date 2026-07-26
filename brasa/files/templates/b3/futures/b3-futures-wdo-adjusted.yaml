@@ -1,7 +1,76 @@
 id: b3-futures-wdo-adjusted
-description: Mini Futuro de Dólar Ajustado
+description: Mini Futuro de Dólar Ajustado (WDOADJ)
+
 etl:
-  function: brasa.etl.create_b3_price_futures_adjusted
-  futures_dataset: b3-futures-wdo
-  business_days_to_ignore: [0]
-  first_generic_symbol: WDOADJ
+  pipeline:
+    - step: sql_query
+      datasets:
+        - staging.b3-futures
+      query: |+
+        -- Roll-ratio back-adjusted continuous front-contract price.
+        -- Contracts are ranked with maturity_date >= refdate so the roll day
+        -- (maturity day, legacy business_days = 0) is present. On roll days
+        -- ratio = settlement_2 / settlement_1; the cumulative ratio is the
+        -- product of all roll ratios from the current row forward (inclusive,
+        -- reproducing the legacy reverse-cumprod + bfill), computed as a
+        -- sum-of-logs window; after the last roll the ratio is 1 (coalesce 0).
+        with ranked as (
+          select
+            refdate,
+            maturity_date,
+            adjusted_quote,
+            row_number() over (
+              partition by refdate order by maturity_date
+            ) as rn
+          from 'staging.b3-futures'
+          where
+            commodity = 'WDO'
+            and maturity_date >= refdate
+        ),
+        daily as (
+          select
+            refdate,
+            max(case when rn = 1 then adjusted_quote end) as settlement_1,
+            max(case when rn = 1 then maturity_date end) as maturity_1,
+            max(case when rn = 2 then adjusted_quote end) as settlement_2
+          from ranked
+          where rn <= 2
+          group by refdate
+        ),
+        with_ratio as (
+          select
+            *,
+            case when maturity_1 = refdate
+              then settlement_2 / settlement_1
+            end as roll_ratio
+          from daily
+        )
+        select
+          refdate,
+          'WDOADJ' as symbol,
+          settlement_1 * exp(coalesce(
+            sum(ln(roll_ratio)) over (
+              order by refdate
+              rows between current row and unbounded following
+            ), 0)) as price
+        from with_ratio
+        order by refdate
+
+    - step: select_fields
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+  partitioning: []
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Continuous adjusted-price symbol (constant WDOADJ)
+    type: string
+  - name: price
+    description: Roll-ratio back-adjusted front-contract settlement price
+    type: numeric
