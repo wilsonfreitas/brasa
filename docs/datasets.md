@@ -105,6 +105,18 @@ Daily return series derived from quotations.
 | `staging.b3-equities-returns` | **Adjusted** stock daily returns; built from `b3-bvbg086` oscillation. History **starts 2018** | refdate, symbol, pct_return, log_return | **canonical** (adjusted stock returns) |
 | `staging.b3-equities-etfs-returns` | ETF daily returns — **longer history**: concatenates `b3-cotahist` (<2018) + `b3-bvbg086` (>2018) | refdate, symbol, pct_return, log_return | **canonical** (ETF returns) |
 
+### Unified aggregates
+
+Long-format unions of the canonical per-class datasets above (prices, OHLC,
+returns), symbols namespaced by their source conventions (equity tickers,
+`WINADJ`/`WDOADJ`, `DI1T252`/`DAPT252`, `BRLUSD`).
+
+| Dataset | Description | Key Columns | Status |
+|---------|-------------|-------------|--------|
+| `staging.brasa-prices` | All closing prices, long format (equities, indexes, FX, WIN/WDO adjusted futures) | refdate, symbol, close | **canonical** (unified aggregate) |
+| `staging.brasa-ohlc-prices` | All OHLC prices, long format (equities, indexes, FX) | refdate, symbol, open, high, low, close | **canonical** (unified aggregate) |
+| `staging.brasa-returns` | All daily returns, long format (equities, indexes, ETFs, DI1/DAP curves, FX, WIN/WDO adjusted futures). The `returns` column is the **log return** | refdate, symbol, returns | **canonical** (unified aggregate) |
+
 ## Indexes
 
 Index compositions, portfolios, prices, and index/IOPV/BDR reference info.
