@@ -8,7 +8,7 @@ from bizdays import Calendar
 
 from .engine import MarketDataETL
 from .parsers.b3.futures_settlement_prices import maturity2date
-from .queries import BrasaDB, get_dataset, write_dataset
+from .queries import get_dataset, write_dataset
 
 
 def create_b3_rate_futures(handler: MarketDataETL):
@@ -788,10 +788,3 @@ def rename_symbols_in_equities_returns(handler: MarketDataETL):
         tables.append(tb)
     rets = pyarrow.concat_tables(tables)
     write_dataset(rets.to_pandas(), handler.template_id)
-
-
-def execute_query(handler: MarketDataETL):
-    con = BrasaDB.get_connection()
-    df = con.execute(handler.query).df()
-    write_dataset(df, handler.template_id)
-    BrasaDB.create_view(handler.template_id)
