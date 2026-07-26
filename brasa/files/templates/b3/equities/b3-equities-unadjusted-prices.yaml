@@ -1,0 +1,96 @@
+id: b3-equities-unadjusted-prices
+description: Preços não ajustados (OHLC + volume) das ações da B3
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - input.b3-bvbg086
+        - staging.b3-cotahist
+        - input.b3-bdin-stocks-summary
+        - staging.b3-equities-spot-market
+      query: |+
+        -- Unadjusted OHLC+volume for the spot-market universe.
+        -- bvbg086 is the base (starts 2016-02-01) with two whole-market
+        -- zero-row days patched from other sources:
+        --   2021-06-10 from cotahist; 2016-02-29 from BDIN (cod_bdi=2,
+        --   round lot — same source b3-equities-returns uses for that day).
+        -- BDIN is never used beyond that single day: its feed ends 2017-06-14.
+        with universe as (
+          select distinct symbol from 'staging.b3-equities-spot-market'
+        )
+        select
+          q.refdate, q.symbol,
+          q.traded_quantity as trade_quantity,
+          q.traded_contracts, q.volume,
+          q.open, q.low, q.high, q.close, q.average
+        from 'input.b3-bvbg086' q
+        join universe u on u.symbol = q.symbol
+
+        union all
+
+        select
+          c.refdate, c.symbol,
+          c.trade_quantity, c.traded_contracts, c.volume,
+          c.open, c.low, c.high, c.close, c.average
+        from 'staging.b3-cotahist' c
+        join universe u on u.symbol = c.symbol
+        where c.refdate = '2021-06-10'
+
+        union all
+
+        select
+          cast(b.refdate as date) as refdate,
+          b.cod_negociacao as symbol,
+          b.qtd_negocios as trade_quantity,
+          b.qtd_titulos_negociados as traded_contracts,
+          b.volume_titulos_negociados as volume,
+          b.preco_abertura as open,
+          b.preco_min as low,
+          b.preco_max as high,
+          b.preco_ult as close,
+          b.preco_med as average
+        from 'input.b3-bdin-stocks-summary' b
+        join universe u on u.symbol = b.cod_negociacao
+        where b.refdate = '2016-02-29' and b.cod_bdi = 2
+
+        order by refdate, symbol
+
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+  partitioning: []
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Equity symbol
+    type: string
+  - name: trade_quantity
+    description: Number of trades in the session
+    type: numeric
+  - name: traded_contracts
+    description: Quantity of securities traded
+    type: numeric
+  - name: volume
+    description: Financial volume traded
+    type: numeric
+  - name: open
+    description: Opening price (unadjusted)
+    type: numeric
+  - name: low
+    description: Lowest price (unadjusted)
+    type: numeric
+  - name: high
+    description: Highest price (unadjusted)
+    type: numeric
+  - name: close
+    description: Closing price (unadjusted)
+    type: numeric
+  - name: average
+    description: Average price (unadjusted)
+    type: numeric
