@@ -1,26 +1,61 @@
 id: brasa-returns
-description: All returns dataset
+description: Todos os retornos (formato longo)
+
 etl:
-  function: brasa.etl.concat_datasets
-  dataset_names: [refdate, symbol, returns]
-  datasets:
-    - name: b3-equities-returns
-      columns: [refdate, symbol, log_return]
-    - name: b3-indexes-returns
-      columns: [refdate, symbol, log_return]
-    - name: b3-equities-etfs-returns
-      columns: [refdate, symbol, log_return]
-    - name: brasa-returns-missing-data
-      columns: [refdate, symbol, log_return]
-    - name: brasa-returns-symbols-changes
-      columns: [refdate, symbol, log_return]
-    - name: b3-curves-di1-standard-returns
-      columns: [refdate, symbol, returns]
-    - name: b3-curves-dap-standard-returns
-      columns: [refdate, symbol, returns]
-    - name: bcb-currencies-returns
-      columns: [refdate, symbol, log_return]
-    - name: b3-futures-win-adjusted-returns
-      columns: [refdate, symbol, log_return]
-    - name: b3-futures-wdo-adjusted-returns
-      columns: [refdate, symbol, log_return]
+  pipeline:
+    - step: sql_query
+      datasets:
+        - staging.b3-equities-returns
+        - staging.b3-indexes-returns
+        - staging.b3-equities-etfs-returns
+        - staging.b3-curves-di1-standard-returns
+        - staging.b3-curves-dap-standard-returns
+        - staging.bcb-currencies-returns
+        - staging.b3-futures-win-adjusted-returns
+        - staging.b3-futures-wdo-adjusted-returns
+      query: |+
+        -- Long-format union of canonical log-return series. Dropped from
+        -- the legacy list: brasa-returns-missing-data (dead source) and
+        -- brasa-returns-symbols-changes (moved to WIL-130).
+        select refdate, symbol, log_return as returns
+        from 'staging.b3-equities-returns'
+        union all
+        select refdate, symbol, log_return as returns
+        from 'staging.b3-indexes-returns'
+        union all
+        select refdate, symbol, log_return as returns
+        from 'staging.b3-equities-etfs-returns'
+        union all
+        select refdate, symbol, returns
+        from 'staging.b3-curves-di1-standard-returns'
+        union all
+        select refdate, symbol, returns
+        from 'staging.b3-curves-dap-standard-returns'
+        union all
+        select refdate, symbol, log_return as returns
+        from 'staging.bcb-currencies-returns'
+        union all
+        select refdate, symbol, log_return as returns
+        from 'staging.b3-futures-win-adjusted-returns'
+        union all
+        select refdate, symbol, log_return as returns
+        from 'staging.b3-futures-wdo-adjusted-returns'
+        order by refdate, symbol
+
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+  partitioning: []
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Instrument symbol (namespaced by source convention)
+    type: string
+  - name: returns
+    description: Daily log return
+    type: numeric
