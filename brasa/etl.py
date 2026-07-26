@@ -85,27 +85,6 @@ def create_b3_price_futures(handler: MarketDataETL):
     write_dataset(df_contracts, handler.template_id)
 
 
-def create_b3_price_futures_adjusted(handler: MarketDataETL):
-    df_contracts = get_dataset(handler.futures_dataset).to_table().to_pandas()
-
-    first = df_contracts.groupby("refdate").nth(0)
-    second = df_contracts.groupby("refdate").nth(1)
-    merged = first.merge(
-        second, on="refdate", how="left", suffixes=("_1", "_2")
-    ).set_index("refdate")
-    idx = merged.index[merged["business_days_1"] == 0]
-    roll = merged.loc[idx, :]
-    roll["ratio"] = roll.settlement_price_2 / roll.settlement_price_1
-    merged["ratio"] = roll.ratio.iloc[::-1].cumprod().iloc[::-1]
-    merged["ratio"] = merged["ratio"].bfill().fillna(1)
-    merged["adjusted"] = merged.settlement_price_1 * merged.ratio
-    merged["symbol"] = handler.first_generic_symbol
-    merged.rename(columns={"adjusted": "price"}, inplace=True)
-    merged.reset_index(inplace=True)
-
-    write_dataset(merged[["refdate", "symbol", "price"]], handler.template_id)
-
-
 def create_b3_curves_di1(handler: MarketDataETL):
     tb_di1 = (
         get_dataset(handler.futures_dataset)
@@ -324,41 +303,6 @@ def create_etf_returns_before_20180101(handler: MarketDataETL):
     )
     ix = df_cotahist_etfs_returns["refdate"] < datetime(2018, 1, 1)
     write_dataset(df_cotahist_etfs_returns[ix], handler.template_id)
-
-
-def _calc_returns(df: pd.DataFrame, value_column: str) -> pd.DataFrame:
-    df = df.set_index("refdate").sort_index()
-    df["log_return"] = np.log(df[value_column]).diff()
-    df["pct_return"] = df[value_column].pct_change()
-    return df.reset_index()
-
-
-def create_returns_for_long_datasets(handler: MarketDataETL):
-    df = (
-        get_dataset(handler.dataset_name)
-        .to_table(columns=handler.dataset_columns)
-        .to_pandas()
-    )
-    df = (
-        df.groupby("symbol")
-        .apply(_calc_returns, handler.dataset_columns[-1])
-        .dropna(axis=0)
-        .reset_index(drop=True)
-    )
-    fields = [
-        pyarrow.field("symbol", pyarrow.string()),
-        pyarrow.field("refdate", pyarrow.timestamp("us")),
-        pyarrow.field("pct_return", pyarrow.float64()),
-        pyarrow.field("log_return", pyarrow.float64()),
-    ]
-
-    my_schema = pyarrow.schema(fields)
-
-    write_dataset(
-        df[["refdate", "symbol", "pct_return", "log_return"]],
-        handler.template_id,
-        schema=my_schema,
-    )
 
 
 def concat_datasets(handler: MarketDataETL):
