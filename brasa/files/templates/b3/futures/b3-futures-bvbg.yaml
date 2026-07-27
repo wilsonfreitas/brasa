@@ -13,9 +13,10 @@ etl:
         -- the contract is registered AND priced on that refdate.
         -- bvbg086 can carry more than one row per (refdate, symbol); the row
         -- with the highest liquidity holds the official settlement values,
-        -- so QUALIFY keeps only that row. adjusted_quote breaks liquidity
-        -- ties deterministically (e.g. ETHF24 2023-09-28 ships two rows with
-        -- identical traded_contracts/volume but different settlement).
+        -- so QUALIFY keeps only that row. adjusted_quote and open_interest
+        -- break liquidity ties deterministically — 6 keys in the whole
+        -- history ship tied duplicate rows (BGIQ17/ETHK17 2017, ETH*
+        -- 2023-09-28) differing only in settlement or OI.
         -- adjusted_tax: bvbg086 ships percent form; stored here in decimal
         -- (project convention, WIL-124).
         select
@@ -45,7 +46,7 @@ etl:
           row_number() over (
             partition by fc.refdate, fc.symbol
             order by p.traded_contracts desc nulls last, p.volume desc nulls last,
-              p.adjusted_quote desc nulls last
+              p.adjusted_quote desc nulls last, p.open_interest desc nulls last
           ) = 1
 
     - step: select_fields
