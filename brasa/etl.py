@@ -758,18 +758,3 @@ def create_b3_companies_subscriptions(handler: MarketDataETL):
     su0_ = pd.merge(su0_, sp[["isin", "symbol"]], on="isin").drop(columns="isin")
 
     write_dataset(su0_, handler.template_id)
-
-
-def rename_symbols_in_equities_returns(handler: MarketDataETL):
-    _ds = get_dataset(handler.source_dataset_name)
-    tables = []
-    for s in handler.symbols:
-        tb: pyarrow.Table = _ds.filter(pc.field("symbol") == s["src"]).to_table()
-        tb = tb.set_column(
-            tb.schema.get_field_index("symbol"),
-            "symbol",
-            pyarrow.array([s["dest"]] * tb.num_rows),
-        )
-        tables.append(tb)
-    rets = pyarrow.concat_tables(tables)
-    write_dataset(rets.to_pandas(), handler.template_id)
