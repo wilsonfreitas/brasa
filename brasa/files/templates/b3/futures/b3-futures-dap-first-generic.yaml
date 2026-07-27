@@ -16,7 +16,7 @@ etl:
           symbol as ref,
           maturity_date,
           adjusted_quote,
-          adjusted_tax / 100.0 as adjusted_tax
+          adjusted_tax
         from (
           select
             *,

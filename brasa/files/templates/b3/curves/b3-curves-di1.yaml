@@ -16,7 +16,7 @@ etl:
           refdate,
           symbol,
           maturity_date as maturity_date_raw,
-          adjusted_tax / 100.0 as adjusted_tax
+          adjusted_tax
         from
           'staging.b3-futures'
         where
