@@ -87,8 +87,8 @@ Selection questions arrive as *information needs*, not table names. Match the ne
 
 ### Futures
 
-- **Futures daily data (>2018)** — prices/OHLC, settlement, open interest, contract metadata → `staging.b3-futures`. It is `b3-bvbg086` + `b3-bvbg028-future_contracts` already joined and cleaned. **Settlement lives in `adjusted_quote`/`adjusted_tax`, not `settlement_value`.**
-- **Futures settlement pre-2018** → `input.b3-futures-settlement-prices` (frozen; incomplete — no maturity/OI; OK only for simple standardized contracts like DI1, DOL, DAP).
+- **Futures daily data (2006-05-22 onward)** — prices/OHLC, settlement, open interest, contract metadata → `staging.b3-futures`. Union of the bvbg join (2016-02+) and the BD_Final bulletin (pre-2016). **Settlement lives in `adjusted_quote`/`adjusted_tax`, not `settlement_value`; `adjusted_tax` is in decimal form (0.09005, not 9.005).**
+- **Futures settlement before 2006-05-22** → not available yet (WIL-128 backlog). `input.b3-futures-settlement-prices` (frozen, starts 2010) is now only a cross-check source — `staging.b3-futures` covers its whole range with richer data.
 - **Contract registry (maturity, multiplier)** → `staging.b3-futures-register`.
 - Avoid `staging.b3-futures-di1-consolidated` (**deprecated**) and `staging.b3-futures-settlement-prices` (**outdated, ships 2× duplicate rows**).
 
@@ -241,9 +241,9 @@ These are the most commonly used datasets, with their actual column names verifi
 
 | Table | Description | Key Columns |
 |-------|-------------|-------------|
-| `staging.b3-futures` | **Futures daily data (>2018)** — OHLC, settlement (`adjusted_quote`/`adjusted_tax`), OI, contract meta | refdate, symbol, commodity, maturity_date, contract_multiplier, close, adjusted_quote, adjusted_tax, open_interest, volume |
+| `staging.b3-futures` | **Futures daily data (2006-05-22+)** — OHLC, settlement (`adjusted_quote`/`adjusted_tax`, decimal rates), OI, contract meta | refdate, symbol, commodity, maturity_date, contract_multiplier, close, adjusted_quote, adjusted_tax, open_interest, volume |
 | `staging.b3-futures-register` | Futures contract registry (maturity, multiplier) | refdate, symbol, maturity_date, contract_multiplier |
-| `input.b3-futures-settlement-prices` | Settlement **pre-2018** tail (frozen, incomplete — simple standardized contracts only) | refdate, symbol, commodity, price, settlement_value |
+| `input.b3-futures-settlement-prices` | Frozen settlement feed (starts 2010) — cross-check only; `staging.b3-futures` supersedes it | refdate, symbol, commodity, price, settlement_value |
 | `input.b3-equity-options` | Equity option theoretical prices & implied vol | refdate, symbol, strike, maturity_date, volatility |
 | `input.b3-equities-volatility-surface` | Equity volatility surface | refdate, underlying, delta, volatility, maturity_date |
 

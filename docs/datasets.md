@@ -181,7 +181,7 @@ Settlement, open interest, and option pricing/volatility.
 
 | Dataset | Description | Key Columns | Status |
 |---------|-------------|-------------|--------|
-| `input.b3-bvbg086` | Market data for **all** B3-traded assets: OHLC, OI, volume, and the daily **`oscillation`** column used to build adjusted stock returns. Settlement is expressed via `adjusted_quote`/`adjusted_tax` — **there is no `settlement_value` column**. Starts **2018** | refdate, symbol, open, high, low, close, average, oscillation, open_interest, volume, traded_contracts, adjusted_quote, adjusted_tax, adjusted_value_contract | raw source (use `staging.b3-futures` for futures; `staging.b3-equities-returns` for returns) |
+| `input.b3-bvbg086` | Market data for **all** B3-traded assets: OHLC, OI, volume, and the daily **`oscillation`** column used to build adjusted stock returns. Settlement is expressed via `adjusted_quote`/`adjusted_tax` — **there is no `settlement_value` column**. Starts **2016-02-01** | refdate, symbol, open, high, low, close, average, oscillation, open_interest, volume, traded_contracts, adjusted_quote, adjusted_tax, adjusted_value_contract | raw source (use `staging.b3-futures` for futures; `staging.b3-equities-returns` for returns) |
 | `input.b3-equity-options` | Equity option theoretical prices & implied vol | refdate, symbol, strike, maturity_date, volatility, theoretic_price | **canonical** (option theoretical price / implied vol) — input-only |
 | `input.b3-equities-volatility-surface` | Equity implied-volatility surface | refdate, underlying, delta, volatility, maturity_date | **canonical** (vol surface) — input-only |
 
@@ -193,18 +193,24 @@ Datasets suffixed **`-sp`** derive from the frozen `b3-futures-settlement-prices
 feed (pre-2018 tail; no maturity/OI at the source). They are special-purpose —
 reach for them only when the bvbg-based canonical datasets can't cover the need.
 
-**Futures daily data.** For **>2018**, `staging.b3-futures` is canonical — it is the
-`b3-bvbg086` prices/OI + `b3-bvbg028-future_contracts` contract metadata already
-joined and cleaned (settlement via `adjusted_quote`/`adjusted_tax`, **not**
-`settlement_value`). For the **pre-2018** tail, `input.b3-futures-settlement-prices`
-is the only source, but it is frozen and incomplete (no maturity/OI) — usable only
-for simple standardized contracts like DI1, DOL, DAP.
+**Futures daily data.** `staging.b3-futures` is canonical for **2006-05-22 onward**
+(WIL-127): a union of `input.b3-futures-bvbg` (BVBG028 contract metadata joined to
+BVBG086 prices/OI/settlement, 2016-02-01+) and `input.b3-futures-bd` (the BD_Final
+daily bulletin parsed in `b3-derivatives-daily`, 2006-05-22 → 2017-08-25, used for
+the pre-2016 era plus the 2016-02-29 bvbg gap day). Settlement lives in
+`adjusted_quote`/`adjusted_tax` (**not** `settlement_value`), and `adjusted_tax` is
+stored in **decimal form** (0.09005, not 9.005) for rate-quoted contracts (DI1, OC1,
+DAP, DDI, DCO — derived from the settlement PU on the BD side). The frozen
+`input.b3-futures-settlement-prices` remains only as a cross-check source; it starts
+2010-01-04, shallower than the union.
 
 | Dataset | Description | Key Columns | Status |
 |---------|-------------|-------------|--------|
-| `staging.b3-futures` | **Futures daily data (>2018)** — BVBG028 contracts joined to BVBG086 prices/OI/settlement | refdate, symbol, commodity, maturity_date, contract_multiplier, open, high, low, close, average, adjusted_quote, adjusted_tax, open_interest, volume | **canonical** (futures daily data, >2018) |
+| `staging.b3-futures` | **Futures daily data (2006-05-22+)** — union of the bvbg and BD inputs; rates in decimal | refdate, symbol, commodity, expiration_code, maturity_date, contract_multiplier, open, high, low, close, average, adjusted_quote, adjusted_tax, adjusted_value_contract, traded_contracts, volume, open_interest | **canonical** (futures daily data) |
+| `input.b3-futures-bvbg` | bvbg-sourced input of the union (BVBG028 ⋈ BVBG086), 2016-02-01+ | same 17 columns as `staging.b3-futures` | internal (use `staging.b3-futures`) |
+| `input.b3-futures-bd` | BD_Final-sourced input of the union, 2006-05-22 → 2017-08-25 | same 17 columns as `staging.b3-futures` | internal (use `staging.b3-futures`) |
 | `staging.b3-futures-register` | Processed futures contract registry (maturity, multiplier) | refdate, symbol, maturity_date, contract_multiplier | **canonical** (contract registry) |
-| `input.b3-futures-settlement-prices` | Raw settlement prices; frozen. Pre-2018 tail only; incomplete (no maturity/OI) | refdate, symbol, commodity, price, settlement_value | raw source (pre-2018 tail; simple contracts only) |
+| `input.b3-futures-settlement-prices` | Raw settlement prices; frozen, starts 2010-01-04; incomplete (no maturity/OI) | refdate, symbol, commodity, price, settlement_value | raw source (cross-check only; simple contracts) |
 | `staging.b3-futures-settlement-prices` | Processed settlement prices, built on the frozen raw feed | refdate, symbol, commodity, maturity_code, price, settlement_value | ⚠️ **outdated** — ships **2× duplicate rows** (dedup before use); prefer `staging.b3-futures` |
 
 **First-generic (continuous front-contract) series.** One row per refdate, tracking
