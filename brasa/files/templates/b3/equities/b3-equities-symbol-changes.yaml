@@ -1,0 +1,208 @@
+id: b3-equities-symbol-changes
+description: >
+  Detected B3 ticker renames. A symbol whose daily series hard-stops and is
+  followed the next session by a new symbol of the same ISIN class is recorded
+  as a src -> dest rename when either the dest's adjusted first-day return
+  matches the signed close-to-close change (ret_match), or the pair keeps
+  share-class continuity and the ticker suffix. No price-gap ceiling; a
+  two-round 1:1 matching resolves same-day collisions. Derived from
+  staging.b3-cotahist corroborated by staging.b3-equities-returns.
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - staging.b3-cotahist
+        - staging.b3-equities-returns
+      query: |+
+        WITH universe AS (
+            SELECT refdate, symbol, close, isin,
+                   substr(isin, 7, 3) AS isin_class,
+                   CASE WHEN substr(isin, 10, 2) = 'OR' THEN 'ON'
+                        WHEN substr(isin, 10, 1) = 'P' THEN 'PN'
+                        ELSE substr(isin, 7, 3) END AS share_class,
+                   corporation_name
+            FROM 'staging.b3-cotahist'
+            WHERE instrument_market = 10
+              AND substr(isin, 7, 3) IN ('ACN', 'UNT', 'CDA')
+              AND close IS NOT NULL
+        ),
+        session_rank AS (
+            SELECT refdate, row_number() OVER (ORDER BY refdate) AS rn
+            FROM (SELECT DISTINCT refdate FROM universe)
+        ),
+        bounds AS (SELECT min(rn) AS min_rn, max(rn) AS max_rn FROM session_rank),
+        spans AS (
+            SELECT symbol,
+                   min(refdate) AS first_date,
+                   max(refdate) AS last_date,
+                   arg_min(close, refdate) AS first_close,
+                   arg_max(close, refdate) AS last_close,
+                   arg_max(isin, refdate) AS isin,
+                   any_value(isin_class) AS isin_class,
+                   any_value(share_class) AS share_class,
+                   arg_max(corporation_name, refdate) AS corporation_name
+            FROM universe GROUP BY symbol
+        ),
+        spans_ranked AS (
+            SELECT s.*, fr.rn AS first_rn, lr.rn AS last_rn
+            FROM spans s
+            JOIN session_rank fr ON fr.refdate = s.first_date
+            JOIN session_rank lr ON lr.refdate = s.last_date
+        ),
+        flagged AS (
+            SELECT sr.*,
+                   sr.last_rn  < b.max_rn - 5 AS is_hard_stop,
+                   sr.first_rn > b.min_rn + 5 AS is_sudden_start
+            FROM spans_ranked sr CROSS JOIN bounds b
+        ),
+        -- All next-session adjacencies within the ISIN class. No price
+        -- ceiling: price continuity is a weak criterion (renames bundled
+        -- with corporate events jump legitimately, e.g. OMGE3 -> MEGA3).
+        candidate_pairs AS (
+            SELECT a.symbol AS src_symbol,
+                   b.symbol AS dest_symbol,
+                   b.first_date AS change_date,
+                   a.last_close AS src_last_close,
+                   b.first_close AS dest_first_close,
+                   (b.first_close - a.last_close) / a.last_close AS close_change_pct,
+                   a.isin_class AS isin_class,
+                   a.share_class AS src_share_class,
+                   b.share_class AS dest_share_class,
+                   a.isin AS src_isin,
+                   b.isin AS dest_isin,
+                   a.corporation_name AS corporation_name_src,
+                   b.corporation_name AS corporation_name_dest,
+                   (a.share_class = b.share_class) AS same_share_class,
+                   (a.share_class = b.share_class
+                    OR (a.share_class = 'PN' AND b.share_class = 'ON')) AS class_ok,
+                   (substr(a.symbol, 5) = substr(b.symbol, 5)) AS same_suffix
+            FROM flagged a
+            JOIN flagged b
+              ON b.first_rn = a.last_rn + 1
+             AND a.isin_class = b.isin_class
+            WHERE a.is_hard_stop AND b.is_sudden_start
+              AND a.last_close > 0
+        ),
+        -- ret_match: the dest's adjusted first-day return equals the signed
+        -- close-to-close change (NULL when no returns coverage, pre-2016).
+        with_ret AS (
+            SELECT c.*,
+                   CASE WHEN r.pct_return IS NULL THEN NULL
+                        ELSE abs(r.pct_return - c.close_change_pct) <= 0.005
+                   END AS ret_match
+            FROM candidate_pairs c
+            LEFT JOIN 'staging.b3-equities-returns' r
+              ON r.symbol = c.dest_symbol AND r.refdate = c.change_date
+        ),
+        confident AS (
+            SELECT * FROM with_ret
+            WHERE ret_match IS TRUE OR (class_ok AND same_suffix)
+        ),
+        round1 AS (
+            SELECT * FROM (
+                SELECT *,
+                       row_number() OVER (
+                           PARTITION BY src_symbol
+                           ORDER BY (ret_match IS NOT TRUE),
+                                    (NOT same_share_class),
+                                    abs(close_change_pct)
+                       ) AS src_rk,
+                       row_number() OVER (
+                           PARTITION BY dest_symbol
+                           ORDER BY (ret_match IS NOT TRUE),
+                                    (NOT same_share_class),
+                                    abs(close_change_pct)
+                       ) AS dest_rk
+                FROM confident
+            ) WHERE src_rk = 1 AND dest_rk = 1
+        ),
+        -- Second matching round over the leftovers: recovers pairs whose
+        -- first preference was taken by a stronger same-day pair (verified
+        -- on real data: converges, a third round adds nothing).
+        leftover AS (
+            SELECT c.* FROM confident c
+            WHERE c.src_symbol NOT IN (SELECT src_symbol FROM round1)
+              AND c.dest_symbol NOT IN (SELECT dest_symbol FROM round1)
+        ),
+        round2 AS (
+            SELECT * FROM (
+                SELECT *,
+                       row_number() OVER (
+                           PARTITION BY src_symbol
+                           ORDER BY (ret_match IS NOT TRUE),
+                                    (NOT same_share_class),
+                                    abs(close_change_pct)
+                       ) AS src_rk,
+                       row_number() OVER (
+                           PARTITION BY dest_symbol
+                           ORDER BY (ret_match IS NOT TRUE),
+                                    (NOT same_share_class),
+                                    abs(close_change_pct)
+                       ) AS dest_rk
+                FROM leftover
+            ) WHERE src_rk = 1 AND dest_rk = 1
+        )
+        SELECT src_symbol, dest_symbol, change_date,
+               src_last_close, dest_first_close, close_change_pct, ret_match,
+               isin_class, src_share_class, dest_share_class,
+               src_isin, dest_isin, corporation_name_src, corporation_name_dest
+        FROM round1
+        UNION ALL
+        SELECT src_symbol, dest_symbol, change_date,
+               src_last_close, dest_first_close, close_change_pct, ret_match,
+               isin_class, src_share_class, dest_share_class,
+               src_isin, dest_isin, corporation_name_src, corporation_name_dest
+        FROM round2
+        ORDER BY change_date, src_symbol
+
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+  partitioning: []
+
+fields:
+  - name: src_symbol
+    description: Symbol whose series hard-stopped (old ticker)
+    type: string
+  - name: dest_symbol
+    description: Successor symbol that resumed the series (new ticker)
+    type: string
+  - name: change_date
+    description: First trading session under the new ticker
+    type: date
+  - name: src_last_close
+    description: Close on the old ticker's last session
+    type: numeric
+  - name: dest_first_close
+    description: Close on the new ticker's first session
+    type: numeric
+  - name: close_change_pct
+    description: Signed close-to-close change across the rename (negative on drops)
+    type: numeric
+  - name: ret_match
+    description: Adjusted first-day return corroborates the change (NULL pre-2016)
+    type: boolean
+  - name: isin_class
+    description: ISIN security-class token shared by both tickers (ACN/UNT/CDA)
+    type: string
+  - name: src_share_class
+    description: ISIN-derived share class of the old ticker (ON/PN/UNT/CDA)
+    type: string
+  - name: dest_share_class
+    description: ISIN-derived share class of the new ticker (ON/PN/UNT/CDA)
+    type: string
+  - name: src_isin
+    description: ISIN of the old ticker
+    type: string
+  - name: dest_isin
+    description: ISIN of the new ticker
+    type: string
+  - name: corporation_name_src
+    description: Corporation name on the old ticker (corroboration only)
+    type: string
+  - name: corporation_name_dest
+    description: Corporation name on the new ticker (corroboration only)
+    type: string
