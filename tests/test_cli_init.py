@@ -25,7 +25,7 @@ def make_args(data_path=None, yes=False):
 
 
 def read_config(cfg_file):
-    import tomllib
+    from brasa.engine.config import tomllib
 
     return tomllib.loads(cfg_file.read_text())
 
