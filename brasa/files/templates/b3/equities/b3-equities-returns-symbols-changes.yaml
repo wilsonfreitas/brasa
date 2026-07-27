@@ -1,0 +1,71 @@
+id: b3-equities-returns-symbols-changes
+description: >
+  Return history of renamed tickers relabeled under their final symbol.
+  Multi-hop chains (e.g. VVAR3 -> VIIA3 -> BHIA3) resolve recursively to the
+  terminal ticker, so both the original and intermediate symbols' histories
+  are emitted under the final name. Only relabeled rows are emitted; the
+  final symbol's own history already lives in staging.b3-equities-returns.
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - staging.b3-equities-symbol-changes
+        - staging.b3-equities-returns
+      query: |+
+        -- Walk every src forward through the rename graph to its terminal
+        -- ticker. depth < 20 is a defensive guard against a data cycle;
+        -- no real chain exceeds 2 hops today. The registered table is
+        -- referenced directly in both branches instead of via an `edges`
+        -- CTE: a non-recursive CTE read twice inside WITH RECURSIVE over
+        -- registered Arrow data trips a DuckDB INTERNAL error ("Could not
+        -- find CTE definition"), same family as the binder bug noted in
+        -- bcb-currency-consolidated.yaml.
+        WITH RECURSIVE resolved AS (
+            SELECT src_symbol AS symbol, dest_symbol AS final_symbol, 1 AS depth
+            FROM 'staging.b3-equities-symbol-changes'
+            UNION ALL
+            SELECT r.symbol, e.dest_symbol, r.depth + 1
+            FROM resolved r
+            JOIN 'staging.b3-equities-symbol-changes' e
+              ON e.src_symbol = r.final_symbol
+            WHERE r.depth < 20
+        ),
+        final_map AS (
+            SELECT symbol, final_symbol
+            FROM (
+                SELECT *,
+                       row_number() OVER (
+                           PARTITION BY symbol ORDER BY depth DESC
+                       ) AS rk
+                FROM resolved
+            ) WHERE rk = 1
+        )
+        SELECT r.refdate,
+               m.final_symbol AS symbol,
+               r.pct_return,
+               r.log_return
+        FROM 'staging.b3-equities-returns' r
+        JOIN final_map m ON m.symbol = r.symbol
+        ORDER BY refdate, symbol
+
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: staging
+  partitioning: []
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Final (post-rename) equity symbol
+    type: string
+  - name: pct_return
+    description: Daily percentage return (unchanged from the source series)
+    type: numeric
+  - name: log_return
+    description: Daily log return (unchanged from the source series)
+    type: numeric

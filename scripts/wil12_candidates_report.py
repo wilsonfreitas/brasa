@@ -13,10 +13,12 @@ close-to-close change across the pair, and `ret_match` is True when they agree
 within RET_MATCH_TOL. For a genuine rename the adjusted return equals the close
 change, so `ret_match` is the strongest continuity signal available.
 
-Verdict per pair (row color only; nothing is hidden):
-- MATCHED: the pair is in scripts/out/symbol_changes.csv (strict rules)
-- NEAR:    same ISIN class and price diff <= 25%, but not matched
-- WEAK:    everything else (class mismatch or large price gap)
+Verdict per pair (row color only; nothing is hidden), aligned with the
+production rule in b3-equities-symbol-changes.yaml (WIL-130):
+- MATCHED:   the pair is in the materialized staging.b3-equities-symbol-changes
+- CONFIRMED: ret_match True but not matched (lost a 1:1 ranking slot)
+- NEAR:      class_ok AND same_suffix, but not matched (no price ceiling)
+- WEAK:      everything else
 
 Usage:
     uv run python scripts/wil12_candidates_report.py
@@ -30,10 +32,8 @@ from bizdays import Calendar
 
 OUT_DIR = Path("scripts/out")
 SPANS_CSV = OUT_DIR / "symbol_spans_analysis.csv"
-CHANGES_CSV = OUT_DIR / "symbol_changes.csv"
 REPORT_HTML = OUT_DIR / "symbol_changes_candidates.html"
 
-NEAR_TOL = 0.25  # same-class pairs up to this price diff are flagged NEAR
 RET_MATCH_TOL = 0.005  # |dest_pct_return - close_change_pct| to corroborate
 
 
@@ -49,9 +49,6 @@ def build_pairs() -> pd.DataFrame:
     pairs = hs.merge(
         ss, left_on="next_bd", right_on="event_date", suffixes=("_src", "_dest")
     )
-    pairs["price_diff_pct"] = (
-        (pairs["close_dest"] - pairs["close_src"]).abs() / pairs["close_src"]
-    ).where(pairs["close_src"] > 0)
     pairs["same_class"] = pairs["isin_class_src"] == pairs["isin_class_dest"]
     pairs["same_suffix"] = pairs["symbol_src"].str[4:] == pairs["symbol_dest"].str[4:]
 
@@ -78,25 +75,26 @@ def build_pairs() -> pd.DataFrame:
         .where(pairs["dest_pct_return"].notna(), None)
     )
 
-    matched_pairs: set[tuple[str, str]] = set()
-    if CHANGES_CSV.exists():
-        changes = pd.read_csv(CHANGES_CSV)
-        matched_pairs = set(
-            zip(changes["src_symbol"], changes["dest_symbol"], strict=True)
+    from brasa.queries import get_dataset
+
+    changes = (
+        get_dataset(
+            "b3-equities-symbol-changes",
+            layer="staging",
+            use_template_schema=False,
+            use_catalog_schema=True,
         )
+        .to_table()
+        .to_pandas()
+    )
+    matched_pairs = set(zip(changes["src_symbol"], changes["dest_symbol"], strict=True))
 
     def verdict(row) -> str:
         if (row["symbol_src"], row["symbol_dest"]) in matched_pairs:
             return "MATCHED"
-        # adjusted returns confirm continuity even outside the strict rules
         if row["ret_match"] is True:
             return "CONFIRMED"
-        # an incompatible share-class transition (e.g. ON->PN) can't be a rename
-        if (
-            row["class_ok"]
-            and pd.notna(row["price_diff_pct"])
-            and row["price_diff_pct"] <= NEAR_TOL
-        ):
+        if row["class_ok"] and row["same_suffix"]:
             return "NEAR"
         return "WEAK"
 
@@ -111,7 +109,6 @@ def build_pairs() -> pd.DataFrame:
             "change_date": pairs["event_date_dest"].dt.strftime("%Y-%m-%d"),
             "src_close": pairs["close_src"].round(2),
             "dest_close": pairs["close_dest"].round(2),
-            "price_diff_pct": (pairs["price_diff_pct"] * 100).round(1),
             "close_change_pct": (pairs["close_change_pct"] * 100).round(2),
             "dest_pct_return": (pairs["dest_pct_return"] * 100).round(2),
             "ret_match": pairs["ret_match"],
@@ -159,10 +156,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <h1>WIL-12 — hard-stop &rarr; next-business-day sudden-start candidates</h1>
 <div class="summary" id="summary"></div>
 <div class="legend">
-  <span class="lg-MATCHED">MATCHED — in strict-rule output</span>
+  <span class="lg-MATCHED">MATCHED — in staging.b3-equities-symbol-changes</span>
   <span class="lg-CONFIRMED">CONFIRMED — adjusted return matches close change</span>
-  <span class="lg-NEAR">NEAR — same class, &Delta; &le; 25%</span>
-  <span class="lg-WEAK">WEAK — class mismatch or large gap</span>
+  <span class="lg-NEAR">NEAR — class_ok &amp; same suffix, unmatched</span>
+  <span class="lg-WEAK">WEAK — everything else</span>
 </div>
 <div class="controls">
   <input type="text" id="filter" placeholder="filter symbol / corp / date...">
@@ -174,7 +171,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <table id="tbl"><thead></thead><tbody></tbody></table>
 <script>
 const COLUMNS = __COLUMNS__;
-const NUMERIC = new Set(["src_close", "dest_close", "price_diff_pct", "close_change_pct", "dest_pct_return"]);
+const NUMERIC = new Set(["src_close", "dest_close", "close_change_pct", "dest_pct_return"]);
 const DATA = __DATA__;
 let sortCol = "change_date", sortAsc = true;
 

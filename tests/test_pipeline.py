@@ -86,15 +86,8 @@ def test_etl_pipeline_template_loading():
     """Test loading an ETL template with pipeline configuration."""
     from brasa.engine.template import retrieve_template
 
-    # Load a legacy function-based ETL template
-    template = retrieve_template("brasa-returns-symbols-changes")
-    assert template.id == "brasa-returns-symbols-changes"
-    assert template.is_etl
-    assert not template.etl.is_pipeline
-    assert template.etl.process_function is not None
-    assert template.etl.source_dataset_name == "b3-equities-returns"
-
-    # Load a new pipeline-based ETL template
+    # No live template uses function-based ETL anymore (WIL-130 migrated the
+    # last one); load a pipeline-based ETL template
     template = retrieve_template("b3-futures-settlement-prices-consolidated")
     assert template.id == "b3-futures-settlement-prices-consolidated"
     assert template.is_etl

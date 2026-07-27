@@ -3,8 +3,9 @@
 Builds the two detection queries (symbol changes + hard-stop/sudden-start
 analysis), runs them against staging.b3-cotahist in an in-memory DuckDB
 (mirroring the sql_query ETL step), writes both tables to CSV, and scores the
-detected changes against the known renames in
-templates/brasa/brasa-returns-symbols-changes.yaml.
+detected changes against the frozen 19-pair validation baseline in
+known_pairs() (originally the hardcoded list of the retired
+brasa-returns-symbols-changes.yaml, deleted by WIL-130).
 
 Each candidate is also corroborated against staging.b3-equities-returns, the
 adjusted daily-return series. For a genuine rename the dest symbol's
@@ -29,7 +30,6 @@ Read-only.
 from pathlib import Path
 
 import duckdb
-import yaml
 
 from brasa.queries import get_dataset
 
@@ -237,9 +237,30 @@ def spans_sql() -> str:
 
 
 def known_pairs() -> set[tuple[str, str]]:
-    path = Path("brasa/files/templates/brasa/brasa-returns-symbols-changes.yaml")
-    doc = yaml.safe_load(path.read_text())
-    return {(row["src"], row["dest"]) for row in doc["etl"]["symbols"]}
+    """The 19 manually-curated renames from the retired hardcoded list
+    (brasa-returns-symbols-changes.yaml, deleted by WIL-130) — kept as the
+    frozen validation baseline for the detection heuristics."""
+    return {
+        ("LLIS3", "VSTE3"),
+        ("ARZZ3", "AZZA3"),
+        ("VVAR3", "BHIA3"),
+        ("VIIA3", "BHIA3"),
+        ("WIZS3", "WIZC3"),
+        ("KROT3", "COGN3"),
+        ("BVMF3", "B3SA3"),
+        ("FJTA3", "TASA3"),
+        ("FJTA4", "TASA4"),
+        ("NATU3", "NTCO3"),
+        ("TIMP3", "TIMS3"),
+        ("CNTO3", "SBFG3"),
+        ("BTOW3", "AMER3"),
+        ("CARD3", "CSUD3"),
+        ("BRDT3", "VBBR3"),
+        ("PETZ3", "AUAU3"),
+        ("TESA3", "LAND3"),
+        ("PNVL4", "RAIZ4"),
+        ("OMGE3", "MEGA3"),
+    }
 
 
 def main() -> None:

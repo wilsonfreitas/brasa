@@ -104,6 +104,9 @@ Daily return series derived from quotations.
 |---------|-------------|-------------|--------|
 | `staging.b3-equities-returns` | **Adjusted** stock daily returns; built from `b3-bvbg086` oscillation. History **starts 2018** | refdate, symbol, pct_return, log_return | **canonical** (adjusted stock returns) |
 | `staging.b3-equities-etfs-returns` | ETF daily returns — **longer history**: concatenates `b3-cotahist` (<2018) + `b3-bvbg086` (>2018) | refdate, symbol, pct_return, log_return | **canonical** (ETF returns) |
+| `staging.b3-equities-symbol-changes` | **Detected ticker renames** (src → dest). Confidence rule: adjusted-return corroboration (`ret_match`) OR share-class continuity + same ticker suffix; two-round 1:1 matching; **no price ceiling**; `close_change_pct` is signed | src_symbol, dest_symbol, change_date, close_change_pct, ret_match, src_isin, dest_isin | **canonical** (ticker renames) |
+| `staging.b3-equities-symbol-spans-analysis` | Every hard-stop and sudden-start, with `matched` looked up from the changes dataset; unmatched hard-stops = corporate-event exit candidates | symbol, event_type, event_date, close, isin, matched | supporting (analysis) |
+| `staging.b3-equities-returns-symbols-changes` | Renamed tickers' **return history relabeled to the final symbol** (multi-hop chains resolved recursively, e.g. VVAR3→VIIA3→BHIA3 all under BHIA3); unioned into `brasa-returns` | refdate, symbol, pct_return, log_return | **canonical** (renamed-history returns) |
 
 ### Unified aggregates
 
@@ -115,7 +118,7 @@ returns), symbols namespaced by their source conventions (equity tickers,
 |---------|-------------|-------------|--------|
 | `staging.brasa-prices` | All closing prices, long format (equities, indexes, FX, WIN/WDO adjusted futures) | refdate, symbol, close | **canonical** (unified aggregate) |
 | `staging.brasa-ohlc-prices` | All OHLC prices, long format (equities, indexes, FX) | refdate, symbol, open, high, low, close | **canonical** (unified aggregate) |
-| `staging.brasa-returns` | All daily returns, long format (equities, indexes, ETFs, DI1/DAP curves, FX, WIN/WDO adjusted futures). The `returns` column is the **log return** | refdate, symbol, returns | **canonical** (unified aggregate) |
+| `staging.brasa-returns` | All daily returns, long format (equities, indexes, ETFs, renamed-symbol histories, DI1/DAP curves, FX, WIN/WDO adjusted futures). The `returns` column is the **log return** | refdate, symbol, returns | **canonical** (unified aggregate) |
 
 ## Indexes
 
