@@ -568,7 +568,7 @@ def test_b3_companies_symbols_template_loads():
 
 
 def test_b3_futures_template_loads():
-    """Test that the b3-futures template (bvbg028 x bvbg086 join) loads correctly."""
+    """Test that the b3-futures template (union of bvbg + BD inputs) loads correctly."""
     tpl = MarketDataTemplate("brasa/files/templates/b3/futures/b3-futures.yaml")
 
     assert tpl.id == "b3-futures"
@@ -578,8 +578,8 @@ def test_b3_futures_template_loads():
     assert tpl.etl.is_pipeline
 
     inputs = tpl.etl.get_input_datasets()
-    assert "input.b3-bvbg028-future_contracts" in inputs
-    assert "input.b3-bvbg086" in inputs
+    assert "input.b3-futures-bvbg" in inputs
+    assert "input.b3-futures-bd" in inputs
 
     field_names = {f.name for f in tpl.fields}
     expected_fields = {
@@ -589,8 +589,6 @@ def test_b3_futures_template_loads():
         "expiration_code",
         "maturity_date",
         "contract_multiplier",
-        "trading_currency",
-        "isin",
         "open",
         "high",
         "low",
@@ -598,11 +596,7 @@ def test_b3_futures_template_loads():
         "average",
         "adjusted_quote",
         "adjusted_tax",
-        "previous_adjusted_quote",
-        "previous_adjusted_tax",
         "adjusted_value_contract",
-        "variation_points",
-        "days_to_settlement",
         "traded_contracts",
         "volume",
         "open_interest",

@@ -1,54 +1,41 @@
 id: b3-futures
-description: Contratos futuros da B3 com preços e taxas de ajuste (BVBG028 + BVBG086)
+description: Contratos futuros da B3 — série canônica unificada (BD_Final 2006-2016 + BVBG 2016+)
 
 etl:
   pipeline:
     - step: sql_query
       datasets:
-        - input.b3-bvbg028-future_contracts
-        - input.b3-bvbg086
+        - input.b3-futures-bvbg
+        - input.b3-futures-bd
       query: |+
-        -- Futures contracts registered for the day (bvbg028) joined with
-        -- market prices/rates (bvbg086). Inner join: a row exists only when
-        -- the contract is registered AND priced on that refdate.
-        -- bvbg086 can carry more than one row per (refdate, symbol); the row
-        -- with the highest liquidity holds the official settlement values
-        -- (validated against the frozen b3-futures-settlement-prices), so
-        -- QUALIFY keeps only that row.
+        -- Canonical futures series: union of the two sources with the
+        -- boundary declared once, here:
+        --   * b3-futures-bd (BD_Final): refdate < 2016-02-01
+        --   * b3-futures-bvbg (BVBG028+086): refdate >= 2016-02-01
+        -- plus 2016-02-29 taken from BD: bvbg086 has 0 rows that day (known
+        -- whole-market source gap) while BD carries the full session.
+        -- Both inputs keep their full ranges; the 2016-02..2017-08 overlap
+        -- stays in the inputs for cross-source validation.
+        -- 2021-06-10 (the other bvbg gap day) is beyond BD's range and
+        -- remains partial.
         select
-          fc.refdate,
-          fc.symbol,
-          fc.instrument_asset as commodity,
-          fc.expiration_code,
-          fc.maturity_date,
-          fc.contract_multiplier,
-          fc.trading_currency,
-          fc.isin,
-          p.open,
-          p.high,
-          p.low,
-          p.close,
-          p.average,
-          p.adjusted_quote,
-          p.adjusted_tax,
-          p.previous_adjusted_quote,
-          p.previous_adjusted_tax,
-          p.adjusted_value_contract,
-          p.variation_points,
-          p.days_to_settlement,
-          p.traded_contracts,
-          p.volume,
-          p.open_interest
-        from
-          'input.b3-bvbg028-future_contracts' fc
-        join
-          'input.b3-bvbg086' p
-          on p.refdate = fc.refdate and p.symbol = fc.symbol
-        qualify
-          row_number() over (
-            partition by fc.refdate, fc.symbol
-            order by p.traded_contracts desc nulls last, p.volume desc nulls last
-          ) = 1
+          refdate, symbol, commodity, expiration_code, maturity_date,
+          contract_multiplier, open, high, low, close, average,
+          adjusted_quote, adjusted_tax, adjusted_value_contract,
+          traded_contracts, volume, open_interest
+        from 'input.b3-futures-bd'
+        where refdate < date '2016-02-01' or refdate = date '2016-02-29'
+        union all
+        select
+          refdate, symbol, commodity, expiration_code, maturity_date,
+          contract_multiplier, open, high, low, close, average,
+          adjusted_quote, adjusted_tax, adjusted_value_contract,
+          traded_contracts, volume, open_interest
+        from 'input.b3-futures-bvbg'
+        where refdate >= date '2016-02-01' and refdate <> date '2016-02-29'
+
+    - step: sort
+      by: [refdate, symbol]
 
     - step: select_fields
     - step: apply_fields
@@ -66,7 +53,7 @@ fields:
     description: Ticker symbol
     type: string
   - name: commodity
-    description: Commodity code (bvbg028 instrument_asset)
+    description: Commodity code
     type: string
   - name: expiration_code
     description: Expiration code
@@ -77,12 +64,6 @@ fields:
   - name: contract_multiplier
     description: Contract multiplier
     type: numeric
-  - name: trading_currency
-    description: Trading currency
-    type: string
-  - name: isin
-    description: ISIN code
-    type: string
   - name: open
     description: Opening price
     type: numeric
@@ -102,23 +83,11 @@ fields:
     description: Settlement price
     type: numeric
   - name: adjusted_tax
-    description: Settlement rate
-    type: numeric
-  - name: previous_adjusted_quote
-    description: Previous settlement price
-    type: numeric
-  - name: previous_adjusted_tax
-    description: Previous settlement rate
+    description: Settlement rate (decimal form)
     type: numeric
   - name: adjusted_value_contract
     description: Settlement value per contract (R$)
     type: numeric
-  - name: variation_points
-    description: Variation in points
-    type: numeric
-  - name: days_to_settlement
-    description: Days to settlement
-    type: integer
   - name: traded_contracts
     description: Traded contracts
     type: numeric
