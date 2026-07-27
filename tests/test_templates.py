@@ -718,3 +718,22 @@ def test_pregao_templates_use_b3_pregao_download(name):
     assert tpl.downloader.download_function is b3_pregao_download
     assert tpl.downloader.retry_attempts == 3
     assert tpl.downloader.timeout == 90
+
+
+def test_b3_futures_bvbg_template_loads():
+    tpl = MarketDataTemplate("brasa/files/templates/b3/futures/b3-futures-bvbg.yaml")
+    assert tpl.id == "b3-futures-bvbg"
+    assert tpl.is_etl
+    assert tpl.etl.is_pipeline
+    assert any("b3-bvbg086" in d for d in tpl.etl.get_input_datasets())
+    assert len(tpl.fields) == 17
+    assert tpl.fields["adjusted_tax"].type_name == "numeric"
+    for gone in (
+        "trading_currency",
+        "isin",
+        "previous_adjusted_tax",
+        "days_to_settlement",
+        "variation_points",
+        "previous_adjusted_quote",
+    ):
+        assert gone not in [f.name for f in tpl.fields]
