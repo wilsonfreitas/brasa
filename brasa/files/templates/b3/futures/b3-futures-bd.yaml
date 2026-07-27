@@ -19,6 +19,9 @@ etl:
         -- adjusted_tax is derived from the settlement PU in decimal form for
         -- rate-quoted contracts; formulas validated against bvbg086 in the
         -- 2016-02..2017-08 overlap (see WIL-127). NULL elsewhere.
+        -- BD uses 0 for "no value" in price fields where bvbg uses NULL
+        -- (no-trade days, missing settlement); nullif keeps both eras on the
+        -- bvbg convention.
         select
           data_geracao_arquivo as refdate,
           trim(cod_gts) as symbol,
@@ -26,12 +29,12 @@ etl:
           substr(trim(cod_gts), 4) as expiration_code,
           data_vencimento as maturity_date,
           tamanho_contr as contract_multiplier,
-          cot_primeiro_negocio as open,
-          cot_maior_negocio as high,
-          cot_menor_negocio as low,
-          cot_ult_negocio as close,
-          cot_med_negocios as average,
-          cot_ajuste as adjusted_quote,
+          nullif(cot_primeiro_negocio, 0) as open,
+          nullif(cot_maior_negocio, 0) as high,
+          nullif(cot_menor_negocio, 0) as low,
+          nullif(cot_ult_negocio, 0) as close,
+          nullif(cot_med_negocios, 0) as average,
+          nullif(cot_ajuste, 0) as adjusted_quote,
           case
             when cod_mercadoria in ('DI1', 'OC1', 'DAP')
                  and cot_ajuste > 0 and num_dias_saques > 0
