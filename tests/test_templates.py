@@ -737,3 +737,20 @@ def test_b3_futures_bvbg_template_loads():
         "previous_adjusted_quote",
     ):
         assert gone not in [f.name for f in tpl.fields]
+
+
+def test_b3_futures_bd_template_loads():
+    tpl = MarketDataTemplate("brasa/files/templates/b3/futures/b3-futures-bd.yaml")
+    assert tpl.id == "b3-futures-bd"
+    assert tpl.is_etl
+    assert tpl.etl.is_pipeline
+    assert any("b3-derivatives-daily" in d for d in tpl.etl.get_input_datasets())
+    assert len(tpl.fields) == 17
+    assert [f.name for f in tpl.fields][:6] == [
+        "refdate",
+        "symbol",
+        "commodity",
+        "expiration_code",
+        "maturity_date",
+        "contract_multiplier",
+    ]

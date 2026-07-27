@@ -1,0 +1,114 @@
+id: b3-futures-bd
+description: Contratos futuros da B3, fonte BD_Final (b3-derivatives-daily), 2006-05-22 a 2017-08-25
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - input.b3-derivatives-daily
+      query: |+
+        -- Outright futures from the BD_Final daily bulletin (cod_mercado = '2').
+        -- Starts 2006-05-22: exact cutover from 1-digit to 2-digit year symbols
+        -- (1-digit symbols are ambiguous, e.g. DI1F3 = 2003 AND 2013; the
+        -- pre-cutover era is deferred to WIL-128).
+        -- The symbol regex keeps outrights only: it excludes strategy
+        -- instruments (FRP0/FRP1, CR1/IR1 rolls) and 2002-03 FRC rows whose
+        -- cod_gts holds the literal string '<NA>' (FWF parsing artifact).
+        -- expiration_code comes from the symbol suffix: the serie column uses
+        -- old month names (DEZ5) before 2006.
+        -- adjusted_tax is derived from the settlement PU in decimal form for
+        -- rate-quoted contracts; formulas validated against bvbg086 in the
+        -- 2016-02..2017-08 overlap (see WIL-127). NULL elsewhere.
+        select
+          data_geracao_arquivo as refdate,
+          trim(cod_gts) as symbol,
+          cod_mercadoria as commodity,
+          substr(trim(cod_gts), 4) as expiration_code,
+          data_vencimento as maturity_date,
+          tamanho_contr as contract_multiplier,
+          cot_primeiro_negocio as open,
+          cot_maior_negocio as high,
+          cot_menor_negocio as low,
+          cot_ult_negocio as close,
+          cot_med_negocios as average,
+          cot_ajuste as adjusted_quote,
+          case
+            when cod_mercadoria in ('DI1', 'OC1', 'DAP')
+                 and cot_ajuste > 0 and num_dias_saques > 0
+              then round(pow(100000.0 / cot_ajuste, 252.0 / num_dias_saques) - 1, 5)
+            when cod_mercadoria in ('DDI', 'DCO')
+                 and cot_ajuste > 0 and num_dias_corridos > 0
+              then round((100000.0 / cot_ajuste - 1) * 360.0 / num_dias_corridos, 5)
+            else null
+          end as adjusted_tax,
+          valor_ajuste_contr as adjusted_value_contract,
+          qtd_contr as traded_contracts,
+          volume_real as volume,
+          qtd_contr_aberto as open_interest
+        from
+          'input.b3-derivatives-daily'
+        where
+          cod_mercado = '2'
+          and data_geracao_arquivo >= date '2006-05-22'
+          and regexp_matches(trim(cod_gts), '^[A-Z0-9]{3}[FGHJKMNQUVXZ][0-9]{2}$')
+
+    - step: select_fields
+    - step: apply_fields
+      errors: coerce
+
+writer:
+  layer: input
+  partitioning: [commodity]
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Ticker symbol (cod_gts)
+    type: string
+  - name: commodity
+    description: Commodity code
+    type: string
+  - name: expiration_code
+    description: Expiration code (symbol suffix)
+    type: string
+  - name: maturity_date
+    description: Maturity/expiration date
+    type: date
+  - name: contract_multiplier
+    description: Contract multiplier
+    type: numeric
+  - name: open
+    description: Opening price
+    type: numeric
+  - name: high
+    description: Highest price
+    type: numeric
+  - name: low
+    description: Lowest price
+    type: numeric
+  - name: close
+    description: Closing price (last trade)
+    type: numeric
+  - name: average
+    description: Average price
+    type: numeric
+  - name: adjusted_quote
+    description: Settlement price
+    type: numeric
+  - name: adjusted_tax
+    description: Settlement rate (decimal form, derived from settlement PU)
+    type: numeric
+  - name: adjusted_value_contract
+    description: Settlement value per contract (R$)
+    type: numeric
+  - name: traded_contracts
+    description: Traded contracts
+    type: numeric
+  - name: volume
+    description: Financial volume (R$)
+    type: numeric
+  - name: open_interest
+    description: Open interest
+    type: numeric
