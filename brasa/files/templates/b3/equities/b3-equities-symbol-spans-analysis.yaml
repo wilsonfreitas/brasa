@@ -1,15 +1,16 @@
-id: brasa-symbol-spans-analysis
+id: b3-equities-symbol-spans-analysis
 description: >
   Every hard-stop and sudden-start in the B3 equity universe, with a `matched`
-  flag indicating whether it participated in a detected ticker change. Unmatched
-  hard-stops are the candidates for corporate-event exits (delisting, merger,
-  redemption) to review. Derived from staging.b3-cotahist.
+  flag looked up from staging.b3-equities-symbol-changes (the single source of
+  truth for the detection rule). Unmatched hard-stops are the candidates for
+  corporate-event exits (delisting, merger, redemption) to review.
 
 etl:
   pipeline:
     - step: sql_query
       datasets:
         - staging.b3-cotahist
+        - staging.b3-equities-symbol-changes
       query: |+
         WITH universe AS (
             SELECT refdate, symbol, close, isin,
@@ -47,51 +48,28 @@ etl:
                    sr.last_rn  < b.max_rn - 5 AS is_hard_stop,
                    sr.first_rn > b.min_rn + 5 AS is_sudden_start
             FROM spans_ranked sr CROSS JOIN bounds b
-        ),
-        candidate_pairs AS (
-            SELECT a.symbol AS src_symbol, b.symbol AS dest_symbol,
-                   abs(b.first_close - a.last_close) / a.last_close AS price_diff_pct
-            FROM flagged a
-            JOIN flagged b
-              ON b.first_rn = a.last_rn + 1
-             AND a.isin_class = b.isin_class
-            WHERE a.is_hard_stop AND b.is_sudden_start
-              AND a.last_close > 0
-              AND abs(b.first_close - a.last_close) / a.last_close <= 0.10
-        ),
-        ranked AS (
-            -- prefer pairs that keep the symbol suffix (share-class digits),
-            -- then smallest price gap; avoids cross-pairing e.g. FJTA4->TASA3
-            SELECT *,
-                   row_number() OVER (
-                       PARTITION BY src_symbol
-                       ORDER BY (substr(src_symbol, 5) = substr(dest_symbol, 5)) DESC,
-                                price_diff_pct
-                   ) AS src_rk,
-                   row_number() OVER (
-                       PARTITION BY dest_symbol
-                       ORDER BY (substr(src_symbol, 5) = substr(dest_symbol, 5)) DESC,
-                                price_diff_pct
-                   ) AS dest_rk
-            FROM candidate_pairs
-        ),
-        changes AS (
-            SELECT src_symbol, dest_symbol FROM ranked WHERE src_rk = 1 AND dest_rk = 1
         )
         SELECT symbol, 'HARD_STOP' AS event_type, last_date AS event_date,
                last_close AS close, isin, isin_class, corporation_name,
-               symbol IN (SELECT src_symbol FROM changes) AS matched
+               symbol IN (
+                   SELECT src_symbol FROM 'staging.b3-equities-symbol-changes'
+               ) AS matched
         FROM flagged WHERE is_hard_stop
         UNION ALL
         SELECT symbol, 'SUDDEN_START' AS event_type, first_date AS event_date,
                first_close AS close, isin, isin_class, corporation_name,
-               symbol IN (SELECT dest_symbol FROM changes) AS matched
+               symbol IN (
+                   SELECT dest_symbol FROM 'staging.b3-equities-symbol-changes'
+               ) AS matched
         FROM flagged WHERE is_sudden_start
         ORDER BY event_date, symbol
 
+    - step: apply_fields
+      errors: coerce
+
 writer:
   layer: staging
-  dataset: brasa-symbol-spans-analysis
+  partitioning: []
 
 fields:
   - name: symbol
@@ -116,5 +94,5 @@ fields:
     description: Corporation name at the event date
     type: string
   - name: matched
-    description: True if this event is part of a detected ticker change
+    description: True if this event participates in a detected ticker change
     type: boolean
