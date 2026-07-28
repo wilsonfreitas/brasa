@@ -2,7 +2,7 @@
 
 This document provides comprehensive guidance on **pipeline-based templates** in brasa—the new approach using `reader.pipeline` and `etl.pipeline` with typed fields/datasets. These templates enable declarative, data-driven configurations for both download/read and ETL workflows.
 
-**Legacy function-based templates** (using `reader.function` and `etl.function`) are documented in [CONFIGURATION.md](CONFIGURATION.md). This guide focuses exclusively on the modern pipeline approach.
+ETL is exclusively pipeline-based (`etl.pipeline`) — there is no function-based ETL mechanism. Some templates still use function-based readers (`reader.function`, documented in [CONFIGURATION.md](CONFIGURATION.md)); this guide focuses on the pipeline approach for both reading and ETL.
 
 ---
 
@@ -1597,7 +1597,7 @@ reader:
 
 ## Related Documentation
 
-- [CONFIGURATION.md](CONFIGURATION.md) - Legacy function-based templates and general config
+- [CONFIGURATION.md](CONFIGURATION.md) - Function-based readers (`reader.function`) and general config
 - [ETL_PIPELINE_DESIGN.md](ETL_PIPELINE_DESIGN.md) - Detailed ETL design, step reference, examples
 - [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md) - Architecture overview
 - [USER_GUIDE.md](USER_GUIDE.md) - Getting started, common tasks
