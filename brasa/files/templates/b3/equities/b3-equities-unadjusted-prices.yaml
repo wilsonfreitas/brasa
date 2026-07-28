@@ -16,8 +16,21 @@ etl:
         --   2021-06-10 from cotahist; 2016-02-29 from BDIN (cod_bdi=2,
         --   round lot — same source b3-equities-returns uses for that day).
         -- BDIN is never used beyond that single day: its feed ends 2017-06-14.
+        -- Pre-2016 history comes from cotahist (starts 2000-01-03; WIL-129).
+        -- Cotahist/BDIN branches join on symbol AND isin to guard against
+        -- ticker reuse across decades (drops 2,649 rows of reused tickers:
+        -- pre-2006 BBAS11/BBAS12/KLBN11 receipts, FIXX11/EAGL11 fund
+        -- re-registrations). No bdi_code filter on cotahist: universe symbols
+        -- span several bdi codes (2 round lot, 12 FII, 14 ETF, ...) with
+        -- zero (symbol, refdate) duplicates at instrument_market = 10.
+        -- The bvbg086 base joins by symbol only (same era as the universe);
+        -- universe_symbols keeps it duplicate-free if a symbol ever maps to
+        -- more than one isin in the register.
         with universe as (
-          select distinct symbol from 'staging.b3-equities-spot-market'
+          select distinct symbol, isin from 'staging.b3-equities-spot-market'
+        ),
+        universe_symbols as (
+          select distinct symbol from universe
         )
         select
           q.refdate, q.symbol,
@@ -25,7 +38,7 @@ etl:
           q.traded_contracts, q.volume,
           q.open, q.low, q.high, q.close, q.average
         from 'input.b3-bvbg086' q
-        join universe u on u.symbol = q.symbol
+        join universe_symbols u on u.symbol = q.symbol
 
         union all
 
@@ -34,7 +47,7 @@ etl:
           c.trade_quantity, c.traded_contracts, c.volume,
           c.open, c.low, c.high, c.close, c.average
         from 'staging.b3-cotahist' c
-        join universe u on u.symbol = c.symbol
+        join universe u on u.symbol = c.symbol and u.isin = c.isin
         where c.refdate = '2021-06-10'
 
         union all
@@ -51,8 +64,18 @@ etl:
           b.preco_ult as close,
           b.preco_med as average
         from 'input.b3-bdin-stocks-summary' b
-        join universe u on u.symbol = b.cod_negociacao
+        join universe u on u.symbol = b.cod_negociacao and u.isin = b.cod_isin
         where b.refdate = '2016-02-29' and b.cod_bdi = 2
+
+        union all
+
+        select
+          c.refdate, c.symbol,
+          c.trade_quantity, c.traded_contracts, c.volume,
+          c.open, c.low, c.high, c.close, c.average
+        from 'staging.b3-cotahist' c
+        join universe u on u.symbol = c.symbol and u.isin = c.isin
+        where c.refdate < date '2016-02-01' and c.instrument_market = 10
 
         order by refdate, symbol
 
