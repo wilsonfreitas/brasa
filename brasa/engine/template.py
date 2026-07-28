@@ -51,37 +51,29 @@ class TemplatePart:
 
 
 class MarketDataETL:
-    """Configuration for ETL (Extract-Transform-Load) processes.
-
-    Wraps ETL configuration from a template and loads the processing function.
-    Supports both function-based ETL (legacy) and pipeline-based ETL (new).
-    """
+    """Configuration for pipeline-based ETL (Extract-Transform-Load) processes."""
 
     def __init__(self, etl: dict, template_id: str) -> None:
         for n, v in etl.items():
             self.__dict__[n] = v
         self.template_id = template_id
-        self._is_pipeline = "pipeline" in etl
-        self._pipeline = None
+        if "pipeline" not in etl:
+            raise ValueError(
+                f"Template '{template_id}' uses function-based ETL, which has "
+                "been removed — define an 'etl.pipeline' instead"
+            )
+        from .pipeline.etl_executor import ETLPipeline
 
-        if self._is_pipeline:
-            # New pipeline-based ETL
-            from .pipeline.etl_executor import ETLPipeline
-
-            self._pipeline = ETLPipeline.from_config(etl["pipeline"])
-            self.process_function = None
-        else:
-            # Legacy function-based ETL
-            self.process_function = load_function_by_name(etl["function"])
+        self._pipeline = ETLPipeline.from_config(etl["pipeline"])
 
     @property
     def is_pipeline(self) -> bool:
-        """Check if this ETL uses the pipeline approach."""
-        return self._is_pipeline
+        """Pipeline is the only ETL mechanism; kept for consumer compatibility."""
+        return True
 
     @property
     def pipeline(self):
-        """Get the ETL pipeline (if pipeline-based)."""
+        """Get the ETL pipeline."""
         return self._pipeline
 
     def get_input_datasets(self) -> list[str]:
@@ -90,14 +82,7 @@ class MarketDataETL:
         Returns:
             List of dataset names that are inputs to this ETL.
         """
-        if self._pipeline:
-            return self._pipeline.get_input_datasets()
-        # For function-based ETL, try common attribute names
-        inputs = []
-        for attr in ["input_dataset", "futures_dataset", "bcb_dataset"]:
-            if hasattr(self, attr):
-                inputs.append(getattr(self, attr))
-        return inputs
+        return self._pipeline.get_input_datasets()
 
 
 class MarketDataReader:

@@ -836,18 +836,13 @@ def process_etl(
         try:
             template = retrieve_template(template_name)
 
-            if template.etl.is_pipeline:
-                # New pipeline-based ETL
-                writer = getattr(template, "writer", None)
-                fields = getattr(template, "fields", None)
-                template.etl.pipeline.execute_and_write(
-                    template_id=template.id,
-                    writer=writer,
-                    fields=fields,
-                )
-            else:
-                # Legacy function-based ETL
-                template.etl.process_function(template.etl)
+            writer = getattr(template, "writer", None)
+            fields = getattr(template, "fields", None)
+            template.etl.pipeline.execute_and_write(
+                template_id=template.id,
+                writer=writer,
+                fields=fields,
+            )
 
             duration = (datetime.now() - start_time).total_seconds()
 
