@@ -67,6 +67,16 @@ Brasa supports **four distinct template types** based on their purpose and outpu
 | **Processing flow** | download → read pipeline → validate → save | load → etl pipeline → validate → save |
 | **Output layer** | Usually `input` | Usually `staging` or `curated` |
 
+### The `legacy/` folder convention
+
+Any template file whose path contains a `legacy` component is **never
+discovered** by `list_templates`/`retrieve_template`, and hatch **excludes
+`**/legacy/**` from the wheel** (`pyproject.toml`). This is a deliberate
+feature, asserted by
+`tests/test_packaging.py::test_list_templates_excludes_legacy`: park
+work-in-progress or retired templates in a `legacy/` folder anywhere under
+the templates tree and they stay invisible in both dev and prod.
+
 ---
 
 ## Download & Read Templates (Single Dataset)

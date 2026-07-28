@@ -27,9 +27,10 @@ def test_templates_dir_under_package_with_yaml():
 def test_list_templates_excludes_legacy():
     names = list_templates()
     assert len(names) > 0
-    # `b3-companies-details` exists only under templates/legacy/, so it must be
-    # filtered out (note: `bcb-sgs-data` exists both under legacy/ and bcb/, so it
-    # is not a valid legacy-only probe).
+    # Guard (kept as a feature): any template path containing a `legacy`
+    # component is never discovered nor packaged — the folder parks
+    # WIP/retired templates. `b3-companies-details` was the last legacy-only
+    # template name; it must never resurface.
     assert "b3-companies-details" not in names
 
 
