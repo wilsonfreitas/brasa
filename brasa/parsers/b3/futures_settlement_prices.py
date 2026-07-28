@@ -1,11 +1,6 @@
-import io
 from datetime import datetime
-from typing import IO
 
-import numpy as np
-import pandas as pd
 from bizdays import Calendar
-from lxml import etree
 
 
 def maturity2date_newcode(x: str, cal: Calendar, expr: str) -> datetime:
@@ -81,32 +76,3 @@ def code2month_oldcode(code: str) -> int:
         "DEZ",
     ]
     return month_codes.index(code) + 1
-
-
-def future_settlement_prices_parser(fname: IO | str) -> pd.DataFrame:
-    df = pd.read_html(
-        fname,
-        attrs={"id": "tblDadosAjustes"},
-        decimal=",",
-        thousands=".",
-        encoding="latin1",
-    )[0]
-    df.columns = [
-        "commodity",
-        "maturity_code",
-        "previous_settlement_price",
-        "settlement_price",
-        "price_variation",
-        "settlement_value",
-    ]
-    if isinstance(fname, io.IOBase):
-        fname.seek(0)
-    tree = etree.parse(fname, etree.HTMLParser())
-    df["refdate"] = tree.xpath("//input[@id='dData1']")[0].attrib["value"]
-    for ix in range(df.shape[0]):
-        if df.loc[ix, "commodity"] is not np.nan:
-            last_name = df.loc[ix, "commodity"]
-        df.loc[ix, "commodity"] = last_name
-    df.loc[:, "commodity"] = df.loc[:, "commodity"].str.extract(r"^(\w+)")[0]
-    df["symbol"] = df["commodity"] + df["maturity_code"]
-    return df
