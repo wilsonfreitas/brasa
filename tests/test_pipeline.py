@@ -267,3 +267,20 @@ def test_standard_terms_step_executes():
     assert list(result["business_days"]) == [21, 252]
     assert "maturity_date" in result.columns
     assert "adjusted_tax" in result.columns
+
+
+def test_etl_function_template_rejected(tmp_path):
+    """Function-based ETL templates must fail to load with a clear error."""
+    import pytest
+
+    from brasa.engine.template import MarketDataTemplate
+
+    p = tmp_path / "bogus-function-etl.yaml"
+    p.write_text(
+        "id: bogus-function-etl\n"
+        "description: legacy function ETL must be rejected\n"
+        "etl:\n"
+        "  function: brasa.etl.does_not_exist\n"
+    )
+    with pytest.raises(ValueError, match="pipeline"):
+        MarketDataTemplate(str(p))

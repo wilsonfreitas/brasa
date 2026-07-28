@@ -47,7 +47,6 @@ Brasa follows a modular, template-driven architecture that separates concerns ac
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
 │                    ETL Layer                                 │
-│  - etl.py: Transformation functions                         │
 │  - PipelineStep-based ETL pipelines                          │
 │  - Derived datasets creation                                │
 └─────────────────────────────────────────────────────────────┘
@@ -283,52 +282,13 @@ Each parser typically implements a class with:
 
 ### 7. ETL Layer
 
-**Location**: `brasa/etl.py`
+**Location**: `brasa/engine/pipeline/`
 
-**Purpose**: Transform raw data into analytical datasets.
+**Purpose**: Transform existing datasets (input/staging/curated) into derived datasets, declared entirely in a template's `etl.pipeline` block — there is no function-based ETL mechanism.
 
-**Key Functions** (988 lines total):
+**Key Class**: `ETLPipeline` (`brasa/engine/pipeline/etl_executor.py`) — builds and runs a sequence of registered steps from the template's `pipeline` config, then writes the result via the template's `writer`.
 
-**Interest Rate Futures**:
-- `create_b3_rate_futures()`: DI1, DDI curves
-- `create_b3_price_futures()`: Commodity futures
-- `create_b3_price_futures_adjusted()`: Adjusted prices
-- `create_b3_futures_first_generic()`: Front-month contracts
-
-**Curves**:
-- `create_b3_curves_di1()`: DI1 interest rate curves
-- `create_b3_curves()`: Generic curve creation
-- `create_b3_curves_standard_terms()`: Interpolated curves
-- `create_rate_returns()`: Curve returns calculation
-
-**Equities**:
-- `create_cotahist_dataset()`: Merge yearly/daily COTAHIST
-- `create_equities_spot_market_dataset()`: Filter spot market
-- `create_equities_returns()`: Calculate returns
-- `create_adjusted_prices()`: Corporate action adjustments
-
-**Company Data**:
-- `create_b3_companies_details()`: Company metadata
-- `create_b3_companies_info()`: Stock information
-- `create_b3_companies_properties()`: Merged properties
-- `create_b3_equity_symbols_properties()`: Symbol mappings
-- `create_b3_companies_cash_dividends()`: Dividend events
-- `create_b3_companies_stock_dividends()`: Stock dividends
-- `create_b3_companies_subscriptions()`: Subscription rights
-
-**Funds**:
-- `create_b3_listed_funds()`: ETFs and FIIs
-- `create_etf_returns_before_20180101()`: Historical ETF returns
-
-**Economic Data**:
-- `create_bcb_data()`: CDI, SELIC, IPCA, IGPM from BCB
-- `create_bcb_currency_data()`: Exchange rates via PTAX
-
-**Utilities**:
-- `copy_dataset_and_drop_duplicates()`: Dataset deduplication
-- `concat_datasets()`: Merge multiple datasets
-- `rename_symbols_in_equities_returns()`: Symbol renaming
-- `execute_query()`: SQL-based transformations
+**Step modules** (`brasa/engine/pipeline/steps/`): `io_steps.py`, `transform_steps.py`, `column_steps.py`, `b3_steps.py`, `html_steps.py`, `etl_steps.py`, `custom_steps.py`, plus shared helpers in `shared_transforms.py`. See [TEMPLATES.md](TEMPLATES.md#pipeline-steps-reference) for the full step reference.
 
 ### 8. Query Layer
 
