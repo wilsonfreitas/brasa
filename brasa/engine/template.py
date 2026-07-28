@@ -777,6 +777,9 @@ def _discover_templates() -> dict[str, TemplateEntry]:
     winners: dict[str, TemplateEntry] = {}
     for root in _get_template_roots():
         for f in root.rglob("*.yaml"):
+            # Kept as a feature: `legacy` path components are never
+            # discovered — park WIP/retired templates in a legacy/ folder
+            # (hatch also excludes **/legacy/** from the wheel).
             if "legacy" in f.parts:
                 continue
             name = f.stem

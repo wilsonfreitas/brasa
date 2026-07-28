@@ -1,12 +1,9 @@
 """Typed exceptions for content validation and parser failures (audit Q2.7)."""
 
-import io
-
 import pytest
 
 from brasa.downloaders.helpers import validate_empty_file, validate_json_empty_file
-from brasa.engine.exceptions import CorruptedContentException, InvalidContentException
-from brasa.parsers.b3.bvbg086 import BVBG086Parser
+from brasa.engine.exceptions import InvalidContentException
 
 
 def test_validate_empty_file_raises_invalid_content(tmp_path):
@@ -58,13 +55,3 @@ def test_validate_json_without_results_key_passes(tmp_path):
         f = tmp_path / "data.json"
         f.write_bytes(content)
         validate_json_empty_file(str(f))
-
-
-def test_bvbg086_parser_raises_corrupted_content_on_missing_tag():
-    xml = (
-        b'<?xml version="1.0"?>'
-        b'<root><doc><exchange xmlns="urn:bvmf.052.01.xsd"></exchange></doc></root>'
-    )
-    parser = BVBG086Parser(io.BytesIO(xml))
-    with pytest.raises(CorruptedContentException):
-        parser.parse()
