@@ -8,6 +8,7 @@ These tests verify that:
 """
 
 import json
+import logging
 from contextlib import closing
 
 import pandas as pd
@@ -15,7 +16,10 @@ import pyarrow.dataset as ds
 
 from brasa.engine.cache import CacheManager, CacheMetadata
 from brasa.engine.core import json_convert_from_object
-from brasa.engine.processing import save_partitioned_parquet_file
+from brasa.engine.processing import (
+    _get_schema_from_fields,
+    save_partitioned_parquet_file,
+)
 from brasa.util import DownloadArgs, generate_checksum_for_template
 
 # ---------------------------------------------------------------------------
@@ -309,3 +313,28 @@ class TestProcessMarketdataReprocess:
         )
 
         assert processed_keys == ["2026-04-16"]
+
+
+# --- merged from tests/test_processing_schema.py ---
+# _get_schema_from_fields must warn when schema generation fails (audit Q5.4).
+
+
+class BrokenFields:
+    def __iter__(self):
+        raise RuntimeError("broken fields")
+
+    def __len__(self):
+        return 1
+
+
+def test_returns_none_and_warns_on_failure(caplog):
+    with caplog.at_level(logging.WARNING, logger="brasa.engine.processing"):
+        result = _get_schema_from_fields(BrokenFields())
+    assert result is None
+    assert any("schema" in rec.message.lower() for rec in caplog.records)
+
+
+def test_returns_none_quietly_for_empty_fields(caplog):
+    with caplog.at_level(logging.WARNING, logger="brasa.engine.processing"):
+        assert _get_schema_from_fields(None) is None
+    assert not caplog.records
