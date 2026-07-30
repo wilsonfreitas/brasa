@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import shutil
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from contextlib import closing, suppress
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -119,7 +119,8 @@ def _parse_is_processed(raw: str | None) -> bool:
         raw: Raw JSON string from the processed_files column.
 
     Returns:
-        True if processed, False otherwise.
+        True if processed, False otherwise. A non-empty dict (the
+        pre-migration format) is truthy, matching the new bool format.
     """
     if not raw:
         return False
@@ -127,10 +128,6 @@ def _parse_is_processed(raw: str | None) -> bool:
         parsed = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
         return False
-    if isinstance(parsed, bool):
-        return parsed
-    if isinstance(parsed, dict):
-        return bool(parsed)  # migration: non-empty dict → True
     return bool(parsed)
 
 
@@ -202,6 +199,19 @@ def _get_catalog_rows() -> list[dict[str, Any]]:
             return rows
         except sqlite3.OperationalError:
             return []
+
+
+def _iter_layer_dataset_dirs(
+    db_root: Path, valid_layers: set[str]
+) -> Iterator[tuple[Path, Path]]:
+    """Yield (layer_dir, dataset_dir) pairs for known layers under db_root."""
+    for layer_dir in db_root.iterdir():
+        if not layer_dir.is_dir() or layer_dir.name not in valid_layers:
+            continue
+        for dataset_dir in layer_dir.iterdir():
+            if not dataset_dir.is_dir():
+                continue
+            yield layer_dir, dataset_dir
 
 
 def _load_validations_config(path: Path) -> dict[str, Any]:
@@ -499,6 +509,32 @@ def _unexpected_observations(
     )
 
 
+def _compute_calendar_coverage(
+    dates: set[date] | list[date],
+    calendar_name: str,
+    first_date: date,
+    last_date: date,
+) -> tuple[list[date], list[date], int, int]:
+    """Return (missing_days, extra_days, observed, expected) for a coverage window.
+
+    Propagates whatever ``_calendar_completeness_gaps``/``_unexpected_observations``
+    raise (e.g. unknown calendar name) — callers decide how to handle failures.
+    """
+    dates_set = set(dates)
+    missing_days = _calendar_completeness_gaps(
+        dates_set, calendar_name, first_date.isoformat(), last_date.isoformat()
+    )
+    extra_days = [
+        d
+        for d in _unexpected_observations(dates_set, calendar_name)
+        if first_date <= d <= last_date
+    ]
+    in_window = sum(1 for d in dates_set if first_date <= d <= last_date)
+    observed = in_window - len(extra_days)
+    expected = observed + len(missing_days)
+    return missing_days, extra_days, observed, expected
+
+
 # ---------------------------------------------------------------------------
 # Category: Raw Files
 # ---------------------------------------------------------------------------
@@ -643,15 +679,10 @@ def check_orphan_db() -> list[Issue]:
     valid_layers = {lay.value for lay in DataLayer if lay != DataLayer.RAW}
     orphan_dirs: list[str] = []
 
-    for layer_dir in db_root.iterdir():
-        if not layer_dir.is_dir() or layer_dir.name not in valid_layers:
-            continue
-        for dataset_dir in layer_dir.iterdir():
-            if not dataset_dir.is_dir():
-                continue
-            dataset_id = f"{layer_dir.name}/{dataset_dir.name}"
-            if dataset_id not in catalog_ids and dataset_id not in template_datasets:
-                orphan_dirs.append(str(dataset_dir))
+    for layer_dir, dataset_dir in _iter_layer_dataset_dirs(db_root, valid_layers):
+        dataset_id = f"{layer_dir.name}/{dataset_dir.name}"
+        if dataset_id not in catalog_ids and dataset_id not in template_datasets:
+            orphan_dirs.append(str(dataset_dir))
 
     if not orphan_dirs:
         return []
@@ -695,19 +726,13 @@ def check_missing_db() -> list[Issue]:
     missing: list[str] = []
     db_root = Path(man.db_path(""))
     for template_id in processed_templates:
-        # Check if any parquet files exist for this template across all layers
+        # "**" matches zero or more directories, so this covers both
+        # unpartitioned (direct *.parquet) and partitioned datasets.
         found = (
-            any(db_root.rglob(f"{template_id}/*.parquet"))
+            any(db_root.rglob(f"{template_id}/**/*.parquet"))
             if db_root.exists()
             else False
         )
-        if not found:
-            # Also check with wildcard for partitioned datasets
-            found = (
-                any(db_root.rglob(f"{template_id}/**/*.parquet"))
-                if db_root.exists()
-                else False
-            )
         if not found:
             missing.append(template_id)
 
@@ -747,19 +772,14 @@ def check_empty_parquet() -> list[Issue]:
     valid_layers = {lay.value for lay in DataLayer if lay != DataLayer.RAW}
     empty_dirs: list[str] = []
 
-    for layer_dir in db_root.iterdir():
-        if not layer_dir.is_dir() or layer_dir.name not in valid_layers:
-            continue
-        for dataset_dir in layer_dir.iterdir():
-            if not dataset_dir.is_dir():
+    for _layer_dir, dataset_dir in _iter_layer_dataset_dirs(db_root, valid_layers):
+        # Look for partition subdirs (e.g. refdate=2024-01-15)
+        for part_dir in dataset_dir.iterdir():
+            if not part_dir.is_dir():
                 continue
-            # Look for partition subdirs (e.g. refdate=2024-01-15)
-            for part_dir in dataset_dir.iterdir():
-                if not part_dir.is_dir():
-                    continue
-                parquet_files = list(part_dir.glob("*.parquet"))
-                if not parquet_files:
-                    empty_dirs.append(str(part_dir))
+            parquet_files = list(part_dir.glob("*.parquet"))
+            if not parquet_files:
+                empty_dirs.append(str(part_dir))
 
     if not empty_dirs:
         return []
@@ -1147,7 +1167,7 @@ def _cutoff_from_last_days(last_days: int) -> date:
     return date.fromordinal(date.today().toordinal() - last_days)
 
 
-def check_date_gaps(  # noqa: PLR0912, PLR0915
+def check_date_gaps(  # noqa: PLR0912
     last_days: int = 30,
     template_filter: list[str] | None = None,
     calendar_name: str = "B3",
@@ -1192,106 +1212,89 @@ def check_date_gaps(  # noqa: PLR0912, PLR0915
     valid_layers = {lay.value for lay in DataLayer if lay != DataLayer.RAW}
     issues: list[Issue] = []
 
-    for layer_dir in db_root.iterdir():
-        if not layer_dir.is_dir() or layer_dir.name not in valid_layers:
+    for layer_dir, dataset_dir in _iter_layer_dataset_dirs(db_root, valid_layers):
+        dataset_id = f"{layer_dir.name}/{dataset_dir.name}"
+
+        # Apply template filter if specified
+        if template_filter:
+            src_tpl = template_by_dataset.get(dataset_id)
+            if src_tpl not in template_filter:
+                continue
+
+        # Collect all refdate partition values
+        refdate_values: list[date] = []
+        for child in dataset_dir.iterdir():
+            if not child.is_dir():
+                continue
+            parsed = _parse_refdate_partition(child.name)
+            if parsed is not None:
+                refdate_values.append(parsed)
+
+        if len(refdate_values) < 2:
             continue
-        for dataset_dir in layer_dir.iterdir():
-            if not dataset_dir.is_dir():
-                continue
 
-            dataset_id = f"{layer_dir.name}/{dataset_dir.name}"
+        refdate_values.sort()
+        first_date = max(refdate_values[0], cutoff_date)
+        last_date = refdate_values[-1]
 
-            # Apply template filter if specified
-            if template_filter:
-                src_tpl = template_by_dataset.get(dataset_id)
-                if src_tpl not in template_filter:
-                    continue
-
-            # Collect all refdate partition values
-            refdate_values: list[date] = []
-            for child in dataset_dir.iterdir():
-                if not child.is_dir():
-                    continue
-                parsed = _parse_refdate_partition(child.name)
-                if parsed is not None:
-                    refdate_values.append(parsed)
-
-            if len(refdate_values) < 2:
-                continue
-
-            refdate_values.sort()
-            first_date = max(refdate_values[0], cutoff_date)
-            last_date = refdate_values[-1]
-
-            if first_date > last_date:
-                # Dates exist, but all fall before the --last cutoff.
-                issues.append(
-                    Issue(
-                        category="Date Gaps",
-                        code="date-gaps-coverage",
-                        severity="info",
-                        description=(
-                            f"{dataset_id}: no dates within the evaluated "
-                            f"window (last {last_days} days; most recent date "
-                            f"{last_date})"
-                        ),
-                        details=[],
-                        fixable=False,
-                    )
-                )
-                continue
-
-            present_dates = set(refdate_values)
-            try:
-                missing_days = _calendar_completeness_gaps(
-                    present_dates,
-                    calendar_name,
-                    first_date.isoformat(),
-                    last_date.isoformat(),
-                )
-                extra_days = [
-                    d
-                    for d in _unexpected_observations(present_dates, calendar_name)
-                    if first_date <= d <= last_date
-                ]
-            except Exception:
-                continue
-
-            in_window = sum(1 for d in present_dates if first_date <= d <= last_date)
-            observed = in_window - len(extra_days)
-            expected = observed + len(missing_days)
+        if first_date > last_date:
+            # Dates exist, but all fall before the --last cutoff.
             issues.append(
                 Issue(
                     category="Date Gaps",
                     code="date-gaps-coverage",
                     severity="info",
                     description=(
-                        f"{dataset_id}: checked {first_date} → {last_date} "
-                        f"({observed}/{expected} {calendar_name} business days "
-                        f"present)"
+                        f"{dataset_id}: no dates within the evaluated "
+                        f"window (last {last_days} days; most recent date "
+                        f"{last_date})"
                     ),
                     details=[],
                     fixable=False,
                 )
             )
+            continue
 
-            if not missing_days:
-                continue
-
-            issues.append(
-                Issue(
-                    category="Date Gaps",
-                    code="date-gaps",
-                    severity="error",
-                    description=(
-                        f"{dataset_dir.name}: {len(missing_days)} missing "
-                        f"{calendar_name} business day(s) "
-                        f"between {first_date} and {last_date}"
-                    ),
-                    details=[str(d) for d in missing_days],
-                    fixable=False,
-                )
+        present_dates = set(refdate_values)
+        try:
+            missing_days, extra_days, observed, expected = _compute_calendar_coverage(
+                present_dates, calendar_name, first_date, last_date
             )
+        except Exception:
+            continue
+
+        issues.append(
+            Issue(
+                category="Date Gaps",
+                code="date-gaps-coverage",
+                severity="info",
+                description=(
+                    f"{dataset_id}: checked {first_date} → {last_date} "
+                    f"({observed}/{expected} {calendar_name} business days "
+                    f"present)"
+                ),
+                details=[],
+                fixable=False,
+            )
+        )
+
+        if not missing_days:
+            continue
+
+        issues.append(
+            Issue(
+                category="Date Gaps",
+                code="date-gaps",
+                severity="error",
+                description=(
+                    f"{dataset_dir.name}: {len(missing_days)} missing "
+                    f"{calendar_name} business day(s) "
+                    f"between {first_date} and {last_date}"
+                ),
+                details=[str(d) for d in missing_days],
+                fixable=False,
+            )
+        )
 
     return issues
 
@@ -1790,17 +1793,9 @@ def check_download_refdate_gaps(
             )
             continue
 
-        missing = _calendar_completeness_gaps(
-            dates, calendar_name, first_date.isoformat(), last_date.isoformat()
+        missing, extra, observed, expected = _compute_calendar_coverage(
+            dates, calendar_name, first_date, last_date
         )
-        extra = [
-            d
-            for d in _unexpected_observations(dates, calendar_name)
-            if first_date <= d <= last_date
-        ]
-        in_window = sum(1 for d in dates if first_date <= d <= last_date)
-        observed = in_window - len(extra)
-        expected = observed + len(missing)
         issues.append(
             Issue(
                 category="Downloads",

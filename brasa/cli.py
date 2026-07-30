@@ -20,51 +20,6 @@ from .engine.exceptions import BrasaNotConfiguredError
 from .queries import BrasaDB, describe_dataset, get_dataset, list_datasets
 from .util import parse_arg_value
 
-# Command groups for organized help display
-_COMMAND_GROUPS = {
-    "Setup": ["init"],
-    "Execution": ["download", "import", "process", "run", "run-all"],
-    "Templates": ["deps", "plan", "graph", "map"],
-    "Datasets": [
-        "list-unprocessed",
-        "list-datasets",
-        "describe-dataset",
-        "sync-catalog",
-        "head",
-    ],
-    "Database": ["create-views", "create-view", "list-tables", "query"],
-    "Maintenance": ["doctor", "cache"],
-}
-
-
-class _GroupedHelpFormatter(argparse.HelpFormatter):
-    """HelpFormatter that displays subcommands organized into labeled sections."""
-
-    def _format_action(self, action):
-        if not isinstance(action, argparse._SubParsersAction):
-            return super()._format_action(action)
-
-        help_map = {a.dest: a.help or "" for a in action._choices_actions}
-
-        grouped_cmds = {cmd for cmds in _COMMAND_GROUPS.values() for cmd in cmds}
-        ungrouped = [c for c in action.choices if c not in grouped_cmds]
-
-        parts = []
-        for group_name, cmds in _COMMAND_GROUPS.items():
-            available = [c for c in cmds if c in action.choices]
-            if not available:
-                continue
-            parts.append(f"\n  {group_name}:\n")
-            for cmd in available:
-                parts.append(f"    {cmd:<24}{help_map.get(cmd, '')}\n")
-
-        if ungrouped:
-            parts.append("\n  Other:\n")
-            for cmd in ungrouped:
-                parts.append(f"    {cmd:<24}{help_map.get(cmd, '')}\n")
-
-        return "".join(parts)
-
 
 def add_verbosity_args(parser: argparse.ArgumentParser) -> None:
     """Add verbosity and report arguments to a parser."""
@@ -97,23 +52,6 @@ def get_verbosity(args: argparse.Namespace) -> Verbosity:
     return Verbosity.NORMAL
 
 
-def _get_terminal_width(override_width: int | None = None) -> int:
-    """Get terminal width for display.
-
-    Args:
-        override_width: Manual width override. If provided, uses this value.
-
-    Returns:
-        Terminal width in characters.
-    """
-    if override_width is not None:
-        return override_width
-    try:
-        return shutil.get_terminal_size().columns
-    except (AttributeError, ValueError):
-        return 80  # Fallback default
-
-
 def _format_dataframe_for_display(
     df: pd.DataFrame,
     width: int | None = None,
@@ -133,7 +71,7 @@ def _format_dataframe_for_display(
     Returns:
         Formatted string representation of the DataFrame.
     """
-    terminal_width = _get_terminal_width(width)
+    terminal_width = width if width is not None else shutil.get_terminal_size().columns
 
     # Filter columns if specified
     if columns:
@@ -160,9 +98,42 @@ def _format_dataframe_for_display(
         return "\n".join(truncated_lines)
 
 
+def _infer_output_format(path: str) -> str | None:
+    """Infer an output format from a file path's extension.
+
+    Returns:
+        One of "csv", "json", "parquet", "orc", "xls", or None if the
+        extension isn't recognized.
+    """
+    if path.endswith(".csv"):
+        return "csv"
+    if path.endswith(".json"):
+        return "json"
+    if path.endswith(".parquet"):
+        return "parquet"
+    if path.endswith(".orc"):
+        return "orc"
+    if path.endswith(".xls") or path.endswith(".xlsx"):
+        return "xls"
+    return None
+
+
+def _parse_layer_dataset(value: str) -> tuple[str, str]:
+    """Parse a 'layer.dataset' CLI argument.
+
+    Raises:
+        ValueError: If value isn't in valid layer.dataset format.
+    """
+    parts = value.split(".", 1)
+    if len(parts) != 2 or not parts[0] or not parts[1]:
+        raise ValueError(
+            "Invalid dataset format. Use layer.dataset (e.g., input.b3-cotahist)"
+        )
+    return parts[0], parts[1]
+
+
 parser = argparse.ArgumentParser(
     description="Brasa CLI for downloading and processing market data",
-    formatter_class=_GroupedHelpFormatter,
 )
 
 subparsers = parser.add_subparsers(dest="command", title="Commands")
@@ -1136,39 +1107,29 @@ def _run_command(args) -> None:  # noqa: PLR0912, PLR0915
 
         if output == "display":
             print(q)
-        elif output.endswith(".csv"):
-            q.df().to_csv(output, sep=",", encoding="utf-8", index=False)
-            print(f"Results saved to {output}")
-        elif output.endswith(".json"):
-            q.df().to_json(output, index=False)
-            print(f"Results saved to {output}")
-        elif output.endswith(".parquet"):
-            q.df().to_parquet(output, index=False)
-            print(f"Results saved to {output}")
-        elif output.endswith(".orc"):
-            q.df().to_orc(output, index=False)
-            print(f"Results saved to {output}")
-        elif output.endswith(".xls") or output.endswith(".xlsx"):
-            q.df().to_excel(output, index=False)
-            print(f"Results saved to {output}")
+        else:
+            fmt = _infer_output_format(output)
+            if fmt == "csv":
+                q.df().to_csv(output, sep=",", encoding="utf-8", index=False)
+                print(f"Results saved to {output}")
+            elif fmt == "json":
+                q.df().to_json(output, index=False)
+                print(f"Results saved to {output}")
+            elif fmt == "parquet":
+                q.df().to_parquet(output, index=False)
+                print(f"Results saved to {output}")
+            elif fmt == "orc":
+                q.df().to_orc(output, index=False)
+                print(f"Results saved to {output}")
+            elif fmt == "xls":
+                q.df().to_excel(output, index=False)
+                print(f"Results saved to {output}")
     elif args.command == "head":
-        # Validate dataset format
-        if "." not in args.dataset:
-            print(
-                "Error: Invalid dataset format. "
-                "Use layer.dataset (e.g., input.b3-cotahist)"
-            )
+        try:
+            layer, dataset_name = _parse_layer_dataset(args.dataset)
+        except ValueError as e:
+            print(f"Error: {e}")
             sys.exit(1)
-
-        parts = args.dataset.split(".", 1)
-        if len(parts) != 2 or not parts[0] or not parts[1]:
-            print(
-                "Error: Invalid dataset format. "
-                "Use layer.dataset (e.g., input.b3-cotahist)"
-            )
-            sys.exit(1)
-
-        layer, dataset_name = parts
 
         try:
             ds = get_dataset(dataset_name, layer=layer)
@@ -1191,17 +1152,19 @@ def _run_command(args) -> None:  # noqa: PLR0912, PLR0915
                     wrap=args.wrap,
                 )
             )
-        elif output.endswith(".csv"):
-            df.to_csv(output, sep=",", encoding="utf-8", index=False)
-        elif output.endswith(".json"):
-            df.to_json(output, orient="records", indent=2)
-        elif output.endswith(".parquet"):
-            df.to_parquet(output, index=False)
-        elif output.endswith(".xls") or output.endswith(".xlsx"):
-            df.to_excel(output, index=False)
         else:
-            print(f"Error: Unsupported output format: {output}")
-            sys.exit(1)
+            fmt = _infer_output_format(output)
+            if fmt == "csv":
+                df.to_csv(output, sep=",", encoding="utf-8", index=False)
+            elif fmt == "json":
+                df.to_json(output, orient="records", indent=2)
+            elif fmt == "parquet":
+                df.to_parquet(output, index=False)
+            elif fmt == "xls":
+                df.to_excel(output, index=False)
+            else:
+                print(f"Error: Unsupported output format: {output}")
+                sys.exit(1)
 
     elif args.command == "list-datasets":
         datasets = list_datasets(layer=args.layer)
@@ -1224,23 +1187,11 @@ def _run_command(args) -> None:  # noqa: PLR0912, PLR0915
             print(_format_datasets_table(datasets))
 
     elif args.command == "describe-dataset":
-        # Validate dataset format
-        if "." not in args.dataset:
-            print(
-                "Error: Invalid dataset format. "
-                "Use layer.dataset (e.g., input.b3-cotahist)"
-            )
+        try:
+            layer, dataset_name = _parse_layer_dataset(args.dataset)
+        except ValueError as e:
+            print(f"Error: {e}")
             sys.exit(1)
-
-        parts = args.dataset.split(".", 1)
-        if len(parts) != 2 or not parts[0] or not parts[1]:
-            print(
-                "Error: Invalid dataset format. "
-                "Use layer.dataset (e.g., input.b3-cotahist)"
-            )
-            sys.exit(1)
-
-        layer, dataset_name = parts
 
         try:
             info = describe_dataset(
