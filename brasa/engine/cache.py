@@ -181,8 +181,8 @@ class CacheManager(Singleton):
         """Initialize the cache manager and create necessary directories."""
         self._cache_folder = resolve_data_path()
         Path(self._cache_folder).mkdir(parents=True, exist_ok=True)
-        Path(self.cache_path(self._meta_folder)).mkdir(parents=True, exist_ok=True)
-        Path(self.cache_path(self._db_folder)).mkdir(parents=True, exist_ok=True)
+        self._ensure_dir(self._meta_folder)
+        self._ensure_dir(self._db_folder)
         if not Path(self.cache_path(self.meta_db_filename)).exists():
             self.create_meta_db()
         # Initialize the dataset catalog table
@@ -201,6 +201,12 @@ class CacheManager(Singleton):
         else:
             path = Path(self.cache_folder, fname)
         return str(path)
+
+    def _ensure_dir(self, fname: str) -> str:
+        """Create (if needed) and return the cache path for fname."""
+        path = self.cache_path(fname)
+        Path(path).mkdir(parents=True, exist_ok=True)
+        return path
 
     def db_path(self, name: str) -> str:
         """Get the path for a database file.
@@ -263,7 +269,7 @@ class CacheManager(Singleton):
         layer = template.writer.layer.value
         dataset_name = template.writer.dataset
         folder = str(Path(self._db_folder) / layer / dataset_name)
-        Path(self.cache_path(folder)).mkdir(parents=True, exist_ok=True)
+        self._ensure_dir(folder)
         return folder
 
     def db_folders(self, template: MarketDataTemplate) -> dict:
@@ -294,20 +300,20 @@ class CacheManager(Singleton):
                 folder = str(
                     Path(self._db_folder) / layer / f"{dataset_name}-{output_name}"
                 )
-                Path(self.cache_path(folder)).mkdir(parents=True, exist_ok=True)
+                self._ensure_dir(folder)
                 db_folders[output_name] = folder
         elif template.reader.multi:
             # Legacy fallback: use multi mapping (XML tag -> output name)
             for name, val in template.reader.multi.items():
                 folder = str(Path(self._db_folder) / layer / f"{dataset_name}-{val}")
-                Path(self.cache_path(folder)).mkdir(parents=True, exist_ok=True)
+                self._ensure_dir(folder)
                 db_folders[name] = folder
 
         return db_folders
 
     def create_download_folder(self, meta: CacheMetadata):
         """Create the download folder for a cache entry."""
-        Path(self.cache_path(meta.download_folder)).mkdir(parents=True, exist_ok=True)
+        self._ensure_dir(meta.download_folder)
 
     @property
     def meta_db_filename(self) -> str:
@@ -317,7 +323,7 @@ class CacheManager(Singleton):
     @property
     def meta_folder(self) -> str:
         """Metadata folder path."""
-        Path(self.cache_path(self._meta_folder)).mkdir(parents=True, exist_ok=True)
+        self._ensure_dir(self._meta_folder)
         return self._meta_folder
 
     def has_meta(self, meta: CacheMetadata) -> bool:

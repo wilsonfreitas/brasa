@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
-from contextlib import closing
+from contextlib import closing, suppress
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from enum import Enum
@@ -319,12 +319,10 @@ def _get_last_downloaded_end_date(template_name: str) -> date | None:
     if not row or row[0] is None:
         return None
 
-    try:
+    with suppress(json.JSONDecodeError, ValueError):
         end_val = DownloadArgs.from_json(f'{{"end": "{row[0]}"}}').get_object("end")
         if isinstance(end_val, datetime):
             return end_val.date()
-    except (json.JSONDecodeError, ValueError):
-        pass
 
     return None
 

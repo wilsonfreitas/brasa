@@ -20,7 +20,7 @@ import sqlite3
 from collections.abc import Callable, Iterator
 from contextlib import closing, suppress
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -1164,7 +1164,7 @@ def _cutoff_from_last_days(last_days: int) -> date:
     """Return the earliest date of the last_days window; full history when < 0."""
     if last_days < 0:
         return date.min
-    return date.fromordinal(date.today().toordinal() - last_days)
+    return date.today() - timedelta(days=last_days)
 
 
 def check_date_gaps(  # noqa: PLR0912

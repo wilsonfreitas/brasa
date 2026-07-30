@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import sys
+from contextlib import suppress
 from pathlib import Path
 
 import pandas as pd
@@ -1097,13 +1098,11 @@ def _run_command(args) -> None:  # noqa: PLR0912, PLR0915
 
         if getattr(args, "verbose", False):
             # Show query execution info (could add EXPLAIN here)
-            try:
+            with suppress(Exception):  # If EXPLAIN fails, just skip it
                 explain = BrasaDB.query(f"EXPLAIN {args.sql_query}")
                 print("Query Plan:")
                 print(explain)
                 print("\n" + "=" * 60 + "\n")
-            except Exception:
-                pass  # If EXPLAIN fails, just skip it
 
         if output == "display":
             print(q)

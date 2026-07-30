@@ -62,12 +62,7 @@ class B3ForwardFillCommodityStep(PipelineStep):
 
     def execute(self, data: pd.DataFrame, _context: PipelineContext) -> pd.DataFrame:
         column = self.get_param("column", "commodity")
-
-        for ix in range(data.shape[0]):
-            if data.loc[ix, column] is not np.nan and pd.notna(data.loc[ix, column]):
-                last_name = data.loc[ix, column]
-            data.loc[ix, column] = last_name
-
+        data[column] = data[column].ffill()
         return data
 
 

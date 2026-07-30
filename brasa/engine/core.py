@@ -5,6 +5,7 @@ the engine package, including the Singleton pattern and JSON serialization helpe
 """
 
 import abc
+import pydoc
 import re
 from collections.abc import Callable
 from datetime import date, datetime
@@ -42,10 +43,14 @@ def load_function_by_name(func_name: str) -> Callable:
 
     Returns:
         The loaded function object.
+
+    Raises:
+        ImportError: If the function cannot be located (unknown module or
+            missing attribute).
     """
-    module_name, func_name = func_name.rsplit(".", 1)
-    module = __import__(module_name, fromlist=[func_name])
-    func = getattr(module, func_name)
+    func = pydoc.locate(func_name)
+    if func is None:
+        raise ImportError(f"Could not locate function: {func_name!r}")
     return func
 
 
