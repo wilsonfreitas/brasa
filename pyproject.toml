@@ -28,11 +28,6 @@ dependencies = [
 [dependency-groups]
 dev = [
     "ipykernel>=6.15.3",
-    "mypy>=1.9.0",
-    "types-pyyaml>=6.0.12.20241230",
-    "types-pytz>=2024.2.0.20241221",
-    "types-requests>=2.32.0.20241016",
-    "types-lxml>=2024.12.13",
     "ruff>=0.8.0",
     "pre-commit>=4.0.0",
 ]
@@ -70,10 +65,6 @@ markers = [
     "integration: marks tests that require an internet connection (skip with --no-integration)",
 ]
 
-[[tool.mypy.overrides]]
-module = ["pandas.*", "regexparser.*", "bcb.*", "pyarrow.*", "bizdays.*"]
-ignore_missing_imports = true
-
 # =============================================================================
 # Ruff Configuration - Modern Python Linter & Formatter
 # =============================================================================
@@ -93,7 +84,6 @@ exclude = [
     ".git",
     ".git-rewrite",
     ".hg",
-    ".mypy_cache",
     ".nox",
     ".pants.d",
     ".pytype",

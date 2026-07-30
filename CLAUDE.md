@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Important: Always Use uv
 
-This project uses **uv** for dependency management. **Every** Python command must be run through `uv run` — never use bare `python`, `pytest`, `ruff`, or `mypy` directly.
+This project uses **uv** for dependency management. **Every** Python command must be run through `uv run` — never use bare `python`, `pytest`, or `ruff` directly.
 
 ## Common Commands
 
@@ -34,9 +34,6 @@ uv run ruff check . --fix
 
 # Formatting
 uv run ruff format .
-
-# Type checking
-uv run mypy brasa/
 
 # Pre-commit hooks
 uv run pre-commit run --all-files

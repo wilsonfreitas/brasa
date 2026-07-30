@@ -41,13 +41,10 @@ The library provides a structured framework for downloading raw data, parsing it
 - **lxml** (^4.9.2): XML/HTML parsing
 - **bizdays** (^1.0.15): Business days calendar operations
 - **pyyaml** (^6.0): YAML configuration files
-- **progressbar2** (^4.3.2): Progress tracking
 - **python-bcb** (^0.3.2): Central Bank of Brazil data access
 
 ### Dev Dependencies
 - **pytest** (^7.1.3): Testing framework
-- **mypy** (^1.9.0): Static type checking
-- **Sphinx** (^5.1.1): Documentation generation
 
 ## Architecture Summary
 
