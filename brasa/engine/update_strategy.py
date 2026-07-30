@@ -39,12 +39,11 @@ class UpdateStrategy(Enum):
 class ResolvedStrategy:
     """Result of resolving an update strategy.
 
-    Contains the kwargs to pass to download_marketdata and force flag.
+    Contains the kwargs to pass to download_marketdata.
     """
 
     strategy: UpdateStrategy
     kwargs: dict
-    force: bool = False
 
 
 def detect_strategy(template: MarketDataTemplate) -> UpdateStrategy:  # noqa: PLR0911
@@ -134,7 +133,7 @@ def resolve_update(
             with last download to capture late-published data.
 
     Returns:
-        ResolvedStrategy with kwargs and force flag.
+        ResolvedStrategy with kwargs.
 
     Raises:
         ValueError: If template not found.
@@ -182,9 +181,7 @@ def _resolve_incremental_date(
             start=datetime.combine(since_obj, datetime.min.time()), calendar=calendar
         )
     }
-    return ResolvedStrategy(
-        strategy=UpdateStrategy.INCREMENTAL_DATE, kwargs=kwargs, force=False
-    )
+    return ResolvedStrategy(strategy=UpdateStrategy.INCREMENTAL_DATE, kwargs=kwargs)
 
 
 def _resolve_incremental_date_range(
@@ -220,7 +217,7 @@ def _resolve_incremental_date_range(
     if start_obj.date() >= yesterday.date():
         # Nothing to do
         return ResolvedStrategy(
-            strategy=UpdateStrategy.INCREMENTAL_DATE_RANGE, kwargs={}, force=False
+            strategy=UpdateStrategy.INCREMENTAL_DATE_RANGE, kwargs={}
         )
 
     kwargs = {
@@ -228,24 +225,17 @@ def _resolve_incremental_date_range(
         "end": end_obj.date() if isinstance(end_obj, datetime) else end_obj,
     }
     return ResolvedStrategy(
-        strategy=UpdateStrategy.INCREMENTAL_DATE_RANGE, kwargs=kwargs, force=False
+        strategy=UpdateStrategy.INCREMENTAL_DATE_RANGE, kwargs=kwargs
     )
 
 
-def _resolve_daily_snapshot(template_name: str) -> ResolvedStrategy:
+def _resolve_daily_snapshot(template_name: str) -> ResolvedStrategy:  # noqa: ARG001
     """Resolve DAILY_SNAPSHOT strategy.
 
-    If today is cached, no-op. Otherwise download needed (no kwargs).
+    Always downloads with no kwargs — the downloader itself is
+    idempotent when today's snapshot is already cached.
     """
-    if _is_today_cached(template_name):
-        # Already fresh
-        return ResolvedStrategy(
-            strategy=UpdateStrategy.DAILY_SNAPSHOT, kwargs={}, force=False
-        )
-    # Download needed
-    return ResolvedStrategy(
-        strategy=UpdateStrategy.DAILY_SNAPSHOT, kwargs={}, force=False
-    )
+    return ResolvedStrategy(strategy=UpdateStrategy.DAILY_SNAPSHOT, kwargs={})
 
 
 def _resolve_dependency_driven() -> ResolvedStrategy:
@@ -253,9 +243,7 @@ def _resolve_dependency_driven() -> ResolvedStrategy:
 
     Dependencies are resolved by the existing resolver, so return empty kwargs.
     """
-    return ResolvedStrategy(
-        strategy=UpdateStrategy.DEPENDENCY_DRIVEN, kwargs={}, force=False
-    )
+    return ResolvedStrategy(strategy=UpdateStrategy.DEPENDENCY_DRIVEN, kwargs={})
 
 
 def _resolve_no_auto_update(template_name: str) -> ResolvedStrategy:
@@ -267,68 +255,7 @@ def _resolve_no_auto_update(template_name: str) -> ResolvedStrategy:
         f"Template '{template_name}' does not support --update. "
         "Use --force to re-download."
     )
-    return ResolvedStrategy(
-        strategy=UpdateStrategy.NO_AUTO_UPDATE, kwargs={}, force=False
-    )
-
-
-def get_uncached_kwargs(template_name: str, kwargs: dict) -> tuple[dict, int]:
-    """Remove cached arg combos from kwargs.
-
-    Only for templates WITHOUT extra-key. For extra-key templates,
-    returns (kwargs, 0) as cache ID reconstruction is impossible.
-
-    Args:
-        template_name: Name of the template.
-        kwargs: Download kwargs with iterable args (from KwargsIterator).
-
-    Returns:
-        Tuple of (filtered_kwargs, skipped_count).
-    """
-    from brasa.util import KwargsIterator, generate_checksum_for_template
-
-    from .template import retrieve_template
-
-    template = retrieve_template(template_name)
-
-    # Don't filter extra-key templates (cache IDs won't match)
-    if template.downloader._extra_key:
-        return kwargs, 0
-
-    # Generate all combos from kwargs
-    iterator = KwargsIterator(kwargs)
-    all_combos = list(iterator)
-
-    if not all_combos:
-        return kwargs, 0
-
-    # Check which combos are already cached
-    cached_ids = _batch_check_cached(template_name, all_combos)
-
-    # Filter out cached combos
-    uncached_combos = [
-        combo
-        for combo in all_combos
-        if generate_checksum_for_template(template_name, DownloadArgs(combo))
-        not in cached_ids
-    ]
-
-    skipped_count = len(all_combos) - len(uncached_combos)
-
-    # Rebuild kwargs from uncached combos
-    if not uncached_combos:
-        return {}, skipped_count
-
-    # Reconstruct kwargs from uncached combos
-    filtered_kwargs = {}
-    for key in kwargs:
-        values = {combo[key] for combo in uncached_combos}
-        if len(values) == 1:
-            filtered_kwargs[key] = next(iter(values))
-        else:
-            filtered_kwargs[key] = list(values)
-
-    return filtered_kwargs, skipped_count
+    return ResolvedStrategy(strategy=UpdateStrategy.NO_AUTO_UPDATE, kwargs={})
 
 
 def _get_last_downloaded_date(template_name: str) -> date | None:
@@ -400,52 +327,6 @@ def _get_last_downloaded_end_date(template_name: str) -> date | None:
         pass
 
     return None
-
-
-def _batch_check_cached(template_name: str, combos: list[dict]) -> set[str]:
-    """Batch check which arg combos are already cached.
-
-    Uses cache_metadata table with batch queries (chunked at 900).
-    Returns set of cache IDs that exist.
-
-    Args:
-        template_name: Name of the template.
-        combos: List of kwargs dicts (arg combinations).
-
-    Returns:
-        Set of cache IDs that are already cached.
-    """
-    from brasa.util import generate_checksum_for_template
-
-    from .cache import CacheManager
-
-    if not combos:
-        return set()
-
-    cache = CacheManager()
-    cached_ids = set()
-
-    # Generate cache IDs for all combos
-    cache_ids = [
-        generate_checksum_for_template(template_name, DownloadArgs(combo))
-        for combo in combos
-    ]
-
-    # Batch check in chunks of 900 (SQLite limit)
-    chunk_size = 900
-    with closing(cache.meta_db_connection) as conn:
-        c = conn.cursor()
-        for i in range(0, len(cache_ids), chunk_size):
-            chunk = cache_ids[i : i + chunk_size]
-            placeholders = ",".join(["?"] * len(chunk))
-            c.execute(
-                f"SELECT id FROM cache_metadata WHERE template = ? AND id IN ({placeholders})",
-                [template_name, *chunk],
-            )
-            for (cache_id,) in c.fetchall():
-                cached_ids.add(cache_id)
-
-    return cached_ids
 
 
 def _is_today_cached(template_name: str) -> bool:

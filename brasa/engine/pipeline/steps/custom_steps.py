@@ -5,76 +5,11 @@ Steps that allow running custom Python functions within the pipeline.
 
 from __future__ import annotations
 
-from typing import Any
-
 import pandas as pd
 
 from ..context import PipelineContext
 from ..registry import StepRegistry
 from ..step import PipelineStep
-
-
-def _load_function(func_name: str):
-    """Dynamically load a function by its fully qualified name."""
-    module_name, fn_name = func_name.rsplit(".", 1)
-    module = __import__(module_name, fromlist=[fn_name])
-    return getattr(module, fn_name)
-
-
-@StepRegistry.register("custom")
-class CustomStep(PipelineStep):
-    """Execute a custom function.
-
-    The function receives the current data and context, and should return
-    the transformed data.
-
-    Parameters:
-        function: Fully qualified function name (e.g., 'mymodule.my_function')
-
-    The function signature should be:
-        def my_function(data: pd.DataFrame, context: PipelineContext) -> pd.DataFrame:
-            ...
-    """
-
-    def execute(self, data: Any, context: PipelineContext) -> Any:
-        func_name = self.require_param("function")
-        func = _load_function(func_name)
-        return func(data, context)
-
-
-@StepRegistry.register("custom_simple")
-class CustomSimpleStep(PipelineStep):
-    """Execute a simple custom function that only receives data.
-
-    Parameters:
-        function: Fully qualified function name (e.g., 'mymodule.my_function')
-
-    The function signature should be:
-        def my_function(data: pd.DataFrame) -> pd.DataFrame:
-            ...
-    """
-
-    def execute(self, data: Any, _context: PipelineContext) -> Any:
-        func_name = self.require_param("function")
-        func = _load_function(func_name)
-        return func(data)
-
-
-@StepRegistry.register("legacy_reader")
-class LegacyReaderStep(PipelineStep):
-    """Execute a legacy reader function that uses CacheMetadata.
-
-    This step provides backward compatibility with existing reader functions
-    that follow the old signature: func(meta: CacheMetadata) -> pd.DataFrame
-
-    Parameters:
-        function: Fully qualified function name (e.g., 'brasa.readers.read_xxx')
-    """
-
-    def execute(self, _data: Any, context: PipelineContext) -> pd.DataFrame:
-        func_name = self.require_param("function")
-        func = _load_function(func_name)
-        return func(context.meta)
 
 
 @StepRegistry.register("apply_lambda")

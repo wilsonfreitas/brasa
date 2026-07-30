@@ -66,24 +66,6 @@ class DownloadResult:
     retry_success_on_attempt: int | None = None
 
 
-def _extract_http_status(ex: Exception) -> int | None:
-    """Extract HTTP status code from a DownloadException message.
-
-    Parses patterns like ``status_code = 404`` from the exception
-    message string.
-
-    Args:
-        ex: The exception to inspect.
-
-    Returns:
-        The HTTP status code as integer, or None if not found.
-    """
-    match = re.search(r"status_code\s*=\s*(\d+)", str(ex))
-    if match:
-        return int(match.group(1))
-    return None
-
-
 class CacheMetadata:
     """Metadata for a cached market data download.
 
@@ -102,22 +84,6 @@ class CacheMetadata:
         self.processing_errors: str = ""
         self.is_invalid_download: bool = False
         self.invalid_download_reason: str = ""
-
-    def to_dict(self) -> dict:
-        """Convert metadata to a dictionary."""
-        return {
-            "download_checksum": self.download_checksum,
-            "timestamp": self.timestamp,
-            "response": self.response,
-            "download_args": self.download_args,
-            "template": self.template,
-            "downloaded_files": self.downloaded_files,
-            "processed_files": self._is_processed,
-            "extra_key": self.extra_key,
-            "processing_errors": self.processing_errors,
-            "is_invalid_download": self.is_invalid_download,
-            "invalid_download_reason": self.invalid_download_reason,
-        }
 
     def from_dict(self, kwargs) -> None:
         """Load metadata from a dictionary."""
@@ -219,9 +185,6 @@ class CacheManager(Singleton):
         Path(self.cache_path(self._db_folder)).mkdir(parents=True, exist_ok=True)
         if not Path(self.cache_path(self.meta_db_filename)).exists():
             self.create_meta_db()
-        else:
-            self._migrate_download_trials()
-            self._migrate_processed_files()
         # Initialize the dataset catalog table
         self._init_dataset_catalog()
 
@@ -273,69 +236,6 @@ class CacheManager(Singleton):
         sql_path = package_path("sql", "create-dataset-catalog.sql")
         with sql_path.open() as f:
             c.executescript(f.read())
-        db_conn.commit()
-        db_conn.close()
-
-    def _migrate_download_trials(self) -> None:
-        """Add missing status columns to download_trials (idempotent).
-
-        Checks existing columns via PRAGMA table_info and adds any
-        missing columns. Also backfills legacy rows where status_code
-        is NULL: downloaded=1 -> PASSED, downloaded=0 -> FAILED.
-        """
-        new_columns = {
-            "status_code": "TEXT",
-            "status_name": "TEXT",
-            "reason": "TEXT",
-            "http_status": "INTEGER",
-        }
-        db_conn = sqlite3.connect(database=self.cache_path(self.meta_db_filename))
-        c = db_conn.cursor()
-
-        c.execute("PRAGMA table_info(download_trials)")
-        existing = {row[1] for row in c.fetchall()}
-
-        for col_name, col_type in new_columns.items():
-            if col_name not in existing:
-                c.execute(
-                    f"ALTER TABLE download_trials ADD COLUMN {col_name} {col_type}"
-                )
-
-        # Backfill legacy rows that have no status_code
-        c.execute(
-            "UPDATE download_trials SET status_code = '.', status_name = 'PASSED' "
-            "WHERE status_code IS NULL AND downloaded = '1'"
-        )
-        c.execute(
-            "UPDATE download_trials SET status_code = 'F', status_name = 'FAILED' "
-            "WHERE status_code IS NULL AND downloaded = '0'"
-        )
-
-        db_conn.commit()
-        db_conn.close()
-
-    def _migrate_processed_files(self) -> None:
-        """Migrate processed_files column from dict JSON to bool JSON (idempotent).
-
-        Old format: '{}' (unprocessed) or '{"data": "path/..."}' (processed)
-        New format: 'false' or 'true'
-        """
-        db_conn = sqlite3.connect(database=self.cache_path(self.meta_db_filename))
-        c = db_conn.cursor()
-
-        # Already-migrated rows have 'true' or 'false' — skip them.
-        # Convert empty/null dict → 'false'
-        c.execute(
-            "UPDATE cache_metadata SET processed_files = 'false' "
-            "WHERE processed_files IN ('{}', '', 'null') OR processed_files IS NULL"
-        )
-        # Convert any remaining JSON object (old dict format) → 'true'
-        c.execute(
-            "UPDATE cache_metadata SET processed_files = 'true' "
-            "WHERE processed_files NOT IN ('{}', '', 'null', 'false', 'true') "
-            "  AND processed_files IS NOT NULL"
-        )
-
         db_conn.commit()
         db_conn.close()
 
@@ -419,10 +319,6 @@ class CacheManager(Singleton):
         """Metadata folder path."""
         Path(self.cache_path(self._meta_folder)).mkdir(parents=True, exist_ok=True)
         return self._meta_folder
-
-    def meta_file_path(self, meta: CacheMetadata) -> str:
-        """Get the file path for a metadata entry."""
-        return str(Path(self.cache_folder) / self.meta_folder / f"{meta.id}.yaml")
 
     def has_meta(self, meta: CacheMetadata) -> bool:
         """Check if metadata exists for a cache entry."""
@@ -797,6 +693,7 @@ class CacheManager(Singleton):
             InvalidContentException,
             NoDataException,
         )
+        from .template import _extract_status_code_from_exception
 
         retry_count = 0
 
@@ -808,7 +705,7 @@ class CacheManager(Singleton):
             retry_count += 1
             http_st = status_code
             if http_st is None:
-                http_st = _extract_http_status(err)
+                http_st = _extract_status_code_from_exception(err)
             self.save_trial(
                 meta,
                 downloaded=False,
@@ -919,7 +816,7 @@ class CacheManager(Singleton):
                 exception=e,
             )
         except DownloadException as e:
-            http_status = _extract_http_status(e)
+            http_status = _extract_status_code_from_exception(e)
             self.save_trial(
                 meta,
                 downloaded=False,

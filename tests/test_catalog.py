@@ -129,39 +129,6 @@ class TestDatasetCatalog:
         input_list_test = [d for d in input_datasets if "list-test" in d.dataset_name]
         assert len(input_list_test) >= 2
 
-    def test_remove_dataset(self):
-        """Test removing a dataset from the catalog."""
-        catalog = DatasetCatalog()
-
-        schema = pa.schema([pa.field("id", pa.int64())])
-        catalog.register_dataset("curated", "remove-test", schema)
-
-        # Verify exists
-        assert catalog.get_dataset_info("curated", "remove-test") is not None
-
-        # Remove
-        result = catalog.remove_dataset("curated", "remove-test")
-        assert result is True
-
-        # Verify removed
-        assert catalog.get_dataset_info("curated", "remove-test") is None
-
-    def test_remove_nonexistent_dataset(self):
-        """Test removing a nonexistent dataset returns False."""
-        catalog = DatasetCatalog()
-        result = catalog.remove_dataset("nonexistent", "dataset")
-        assert result is False
-
-    def test_dataset_exists(self):
-        """Test checking if a dataset exists."""
-        catalog = DatasetCatalog()
-
-        schema = pa.schema([pa.field("id", pa.int64())])
-        catalog.register_dataset("input", "exists-test", schema)
-
-        assert catalog.dataset_exists("input", "exists-test") is True
-        assert catalog.dataset_exists("input", "nonexistent") is False
-
     def test_dataset_id_format(self):
         """Test that dataset IDs are correctly formatted."""
         catalog = DatasetCatalog()

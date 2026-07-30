@@ -26,18 +26,6 @@ def test_invalid_download_metadata_fields():
     assert meta.invalid_download_reason == ""
 
 
-def test_invalid_download_metadata_to_dict():
-    """Test that invalid fields are included in to_dict()."""
-    meta = CacheMetadata("test-template")
-    meta.is_invalid_download = True
-    meta.invalid_download_reason = "Test error message"
-
-    meta_dict = meta.to_dict()
-
-    assert meta_dict["is_invalid_download"] is True
-    assert meta_dict["invalid_download_reason"] == "Test error message"
-
-
 def test_invalid_content_exception():
     """Test that InvalidContentException can be raised and caught."""
     with pytest.raises(InvalidContentException) as exc_info:

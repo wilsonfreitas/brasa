@@ -25,8 +25,6 @@ Public API:
 # Migrations
 from .api import (
     download_marketdata,
-    get_dependency_graph,
-    get_execution_plan,
     get_marketdata,
     import_marketdata,
     process_etl,
@@ -61,9 +59,6 @@ from .dependency_graph import (
     TemplateDependencyGraph,
 )
 
-# Download internal function (for backwards compatibility)
-from .download import _download_marketdata
-
 # Download plan
 from .download_plan import (
     DownloadPlan,
@@ -84,38 +79,19 @@ from .exceptions import (
 )
 
 # Layers
-from .layers import DEFAULT_ETL_LAYER, DEFAULT_LAYER, LAYER_ORDER, DataLayer
+from .layers import DEFAULT_ETL_LAYER, DEFAULT_LAYER, DataLayer
 
 # Orchestrator
 from .orchestrator import OrchestratorReport, PipelineOrchestrator, RunAllReport
 
-# Parsers
-from .parsers import (
-    CharacterFieldHandler,
-    DateFieldHandler,
-    FieldHandler,
-    FieldHandlerFactory,
-    NumericFieldHandler,
-    NumericParser,
-    PtBRNumericParser,
-    TemplateField,
-    TemplateFields,
-)
-
 # Pipeline map
 from .pipeline_map import TemplateStatus, build_pipeline_map
 
-# Processing functions (including internal for backwards compatibility)
-from .processing import (
-    _read_marketdata,
-    get_fname_part,
-    save_parquet_file,
-    save_partitioned_parquet_file,
-)
+# Processing functions
+from .processing import save_partitioned_parquet_file
 
 # Reporting classes
 from .reporting import (
-    DownloadAttemptStatus,
     ProgressDisplay,
     TaskReport,
     TaskResult,
@@ -125,8 +101,6 @@ from .reporting import (
     create_task_result_from_exception,
     create_task_result_skipped,
     create_task_result_success,
-    map_exception_to_download_status,
-    to_task_status,
 )
 
 # Template classes and functions
@@ -136,29 +110,23 @@ from .template import (
     MarketDataReader,
     MarketDataTemplate,
     MarketDataWriter,
-    TemplatePart,
     clear_template_cache,
     list_templates,
-    reload_template,
     retrieve_template,
 )
 
 __all__ = [
     "DEFAULT_ETL_LAYER",
     "DEFAULT_LAYER",
-    "LAYER_ORDER",
     "BrasaNotConfiguredError",
     "CacheManager",
     "CacheMetadata",
-    "CharacterFieldHandler",
     "CorruptedContentException",
     "CyclicDependencyError",
     "DataLayer",
     "DatasetCatalog",
     "DatasetInfo",
     "DatasetOutput",
-    "DateFieldHandler",
-    "DownloadAttemptStatus",
     "DownloadException",
     "DownloadPlan",
     "DownloadPlanDefaults",
@@ -168,8 +136,6 @@ __all__ = [
     "DuplicatedFolderException",
     "ExecutionPlan",
     "ExecutionStep",
-    "FieldHandler",
-    "FieldHandlerFactory",
     "InvalidContentException",
     "MarketDataDownloader",
     "MarketDataETL",
@@ -177,25 +143,17 @@ __all__ = [
     "MarketDataTemplate",
     "MarketDataWriter",
     "MigrationReport",
-    "NumericFieldHandler",
-    "NumericParser",
     "OrchestratorReport",
     "PipelineOrchestrator",
     "ProgressDisplay",
-    "PtBRNumericParser",
     "RunAllReport",
     "Singleton",
     "TaskReport",
     "TaskResult",
     "TaskStatus",
     "TemplateDependencyGraph",
-    "TemplateField",
-    "TemplateFields",
-    "TemplatePart",
     "TemplateStatus",
     "Verbosity",
-    "_download_marketdata",
-    "_read_marketdata",
     "build_pipeline_map",
     "capture_warnings",
     "clear_template_cache",
@@ -204,23 +162,16 @@ __all__ = [
     "create_task_result_success",
     "download_marketdata",
     "execute_download_plan",
-    "get_dependency_graph",
-    "get_execution_plan",
-    "get_fname_part",
     "get_marketdata",
     "import_marketdata",
     "json_convert_from_object",
     "json_convert_to_object",
     "list_templates",
     "load_function_by_name",
-    "map_exception_to_download_status",
     "process_etl",
     "process_marketdata",
-    "reload_template",
     "resolve_plan_args",
     "retrieve_template",
-    "save_parquet_file",
     "save_partitioned_parquet_file",
     "sync_catalog_from_disk",
-    "to_task_status",
 ]

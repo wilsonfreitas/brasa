@@ -19,56 +19,6 @@ from .template import retrieve_template
 logger = logging.getLogger(__name__)
 
 
-def get_fname_part(meta: CacheMetadata, df: pd.DataFrame) -> str:
-    """Generate a filename part based on metadata and data content.
-
-    Args:
-        meta: Cache metadata with download arguments.
-        df: DataFrame containing the data.
-
-    Returns:
-        String to use as part of the output filename.
-    """
-    template = retrieve_template(meta.template)
-    fmt = template.reader.output_filename_format
-    if "refdate" in meta.download_args:
-        fname_part = meta.download_args.get_object("refdate").strftime(fmt)
-    elif template.id == "b3-company-info":
-        fname_part = f"{df['refdate'].iloc[0].strftime(fmt)}-{meta.download_args['issuingCompany']}"
-    elif template.id == "b3-company-details":
-        fname_part = (
-            f"{df['refdate'].iloc[0].strftime(fmt)}-{meta.download_args['codeCVM']}"
-        )
-    elif template.id == "b3-cash-dividends":
-        fname_part = (
-            f"{df['refdate'].iloc[0].strftime(fmt)}-{meta.download_args['tradingName']}"
-        )
-    elif template.id == "b3-indexes-theoretical-portfolio":
-        fname_part = (
-            f"{df['refdate'].iloc[0].strftime(fmt)}-{meta.download_args['index']}"
-        )
-    elif "refdate" in df:
-        fname_part = df["refdate"].iloc[0].strftime(fmt)
-    else:
-        fname_part = meta.download_checksum
-    return fname_part
-
-
-def save_parquet_file(meta: CacheMetadata, folder: str, df: pd.DataFrame) -> None:
-    """Save a DataFrame to a single parquet file.
-
-    Args:
-        meta: Cache metadata to update with processed file info.
-        folder: Target folder for the parquet file.
-        df: DataFrame to save.
-    """
-    man = CacheManager()
-    fname_part = get_fname_part(meta, df)
-    fname = str(Path(folder) / man.parquet_file_name(fname_part))
-    df.to_parquet(man.cache_path(fname))
-    meta.mark_as_processed()
-
-
 def save_partitioned_parquet_file(
     meta: CacheMetadata,
     folder: str,

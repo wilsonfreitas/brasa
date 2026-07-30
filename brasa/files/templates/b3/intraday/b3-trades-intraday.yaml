@@ -20,13 +20,6 @@ reader:
     #     where: download_args
     #     key: refdate
     #   name: refdate
-    # - step: concat_columns
-    #   columns: [trade_date, trade_time]
-    #   output: trade_datetime
-    #   separator: " "
-    # - step: parse_datetime
-    #   columns: [trade_datetime]
-    #   format: "%Y-%m-%d %H%M%S%f"
 
     - step: rename_columns
       mapping:

@@ -15,7 +15,6 @@ from brasa.engine import (
 from brasa.engine.layers import (
     DEFAULT_ETL_LAYER,
     DEFAULT_LAYER,
-    LAYER_ORDER,
 )
 
 
@@ -51,14 +50,6 @@ class TestDataLayerEnum:
         """Test string representation of DataLayer."""
         assert str(DataLayer.INPUT) == "input"
         assert str(DataLayer.STAGING) == "staging"
-
-    def test_layer_order(self):
-        """Test that layer order is correctly defined."""
-        assert len(LAYER_ORDER) == 4
-        assert LAYER_ORDER[0] == DataLayer.RAW
-        assert LAYER_ORDER[1] == DataLayer.INPUT
-        assert LAYER_ORDER[2] == DataLayer.STAGING
-        assert LAYER_ORDER[3] == DataLayer.CURATED
 
     def test_default_layers(self):
         """Test default layer values."""

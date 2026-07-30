@@ -373,40 +373,6 @@ class DatasetCatalog(Singleton):
             for row in rows
         ]
 
-    def remove_dataset(self, layer: str, dataset_name: str) -> bool:
-        """Remove a dataset from the catalog.
-
-        Args:
-            layer: Data layer (input, staging, curated).
-            dataset_name: Name of the dataset.
-
-        Returns:
-            True if a dataset was removed, False otherwise.
-        """
-        dataset_id = self._make_dataset_id(layer, dataset_name)
-
-        with closing(self._connection) as conn, conn:
-            c = conn.cursor()
-            c.execute("DELETE FROM dataset_catalog WHERE id = ?", (dataset_id,))
-            return c.rowcount > 0
-
-    def dataset_exists(self, layer: str, dataset_name: str) -> bool:
-        """Check if a dataset exists in the catalog.
-
-        Args:
-            layer: Data layer (input, staging, curated).
-            dataset_name: Name of the dataset.
-
-        Returns:
-            True if the dataset exists, False otherwise.
-        """
-        dataset_id = self._make_dataset_id(layer, dataset_name)
-
-        with closing(self._connection) as conn, conn:
-            c = conn.cursor()
-            c.execute("SELECT 1 FROM dataset_catalog WHERE id = ?", (dataset_id,))
-            return c.fetchone() is not None
-
 
 def _infer_hive_partitioning(dataset_dir: Path, parquet_file: Path) -> list[str]:
     """Infer partition columns from Hive-style folder structure.

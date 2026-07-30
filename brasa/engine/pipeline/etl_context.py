@@ -53,13 +53,3 @@ class ETLPipelineContext:
             The stored result or default.
         """
         return self.intermediate_results.get(name, default)
-
-    def get_partitioning(self) -> list[str]:
-        """Get the partitioning columns from writer configuration.
-
-        Returns:
-            List of column names for partitioning, empty list if not partitioned.
-        """
-        if self.writer is not None:
-            return getattr(self.writer, "partitioning", [])
-        return []

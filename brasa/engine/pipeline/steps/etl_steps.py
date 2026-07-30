@@ -167,35 +167,6 @@ class ConcatDatasetsStep(PipelineStep):
         return self.params.get("inputs", [])
 
 
-@StepRegistry.register("dataset_filter")
-class DatasetFilterStep(PipelineStep):
-    """Filter rows based on conditions (supports PyArrow Dataset and DataFrame).
-
-    Parameters:
-        where: Dictionary of column -> value(s) for equality filtering.
-               Can be a single value or list of values (IN clause).
-    """
-
-    def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
-        """Filter the data based on the where clause."""
-        where = self.require_param("where")
-        return shared_transforms.filter_data(data, where)
-
-
-@StepRegistry.register("dataset_select")
-class DatasetSelectColumnsStep(PipelineStep):
-    """Select specific columns from the dataset (supports PyArrow Dataset and DataFrame).
-
-    Parameters:
-        columns: List of column names to select.
-    """
-
-    def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
-        """Select the specified columns."""
-        columns = self.require_param("columns")
-        return shared_transforms.select_columns(data, columns)
-
-
 @StepRegistry.register("select_fields")
 class DatasetSelectFieldsStep(PipelineStep):
     """Select specific columns from the dataset (supports PyArrow Dataset and DataFrame) based on field names.
@@ -216,23 +187,6 @@ class DatasetSelectFieldsStep(PipelineStep):
         return shared_transforms.select_columns(data, columns)
 
 
-@StepRegistry.register("dataset_sort")
-class DatasetSortStep(PipelineStep):
-    """Sort data by specified columns (supports PyArrow Dataset and DataFrame).
-
-    Parameters:
-        by: Column name or list of column names to sort by.
-        descending: Whether to sort in descending order (default: False).
-                   Can be a single bool or list of bools matching 'by'.
-    """
-
-    def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
-        """Sort the data by specified columns."""
-        by = self.require_param("by")
-        descending = self.get_param("descending", False)
-        return shared_transforms.sort_data(data, by, descending)
-
-
 @StepRegistry.register("to_dataframe")
 class ToDataFrameStep(PipelineStep):
     """Convert a PyArrow Dataset/Table to pandas DataFrame.
@@ -243,68 +197,6 @@ class ToDataFrameStep(PipelineStep):
     def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
         """Convert data to DataFrame."""
         return shared_transforms.to_dataframe(data)
-
-
-@StepRegistry.register("dataset_drop_columns")
-class DatasetDropColumnsStep(PipelineStep):
-    """Drop specified columns from the dataset (supports PyArrow Dataset and DataFrame).
-
-    Parameters:
-        columns: List of column names to drop.
-    """
-
-    def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
-        """Drop the specified columns."""
-        columns = self.require_param("columns")
-        return shared_transforms.drop_columns(data, columns)
-
-
-@StepRegistry.register("dataset_rename_columns")
-class DatasetRenameColumnsStep(PipelineStep):
-    """Rename columns in the dataset (supports PyArrow Dataset and DataFrame).
-
-    Parameters:
-        mapping: Dictionary of old_name -> new_name.
-    """
-
-    def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
-        """Rename the columns."""
-        mapping = self.require_param("mapping")
-        return shared_transforms.rename_columns(data, mapping)
-
-
-@StepRegistry.register("dataset_drop_duplicates")
-class DatasetDropDuplicatesStep(PipelineStep):
-    """Remove duplicate rows (supports PyArrow Dataset and DataFrame).
-
-    Parameters:
-        subset: Column names to consider for identifying duplicates (optional).
-        keep: Which duplicates to keep ('first', 'last', False).
-    """
-
-    def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
-        """Remove duplicates."""
-        subset = self.get_param("subset")
-        keep = self.get_param("keep", "first")
-        return shared_transforms.drop_duplicates(data, subset, keep)
-
-
-@StepRegistry.register("dataset_fill_na")
-class DatasetFillNAStep(PipelineStep):
-    """Fill missing values (supports PyArrow Dataset and DataFrame).
-
-    Parameters:
-        value: Value to fill NA with.
-        method: Fill method ('ffill', 'bfill').
-        columns: Columns to fill (None = all columns).
-    """
-
-    def execute(self, data: ds.Dataset | pd.DataFrame, _context: Any) -> pd.DataFrame:
-        """Fill NA values."""
-        value = self.get_param("value")
-        method = self.get_param("method")
-        columns = self.get_param("columns")
-        return shared_transforms.fill_na(data, value, method, columns)
 
 
 @StepRegistry.register("future_maturity_to_date")
@@ -714,17 +606,3 @@ class SqlExportStep(PipelineStep):
     def get_input_datasets(self) -> list[str]:
         """Return the list of input dataset names from the 'datasets' parameter."""
         return self.params.get("datasets", [])
-
-
-# =============================================================================
-# Backward Compatibility Aliases
-# =============================================================================
-# Register the dataset steps with their original names for backward compatibility
-# with existing YAML templates. Steps like sort, fill_na, rename_columns,
-# drop_columns, select_columns are now defined in transform_steps.py and
-# column_steps.py using shared_transforms, so they work with both DataFrames
-# and Datasets.
-
-# These register the dataset-specific filter step under the simpler name
-StepRegistry.register("filter")(DatasetFilterStep)
-StepRegistry.register("select")(DatasetSelectColumnsStep)

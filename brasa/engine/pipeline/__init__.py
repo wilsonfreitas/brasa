@@ -11,8 +11,7 @@ Example YAML configuration for reader pipeline:
         - step: read_html
           attrs:
             id: tblDadosAjustes
-        - step: select_table
-          index: 0
+        - step: first_table
         - step: set_columns
           names: [col1, col2, col3]
         - step: apply_fields
@@ -22,32 +21,15 @@ Example YAML configuration for ETL pipeline:
       pipeline:
         - step: load
           input: source-dataset
-        - step: dataset_filter
+        - step: filter_rows
           where: { commodity: "DI1" }
     writer:
       partitioning: []
-
-Shared Transforms:
-    The `shared_transforms` module provides reusable transformation functions
-    that can be used by both reader and ETL pipelines:
-    - filter_data, select_columns, sort_data
-    - drop_columns, rename_columns
-    - drop_duplicates, fill_na, to_dataframe
-
-Unified Step Registry:
-    All pipeline steps (reader and ETL) now use the unified StepRegistry.
-    ETL-specific steps that work with PyArrow Datasets use the 'dataset_' prefix
-    to distinguish them from DataFrame-only reader steps:
-    - dataset_filter, dataset_select, dataset_sort
-    - dataset_drop_columns, dataset_rename_columns
-    - dataset_drop_duplicates, dataset_fill_na
 """
 
 # Import built-in steps to register them
-# Shared transforms for code reuse between pipelines
 from . import steps  # noqa: F401 - registers steps
 from .context import PipelineContext
-from .context_protocol import PipelineContextProtocol
 
 # ETL Pipeline components
 from .etl_context import ETLPipelineContext
@@ -57,19 +39,13 @@ from .registry import StepRegistry
 from .step import PipelineStep
 from .steps import shared_transforms
 
-# Backward compatibility alias for ETLStepRegistry
-# New code should use StepRegistry directly
-ETLStepRegistry = StepRegistry
-
 __all__ = [
     # ETL pipeline
     "ETLPipeline",
     "ETLPipelineContext",
-    "ETLStepRegistry",  # Backward compat alias for StepRegistry
     # Reader pipeline
     "PipelineContext",
     # Shared
-    "PipelineContextProtocol",
     "PipelineStep",
     "ReaderPipeline",
     "StepRegistry",

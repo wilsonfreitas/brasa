@@ -20,7 +20,6 @@ from brasa.util import DownloadArgs, KwargsIterator
 from .cache import CacheManager, CacheMetadata, DownloadResult
 from .exceptions import DownloadException
 from .reporting import (
-    DownloadAttemptStatus,
     TaskReport,
     TaskResult,
     TaskStatus,
@@ -29,7 +28,6 @@ from .reporting import (
     create_task_result_from_exception,
     create_task_result_skipped,
     create_task_result_success,
-    to_task_status,
 )
 from .template import retrieve_template
 
@@ -181,7 +179,7 @@ def _build_result_from_download(
     result.extra_info["download_status_reason"] = dl.reason
 
     # Override generic status with the precise download outcome
-    result.status = to_task_status(DownloadAttemptStatus(dl.status_name.lower()))
+    result.status = TaskStatus(dl.status_name.lower())
     if dl.http_status is not None:
         result.extra_info["http_status"] = str(dl.http_status)
 
@@ -410,8 +408,6 @@ def download_marketdata(
             return report
         # Merge: resolved date kwargs + user-provided kwargs (user wins on conflict)
         kwargs = {**resolved.kwargs, **kwargs}
-        if not force:
-            force = resolved.force
 
     # Resolve declared dependencies and inject missing args
     implicit_reports: list[TaskReport] = []
@@ -876,42 +872,3 @@ def process_etl(
         report.save_report(report_path, format=file_format)
 
     return report
-
-
-def get_dependency_graph():
-    """Build and return the template dependency graph.
-
-    Scans all pipeline-based templates and constructs a directed acyclic
-    graph (DAG) of their dependencies.  Legacy function-based templates
-    are excluded.
-
-    Returns:
-        A ``TemplateDependencyGraph`` instance.
-    """
-    from .dependency_graph import TemplateDependencyGraph
-
-    return TemplateDependencyGraph()
-
-
-def get_execution_plan(template_id: str, force: bool = False):
-    """Compute an execution plan for processing a template.
-
-    Builds the dependency graph, determines topological order,
-    checks staleness for each upstream template, and returns a plan
-    describing which steps need execution.
-
-    Args:
-        template_id: The target template to process.
-        force: If ``True``, all ancestors are marked for execution
-            regardless of staleness.
-
-    Returns:
-        An ``ExecutionPlan`` with ordered ``ExecutionStep`` entries.
-
-    Raises:
-        KeyError: If *template_id* is not in the dependency graph.
-    """
-    from .dependency_graph import TemplateDependencyGraph
-
-    graph = TemplateDependencyGraph()
-    return graph.get_execution_plan(template_id, force=force)

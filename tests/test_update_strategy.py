@@ -15,11 +15,9 @@ import pytest
 from brasa.engine.update_strategy import (
     ResolvedStrategy,
     UpdateStrategy,
-    _batch_check_cached,
     _get_last_downloaded_date,
     _is_today_cached,
     detect_strategy,
-    get_uncached_kwargs,
     resolve_update,
 )
 from brasa.util import DownloadArgs
@@ -195,7 +193,6 @@ class TestResolveUpdateIntegration:
 
         assert result.strategy == UpdateStrategy.INCREMENTAL_DATE
         assert "refdate" in result.kwargs
-        assert result.force is False
 
     @patch("brasa.engine.template.retrieve_template")
     @patch("brasa.engine.update_strategy._get_last_downloaded_date")
@@ -262,38 +259,16 @@ class TestResolveUpdateIntegration:
         assert result.strategy == UpdateStrategy.INCREMENTAL_DATE_RANGE
 
     @patch("brasa.engine.template.retrieve_template")
-    @patch("brasa.engine.update_strategy._is_today_cached")
     @patch("brasa.engine.update_strategy.detect_strategy")
-    def test_resolve_daily_snapshot_cached(
-        self, mock_detect, mock_is_cached, mock_retrieve
-    ):
-        """Test DAILY_SNAPSHOT when today is already cached."""
+    def test_resolve_daily_snapshot(self, mock_detect, mock_retrieve):
+        """Test DAILY_SNAPSHOT always resolves to an empty-kwargs download."""
         mock_retrieve.return_value = Mock()
         mock_detect.return_value = UpdateStrategy.DAILY_SNAPSHOT
-        mock_is_cached.return_value = True
 
         result = resolve_update("test-template", calendar="B3")
 
         assert result.strategy == UpdateStrategy.DAILY_SNAPSHOT
         assert result.kwargs == {}
-        assert result.force is False
-
-    @patch("brasa.engine.template.retrieve_template")
-    @patch("brasa.engine.update_strategy._is_today_cached")
-    @patch("brasa.engine.update_strategy.detect_strategy")
-    def test_resolve_daily_snapshot_not_cached(
-        self, mock_detect, mock_is_cached, mock_retrieve
-    ):
-        """Test DAILY_SNAPSHOT when today is NOT cached."""
-        mock_retrieve.return_value = Mock()
-        mock_detect.return_value = UpdateStrategy.DAILY_SNAPSHOT
-        mock_is_cached.return_value = False
-
-        result = resolve_update("test-template", calendar="B3")
-
-        assert result.strategy == UpdateStrategy.DAILY_SNAPSHOT
-        assert result.kwargs == {}
-        assert result.force is False
 
     @patch("brasa.engine.template.retrieve_template")
     @patch("brasa.engine.update_strategy.detect_strategy")
@@ -306,7 +281,6 @@ class TestResolveUpdateIntegration:
 
         assert result.strategy == UpdateStrategy.DEPENDENCY_DRIVEN
         assert result.kwargs == {}
-        assert result.force is False
 
     @patch("brasa.engine.template.retrieve_template")
     @patch("brasa.engine.update_strategy.detect_strategy")
@@ -319,59 +293,6 @@ class TestResolveUpdateIntegration:
 
         assert result.strategy == UpdateStrategy.NO_AUTO_UPDATE
         assert result.kwargs == {}
-        assert result.force is False
-
-
-class TestGetUncachedKwargs:
-    """Test pre-filtering of cached kwargs."""
-
-    @patch("brasa.engine.template.retrieve_template")
-    @patch("brasa.engine.update_strategy._batch_check_cached")
-    def test_get_uncached_kwargs_filters_cached(self, mock_batch_check, mock_retrieve):
-        """Test that cached combos are filtered out."""
-        mock_template = Mock()
-        mock_template.downloader = Mock()
-        mock_template.downloader._extra_key = None
-        mock_retrieve.return_value = mock_template
-
-        # All combos are cached
-        all_cache_ids = set()
-        mock_batch_check.return_value = all_cache_ids
-
-        kwargs = {"refdate": ["2026-04-01", "2026-04-02"]}
-        result_kwargs, skipped = get_uncached_kwargs("test-template", kwargs)
-
-        # Since no combos are cached, all should be preserved
-        assert skipped == 0
-
-    @patch("brasa.engine.template.retrieve_template")
-    def test_get_uncached_kwargs_skips_extra_key_templates(self, mock_retrieve):
-        """Test that extra-key templates return unchanged kwargs."""
-        mock_template = Mock()
-        mock_template.downloader = Mock()
-        mock_template.downloader._extra_key = "date"
-        mock_retrieve.return_value = mock_template
-
-        kwargs = {"refdate": ["2026-04-01", "2026-04-02"]}
-        result_kwargs, skipped = get_uncached_kwargs("test-template", kwargs)
-
-        # Extra-key templates: return unchanged
-        assert skipped == 0
-
-    @patch("brasa.engine.template.retrieve_template")
-    @patch("brasa.engine.update_strategy._batch_check_cached")
-    def test_get_uncached_kwargs_empty(self, mock_batch_check, mock_retrieve):
-        """Test with empty kwargs."""
-        mock_template = Mock()
-        mock_template.downloader = Mock()
-        mock_template.downloader._extra_key = None
-        mock_retrieve.return_value = mock_template
-
-        kwargs = {}
-        result_kwargs, skipped = get_uncached_kwargs("test-template", kwargs)
-
-        assert result_kwargs == {}
-        assert skipped == 0
 
 
 class TestCacheQueries:
@@ -392,29 +313,6 @@ class TestCacheQueries:
         result = _get_last_downloaded_date("nonexistent-template")
         assert result is None
 
-    def test_batch_check_cached_chunks_at_900(self):
-        """Test that _batch_check_cached chunks queries at 900."""
-        # Create combos that exceed 900 limit
-        combos = [{"refdate": f"2026-04-{i:02d}"} for i in range(1, 1500)]
-
-        with patch("brasa.engine.cache.CacheManager") as mock_cache_cls:
-            mock_cache = Mock()
-            mock_conn = Mock()
-            mock_cursor = Mock()
-
-            mock_cache_cls.return_value = mock_cache
-            mock_cache.meta_db_connection = mock_conn
-            mock_conn.__enter__ = Mock(return_value=mock_conn)
-            mock_conn.__exit__ = Mock(return_value=None)
-            mock_conn.cursor = Mock(return_value=mock_cursor)
-            mock_cursor.fetchall.return_value = []
-
-            # Call _batch_check_cached
-            _batch_check_cached("test-template", combos)
-
-            # Should have been called at least twice (>900 combos)
-            assert mock_cursor.execute.call_count >= 2
-
     @pytest.mark.integration
     def test_is_today_cached(self):
         """Test checking if today's snapshot is cached."""
@@ -430,15 +328,7 @@ class TestResolvedStrategyDataclass:
         result = ResolvedStrategy(
             strategy=UpdateStrategy.INCREMENTAL_DATE,
             kwargs={"refdate": "2026-04-01"},
-            force=False,
         )
 
         assert result.strategy == UpdateStrategy.INCREMENTAL_DATE
         assert result.kwargs == {"refdate": "2026-04-01"}
-        assert result.force is False
-
-    def test_resolved_strategy_default_force(self):
-        """Test that force defaults to False."""
-        result = ResolvedStrategy(strategy=UpdateStrategy.INCREMENTAL_DATE, kwargs={})
-
-        assert result.force is False
