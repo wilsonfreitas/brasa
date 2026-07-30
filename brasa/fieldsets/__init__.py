@@ -9,7 +9,6 @@ __version__ = "0.1.0"
 
 from .adapters.pandas_adapter import PandasAdapter
 from .adapters.pyarrow_adapter import PyArrowAdapter
-from .adapters.unified_reader import FieldsetReader
 from .exceptions import FieldError, FieldsetError, TypeDefinitionError, TypeParseError
 from .field import Field
 from .fieldset import Fieldset
@@ -34,7 +33,6 @@ __all__ = [
     "FieldError",
     "Fieldset",
     "FieldsetError",
-    "FieldsetReader",
     "IntegerParser",
     "NumericParser",
     "PandasAdapter",
