@@ -196,8 +196,8 @@ class TestExistingStepsRegistry:
             "read_html",
             "read_csv",
             "apply_fields",
-            "parse_numeric",
-            "parse_date",
+            "sort",
+            "melt",
         ]
 
         for step_name in expected:

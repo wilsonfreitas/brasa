@@ -158,67 +158,6 @@ class TestPipelineContextDatasets:
         fieldset = context.get_dataset_fieldset("nonexistent")
         assert fieldset is sample_fieldset
 
-    @pytest.mark.xfail(reason="get_dataset_tag not yet implemented")
-    def test_context_get_dataset_tag(self, mock_meta):
-        """Test getting the source tag for a dataset."""
-        from brasa.engine.template import DatasetConfig
-
-        datasets = {
-            "indexes_info": DatasetConfig(
-                name="indexes_info", tag="IndxInf", fields=Fieldset()
-            )
-        }
-
-        context = PipelineContext(
-            meta=mock_meta,
-            reader_config={},
-            datasets=datasets,
-        )
-
-        assert context.get_dataset_tag("indexes_info") == "IndxInf"
-        assert context.get_dataset_tag("nonexistent") is None
-
-    @pytest.mark.xfail(reason="get_tag_to_dataset_mapping not yet implemented")
-    def test_context_get_tag_to_dataset_mapping(self, mock_meta):
-        """Test getting the tag to dataset name mapping."""
-        from brasa.engine.template import DatasetConfig
-
-        datasets = {
-            "indexes_info": DatasetConfig(
-                name="indexes_info", tag="IndxInf", fields=Fieldset()
-            ),
-            "iopv_info": DatasetConfig(
-                name="iopv_info", tag="IOPVInf", fields=Fieldset()
-            ),
-            "bdr_info": DatasetConfig(name="bdr_info", tag="BDRInf", fields=Fieldset()),
-        }
-
-        context = PipelineContext(
-            meta=mock_meta,
-            reader_config={},
-            datasets=datasets,
-        )
-
-        mapping = context.get_tag_to_dataset_mapping()
-
-        assert mapping == {
-            "IndxInf": "indexes_info",
-            "IOPVInf": "iopv_info",
-            "BDRInf": "bdr_info",
-        }
-
-    @pytest.mark.xfail(reason="get_tag_to_dataset_mapping not yet implemented")
-    def test_context_get_tag_to_dataset_mapping_empty(self, mock_meta):
-        """Test that mapping is empty when no datasets configured."""
-        context = PipelineContext(
-            meta=mock_meta,
-            reader_config={},
-            datasets=None,
-        )
-
-        mapping = context.get_tag_to_dataset_mapping()
-        assert mapping == {}
-
 
 class TestPipelineContextBackwardCompatibility:
     """Tests to ensure existing pipeline context usage still works."""

@@ -1,12 +1,8 @@
-"""Shared pipeline steps that work with both reader and ETL pipelines.
+"""Shared transformation functions used by both reader and ETL pipeline steps.
 
-This module provides steps that only depend on the common context interface
-(PipelineContextProtocol) and can be registered in both StepRegistry and
-ETLStepRegistry.
-
-Steps in this module:
-- Work with both PipelineContext and ETLPipelineContext
-- Operate on DataFrames or PyArrow Datasets
+Functions in this module:
+- Work with both PyArrow Datasets and pandas DataFrames
+- Are called from steps registered in StepRegistry
 - Don't require context-specific features (like meta or writer)
 """
 
@@ -20,48 +16,6 @@ import pyarrow.dataset as ds
 
 if TYPE_CHECKING:
     pass
-
-
-def filter_data(
-    data: ds.Dataset | pd.DataFrame,
-    where: dict[str, Any],
-) -> pd.DataFrame:
-    """Filter rows based on conditions.
-
-    Args:
-        data: Input dataset or DataFrame.
-        where: Dictionary of column -> value(s) for equality filtering.
-               Can be a single value or list of values (IN clause).
-
-    Returns:
-        Filtered DataFrame.
-    """
-    import pyarrow.compute as pc
-
-    if isinstance(data, ds.Dataset):
-        # Build filter expression for PyArrow Dataset
-        expr = None
-        for column, value in where.items():
-            if isinstance(value, list):
-                condition = pc.field(column).isin(value)
-            else:
-                condition = pc.field(column) == value
-            expr = condition if expr is None else expr & condition
-        _data = data.to_table()
-        return (_data.filter(expr) if expr is not None else _data).to_pandas()
-
-    elif isinstance(data, pd.DataFrame):
-        # Filter pandas DataFrame
-        mask = pd.Series([True] * len(data))
-        for column, value in where.items():
-            if isinstance(value, list):
-                mask &= data[column].isin(value)
-            else:
-                mask &= data[column] == value
-        return data[mask]
-
-    else:
-        raise TypeError(f"Cannot filter data of type {type(data)}")
 
 
 def select_columns(
@@ -141,23 +95,6 @@ def to_dataframe(data: Any) -> pd.DataFrame:
         raise TypeError(f"Cannot convert {type(data)} to DataFrame")
 
 
-def drop_columns(
-    data: ds.Dataset | pd.DataFrame,
-    columns: list[str],
-) -> pd.DataFrame:
-    """Drop specified columns from the dataset.
-
-    Args:
-        data: Input dataset or DataFrame.
-        columns: List of column names to drop.
-
-    Returns:
-        DataFrame with columns removed.
-    """
-    df = to_dataframe(data)
-    return df.drop(columns=columns, errors="ignore")
-
-
 def rename_columns(
     data: ds.Dataset | pd.DataFrame,
     mapping: dict[str, str],
@@ -192,36 +129,6 @@ def drop_duplicates(
     """
     df = to_dataframe(data)
     return df.drop_duplicates(subset=subset, keep=keep)
-
-
-def fill_na(
-    data: ds.Dataset | pd.DataFrame,
-    value: Any = None,
-    method: str | None = None,
-    columns: list[str] | None = None,
-) -> pd.DataFrame:
-    """Fill missing values.
-
-    Args:
-        data: Input dataset or DataFrame.
-        value: Value to fill NA with.
-        method: Fill method ('ffill', 'bfill').
-        columns: Columns to fill (None = all columns).
-
-    Returns:
-        DataFrame with NA values filled.
-    """
-    df = to_dataframe(data)
-    if columns:
-        if method:
-            df[columns] = df[columns].fillna(method=method)
-        else:
-            df[columns] = df[columns].fillna(value)
-    elif method:
-        df = df.fillna(method=method)
-    else:
-        df = df.fillna(value)
-    return df
 
 
 def convert_future_maturity_codes_to_dates(

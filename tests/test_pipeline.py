@@ -28,7 +28,7 @@ def test_step_registry():
         "first_table",
         "set_columns",
         "apply_fields",
-        "parse_numeric",
+        "sort",
     ]
     for expected in expected_steps:
         assert expected in steps, f"Expected step '{expected}' not found"
@@ -41,8 +41,8 @@ def test_step_creation():
         {"step": "read_html", "attrs": {"id": "myTable"}},
         {"step": "first_table"},
         {"step": "set_columns", "names": ["col1", "col2", "col3"]},
-        {"step": "parse_numeric", "columns": ["price", "quantity"]},
-        {"step": "apply_fields", "errors": "coerce"},
+        {"step": "sort", "by": "price"},
+        {"step": "apply_fields"},
     ]
 
     for config in test_configs:
@@ -97,24 +97,6 @@ def test_etl_pipeline_template_loading():
     assert "b3-futures-settlement-prices" in template.etl.get_input_datasets()
 
 
-def test_etl_step_registry():
-    """Test the ETL step registry."""
-    from brasa.engine.pipeline import ETLStepRegistry
-
-    # Check that all built-in steps are registered
-    steps = ETLStepRegistry.get_all_steps()
-    assert "load" in steps
-    assert "filter" in steps
-    assert "select" in steps
-    assert "sort" in steps
-    assert "to_dataframe" in steps
-    # New steps using shared transforms
-    assert "drop_columns" in steps
-    assert "rename_columns" in steps
-    assert "drop_duplicates" in steps
-    assert "fill_na" in steps
-
-
 def test_shared_transforms():
     """Test that shared transforms can be used directly."""
     import pandas as pd
@@ -129,10 +111,6 @@ def test_shared_transforms():
             "c": [10.0, 20.0, 30.0, 40.0, 50.0],
         }
     )
-
-    # Test filter_data
-    filtered = shared_transforms.filter_data(df, {"a": 2})
-    assert len(filtered) == 2
 
     # Test select_columns
     selected = shared_transforms.select_columns(df, ["a", "b"])

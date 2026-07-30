@@ -67,22 +67,6 @@ class SelectColumnsStep(PipelineStep):
         return shared_transforms.select_columns(data, columns)
 
 
-@StepRegistry.register("drop_columns")
-class DropColumnsStep(PipelineStep):
-    """Drop columns from data (supports DataFrame and PyArrow Dataset).
-
-    Parameters:
-        columns: List of column names to drop
-        errors: How to handle missing columns ('raise' or 'ignore', default: 'ignore')
-    """
-
-    def execute(self, data: pd.DataFrame, _context: Any) -> pd.DataFrame:
-        from . import shared_transforms
-
-        columns = self.require_param("columns")
-        return shared_transforms.drop_columns(data, columns)
-
-
 @StepRegistry.register("add_column")
 class AddColumnStep(PipelineStep):
     """Add a new column to the DataFrame.
@@ -170,28 +154,3 @@ class AddColumnMultiStep(AddColumnStep):
 
 
 StepRegistry.register("set_column")(AddColumnStep)
-StepRegistry.register("set_column_multi")(AddColumnMultiStep)
-
-
-@StepRegistry.register("reorder_columns")
-class ReorderColumnsStep(PipelineStep):
-    """Reorder columns in a specific order.
-
-    Parameters:
-        order: List of column names in desired order
-        keep_rest: Whether to keep unlisted columns at the end (default: False)
-    """
-
-    def execute(self, data: pd.DataFrame, _context: PipelineContext) -> pd.DataFrame:
-        order = self.require_param("order")
-        keep_rest = self.get_param("keep_rest", False)
-
-        missing = set(order) - set(data.columns)
-        if missing:
-            raise ValueError(f"Columns not found: {missing}")
-
-        if keep_rest:
-            rest = [c for c in data.columns if c not in order]
-            order = list(order) + rest
-
-        return data[order]
