@@ -2,7 +2,6 @@ from datetime import date, datetime, time
 
 import pytest
 
-from brasa.fieldsets.exceptions import TypeDefinitionError, TypeParseError
 from brasa.fieldsets.type_parser import (
     BooleanParser,
     DateParser,
@@ -12,7 +11,6 @@ from brasa.fieldsets.type_parser import (
     StringParser,
     TimeParser,
     TypeDefinitionParser,
-    TypeParser,
     TypeParserFactory,
 )
 
@@ -45,11 +43,11 @@ def test_type_definition_parser_quoted_params():
 
 
 def test_type_definition_parser_invalid_format():
-    with pytest.raises(TypeDefinitionError):
+    with pytest.raises(ValueError):
         TypeDefinitionParser.parse("invalid(param=value")
-    with pytest.raises(TypeDefinitionError):
+    with pytest.raises(ValueError):
         TypeDefinitionParser.parse("invalid_type(param)")
-    with pytest.raises(TypeDefinitionError):
+    with pytest.raises(ValueError):
         TypeDefinitionParser.parse("invalid_type(param:value)")
 
 
@@ -80,7 +78,7 @@ def test_type_parser_factory_create_numeric_parser():
 
 
 def test_type_parser_factory_unrecognized_type():
-    with pytest.raises(TypeDefinitionError, match="Unrecognized type: 'unknown'"):
+    with pytest.raises(ValueError, match="Unrecognized type: 'unknown'"):
         TypeParserFactory.create_parser("unknown")
 
 
@@ -88,28 +86,6 @@ def test_type_parser_factory_aliases():
     assert isinstance(TypeParserFactory.create_parser("number"), NumericParser)
     assert isinstance(TypeParserFactory.create_parser("int"), IntegerParser)
     assert isinstance(TypeParserFactory.create_parser("character"), StringParser)
-    assert isinstance(TypeParserFactory.create_parser("char"), StringParser)
-    assert isinstance(TypeParserFactory.create_parser("bool"), BooleanParser)
-
-
-def test_type_parser_factory_register_parser():
-    class CustomParser(TypeParser):
-        def parse(self, value: str) -> str:
-            return "custom_" + value
-
-    TypeParserFactory.register_parser("custom", CustomParser)
-    parser = TypeParserFactory.create_parser("custom")
-    assert isinstance(parser, CustomParser)
-    assert parser.parse("test") == "custom_test"
-    assert "custom" in TypeParserFactory.get_available_types()
-
-
-def test_type_parser_factory_register_invalid_parser():
-    class InvalidParser:
-        pass
-
-    with pytest.raises(ValueError, match="Parser class must inherit from TypeParser"):
-        TypeParserFactory.register_parser("invalid", InvalidParser)  # type: ignore
 
 
 # --- Concrete Parser Tests ---
@@ -128,11 +104,11 @@ def test_date_parser_custom_format():
 
 def test_date_parser_invalid_input():
     parser = DateParser()
-    with pytest.raises(TypeParseError, match="Failed to parse 'invalid-date' as date"):
+    with pytest.raises(ValueError, match="Failed to parse 'invalid-date' as date"):
         parser.parse("invalid-date")
 
     parser_custom = DateParser(parameters={"format": "%d/%m/%Y"})
-    with pytest.raises(TypeParseError, match="Failed to parse '2023-10-26' as date"):
+    with pytest.raises(ValueError, match="Failed to parse '2023-10-26' as date"):
         parser_custom.parse("2023-10-26")
 
 
@@ -150,7 +126,7 @@ def test_datetime_parser_custom_format():
 def test_datetime_parser_invalid_input():
     parser = DateTimeParser()
     with pytest.raises(
-        TypeParseError, match="Failed to parse 'invalid-datetime' as datetime"
+        ValueError, match="Failed to parse 'invalid-datetime' as datetime"
     ):
         parser.parse("invalid-datetime")
 
@@ -168,7 +144,7 @@ def test_time_parser_custom_format_with_microseconds():
 
 def test_time_parser_invalid_input():
     parser = TimeParser()
-    with pytest.raises(TypeParseError, match="Failed to parse 'invalid-time' as time"):
+    with pytest.raises(ValueError, match="Failed to parse 'invalid-time' as time"):
         parser.parse("invalid-time")
 
 
@@ -198,13 +174,13 @@ def test_numeric_parser_with_decimals_and_sign():
 
 def test_numeric_parser_invalid_sign_param():
     parser = NumericParser(parameters={"sign": "X"})
-    with pytest.raises(TypeParseError, match="Invalid sign parameter"):
+    with pytest.raises(ValueError, match="Invalid sign parameter"):
         parser.parse("100")
 
 
 def test_numeric_parser_invalid_input():
     parser = NumericParser()
-    with pytest.raises(TypeParseError, match="Failed to parse 'abc' as numeric"):
+    with pytest.raises(ValueError, match="Failed to parse 'abc' as numeric"):
         parser.parse("abc")
 
 
@@ -255,7 +231,7 @@ def test_numeric_parser_separators_with_sign():
 def test_numeric_parser_same_separator_error():
     """Test that same separator for thousands and decimal raises error."""
     parser = NumericParser(parameters={"thousands": ".", "decimal": "."})
-    with pytest.raises(TypeParseError, match="cannot be the same"):
+    with pytest.raises(ValueError, match="cannot be the same"):
         parser.parse("1.234.56")
 
 
@@ -283,9 +259,9 @@ def test_integer_parser_basic():
 
 def test_integer_parser_invalid_input():
     parser = IntegerParser()
-    with pytest.raises(TypeParseError, match="Failed to parse '1.23' as integer"):
+    with pytest.raises(ValueError, match="Failed to parse '1.23' as integer"):
         parser.parse("1.23")
-    with pytest.raises(TypeParseError, match="Failed to parse 'abc' as integer"):
+    with pytest.raises(ValueError, match="Failed to parse 'abc' as integer"):
         parser.parse("abc")
 
 
@@ -319,9 +295,9 @@ def test_boolean_parser_false_values():
 
 def test_boolean_parser_invalid_input():
     parser = BooleanParser()
-    with pytest.raises(TypeParseError, match="Failed to parse 'maybe' as boolean"):
+    with pytest.raises(ValueError, match="Failed to parse 'maybe' as boolean"):
         parser.parse("maybe")
-    with pytest.raises(TypeParseError, match="Failed to parse '2' as boolean"):
+    with pytest.raises(ValueError, match="Failed to parse '2' as boolean"):
         parser.parse("2")
 
 

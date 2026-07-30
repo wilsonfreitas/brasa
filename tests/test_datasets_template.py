@@ -94,13 +94,13 @@ class TestTemplateWithDatasets:
 
         # Check indexes_info fieldset
         indexes_fieldset = tpl.datasets["indexes_info"].fields
-        assert indexes_fieldset.has_field("refdate")
+        assert "refdate" in indexes_fieldset
         assert indexes_fieldset.get_field("refdate").type_name == "date"
 
-        assert indexes_fieldset.has_field("symbol")
+        assert "symbol" in indexes_fieldset
         assert indexes_fieldset.get_field("symbol").type_name == "string"
 
-        assert indexes_fieldset.has_field("settlement_price")
+        assert "settlement_price" in indexes_fieldset
         assert indexes_fieldset.get_field("settlement_price").type_name == "numeric"
 
     @pytest.mark.xfail(reason="datasets parsing not yet implemented")

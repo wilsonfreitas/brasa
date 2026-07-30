@@ -4,7 +4,6 @@ Field class for defining data field metadata and parsing capabilities.
 
 from typing import Any
 
-from .exceptions import FieldError, TypeParseError
 from .type_parser import TypeParser, TypeParserFactory
 
 
@@ -35,8 +34,8 @@ class Field:
             **kwargs: Additional arbitrary attributes to set on the field
 
         Raises:
-            FieldError: If name is empty or not a string
-            FieldError: If type_definition is invalid
+            ValueError: If name is empty or not a string
+            ValueError: If type_definition is invalid
 
         Example:
             field = Field(
@@ -47,7 +46,7 @@ class Field:
             )
         """
         if not isinstance(name, str) or not name.strip():
-            raise FieldError("Field name must be a non-empty string")
+            raise ValueError("Field name must be a non-empty string")
 
         self._name = name.strip()
         self._description = (
@@ -59,7 +58,7 @@ class Field:
         try:
             self._parser = TypeParserFactory.create_parser(self._type_definition)
         except Exception as e:
-            raise FieldError(
+            raise ValueError(
                 f"Invalid type definition for field '{self._name}': {e}"
             ) from e
 
@@ -109,7 +108,7 @@ class Field:
             Parsed value in the appropriate Python type
 
         Raises:
-            TypeParseError: If parsing fails
+            ValueError: If parsing fails
 
         Example:
             field = Field("birth_date", "Date of birth", "date(format='%d/%m/%Y')")
@@ -118,24 +117,8 @@ class Field:
         """
         try:
             return self._parser.parse(value)
-        except TypeParseError as e:
-            raise TypeParseError(f"Error parsing field '{self.name}': {e}") from e
-
-    def validate(self, value: str) -> bool:
-        """
-        Check if a value can be parsed without raising an exception.
-
-        Args:
-            value: String value to validate
-
-        Returns:
-            True if value can be parsed, False otherwise
-        """
-        try:
-            self.parse(value)
-            return True
-        except TypeParseError:
-            return False
+        except ValueError as e:
+            raise ValueError(f"Error parsing field '{self.name}': {e}") from e
 
     def set_attribute(self, key: str, value: Any) -> None:
         r"""
@@ -149,15 +132,15 @@ class Field:
             value: The attribute value
 
         Raises:
-            FieldError: If key is empty or not a string
-            FieldError: If key conflicts with protected attribute names
+            ValueError: If key is empty or not a string
+            ValueError: If key conflicts with protected attribute names
 
         Example:
             field.set_attribute("max_length", 100)
             field.set_attribute("validation_regex", r"^\d{3}-\d{2}-\d{4}$")
         """
         if not isinstance(key, str) or not key.strip():
-            raise FieldError("Attribute key must be a non-empty string")
+            raise ValueError("Attribute key must be a non-empty string")
 
         key = key.strip()
 
@@ -170,7 +153,7 @@ class Field:
             "_extra_attributes",
         }
         if key in protected_attrs or key.startswith("_"):
-            raise FieldError(
+            raise ValueError(
                 f"Cannot set attribute '{key}': conflicts with protected attribute"
             )
 
@@ -192,59 +175,6 @@ class Field:
         """
         return self._extra_attributes.get(key, default)
 
-    def has_attribute(self, key: str) -> bool:
-        """
-        Check if a custom attribute exists.
-
-        Args:
-            key: The attribute name to check
-
-        Returns:
-            True if the attribute exists, False otherwise
-        """
-        return key in self._extra_attributes
-
-    def remove_attribute(self, key: str) -> None:
-        """
-        Remove a custom attribute from the field.
-
-        Args:
-            key: The attribute name to remove
-
-        Raises:
-            FieldError: If the attribute doesn't exist
-        """
-        if key not in self._extra_attributes:
-            raise FieldError(f"Attribute '{key}' does not exist on field '{self.name}'")
-
-        del self._extra_attributes[key]
-
-    def get_all_attributes(self) -> dict[str, Any]:
-        """
-        Get all custom attributes as a dictionary.
-
-        Returns:
-            Dictionary of all extra attributes
-        """
-        return self._extra_attributes.copy()
-
-    def to_dict(self) -> dict[str, Any]:
-        """
-        Convert the field to a dictionary representation.
-
-        This includes core attributes and all custom attributes.
-
-        Returns:
-            Dictionary containing all field information
-        """
-        result = {
-            "name": self.name,
-            "description": self.description,
-            "type": self.type_definition,
-        }
-        result.update(self._extra_attributes)
-        return result
-
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Field":
         """
@@ -257,13 +187,13 @@ class Field:
             Field instance
 
         Raises:
-            FieldError: If required keys are missing
+            ValueError: If required keys are missing
         """
         required_keys = {"name", "description"}
         missing_keys = required_keys - set(data.keys())
 
         if missing_keys:
-            raise FieldError(f"Missing required keys for Field: {missing_keys}")
+            raise ValueError(f"Missing required keys for Field: {missing_keys}")
 
         # Extract core attributes
         name = data["name"]
