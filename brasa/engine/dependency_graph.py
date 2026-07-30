@@ -25,7 +25,7 @@ Classes:
 
 from __future__ import annotations
 
-import bisect
+import graphlib
 import json
 import logging
 from contextlib import closing
@@ -529,33 +529,25 @@ class TemplateDependencyGraph:
         ancestors = self.get_ancestors(template_id)
         subgraph_nodes = ancestors | {template_id}
 
-        # Build in-degree map and adjacency restricted to subgraph
-        in_degree: dict[str, int] = dict.fromkeys(subgraph_nodes, 0)
-        for tid in subgraph_nodes:
-            for upstream in self.edges.get(tid, []):
-                if upstream in subgraph_nodes:
-                    in_degree[tid] += 1
+        # predecessors_of maps node -> its upstream deps, restricted to the subgraph
+        predecessors_of = {
+            tid: [up for up in self.edges.get(tid, []) if up in subgraph_nodes]
+            for tid in subgraph_nodes
+        }
 
-        # Kahn's algorithm
-        queue = sorted(tid for tid, deg in in_degree.items() if deg == 0)
-        result: list[str] = []
-
-        while queue:
-            node = queue.pop(0)
-            result.append(node)
-            # Find nodes in the subgraph that depend on this node
-            for tid in subgraph_nodes:
-                if node in self.edges.get(tid, []):
-                    in_degree[tid] -= 1
-                    if in_degree[tid] == 0:
-                        bisect.insort(queue, tid)
-
-        if len(result) != len(subgraph_nodes):
-            # Some nodes still have non-zero in-degree → cycle
-            remaining = subgraph_nodes - set(result)
+        ts = graphlib.TopologicalSorter(predecessors_of)
+        try:
+            ts.prepare()
+        except graphlib.CycleError as e:
             raise CyclicDependencyError(
-                f"Cyclic dependency detected among templates: {sorted(remaining)}"
-            )
+                f"Cyclic dependency detected among templates: {e.args[1]}"
+            ) from e
+
+        result: list[str] = []
+        while ts.is_active():
+            ready = sorted(ts.get_ready())
+            result.extend(ready)
+            ts.done(*ready)
 
         return result
 
@@ -636,9 +628,10 @@ class TemplateDependencyGraph:
     def _check_download_template_staleness(self, template_id: str) -> bool:
         """Check if a download template has unprocessed raw files.
 
-        Queries the ``cache_metadata`` SQLite table for entries where
-        ``template = template_id`` and ``processed_files`` is empty or
-        represents an empty collection.
+        Delegates to :meth:`get_download_status` — equivalent because the
+        "no rows" case maps to ``False`` on both sides (``"never-run"`` is
+        not ``"stale"``), and every unprocessed-row condition maps 1:1 to
+        ``status == "stale"``.
 
         Args:
             template_id: A download template id.
@@ -648,31 +641,7 @@ class TemplateDependencyGraph:
             ``False`` if all downloads have been processed or no
             downloads exist.
         """
-        cache = CacheManager()
-        with closing(cache.meta_db_connection) as conn, conn:
-            c = conn.cursor()
-            c.execute(
-                "SELECT processed_files FROM cache_metadata WHERE template = ?",
-                (template_id,),
-            )
-            rows = c.fetchall()
-
-        if not rows:
-            # No cache entries at all — nothing downloaded yet
-            return False
-
-        for (processed_files_json,) in rows:
-            if not processed_files_json:
-                return True
-            # processed_files is stored as JSON; empty dict/list means unprocessed
-            try:
-                parsed = json.loads(processed_files_json)
-            except (json.JSONDecodeError, TypeError):
-                return True
-            if not parsed:
-                return True
-
-        return False
+        return self.get_download_status(template_id)[0] == "stale"
 
     def get_download_status(self, template_id: str) -> tuple[str, str]:
         """Return ``(status, reason)`` for a download template.
@@ -898,20 +867,21 @@ class TemplateDependencyGraph:
         Returns:
             Ordered list of all template ids, sources first.
         """
-        in_degree: dict[str, int] = dict.fromkeys(self.template_ids, 0)
-        for tid, upstreams in self.edges.items():
-            in_degree[tid] = len(upstreams)
+        predecessors_of = {tid: self.edges.get(tid, []) for tid in self.template_ids}
 
-        queue = sorted(t for t, d in in_degree.items() if d == 0)
+        ts = graphlib.TopologicalSorter(predecessors_of)
+        try:
+            ts.prepare()
+        except graphlib.CycleError as e:
+            raise CyclicDependencyError(
+                f"Cyclic dependency detected among templates: {e.args[1]}"
+            ) from e
+
         result: list[str] = []
-        while queue:
-            node = queue.pop(0)
-            result.append(node)
-            for tid, upstreams in self.edges.items():
-                if node in upstreams:
-                    in_degree[tid] -= 1
-                    if in_degree[tid] == 0:
-                        bisect.insort(queue, tid)
+        while ts.is_active():
+            ready = sorted(ts.get_ready())
+            result.extend(ready)
+            ts.done(*ready)
         return result
 
     @property
