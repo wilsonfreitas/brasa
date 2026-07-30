@@ -65,14 +65,6 @@ class DataLayer(str, Enum):
         return self.value
 
 
-# Layer ordering for validation and dependency checks
-LAYER_ORDER: list[DataLayer] = [
-    DataLayer.RAW,
-    DataLayer.INPUT,
-    DataLayer.STAGING,
-    DataLayer.CURATED,
-]
-
 # Default layer for templates without explicit specification
 DEFAULT_LAYER: DataLayer = DataLayer.INPUT
 

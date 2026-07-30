@@ -54,21 +54,6 @@ def get_fname_part(meta: CacheMetadata, df: pd.DataFrame) -> str:
     return fname_part
 
 
-def save_parquet_file(meta: CacheMetadata, folder: str, df: pd.DataFrame) -> None:
-    """Save a DataFrame to a single parquet file.
-
-    Args:
-        meta: Cache metadata to update with processed file info.
-        folder: Target folder for the parquet file.
-        df: DataFrame to save.
-    """
-    man = CacheManager()
-    fname_part = get_fname_part(meta, df)
-    fname = str(Path(folder) / man.parquet_file_name(fname_part))
-    df.to_parquet(man.cache_path(fname))
-    meta.mark_as_processed()
-
-
 def save_partitioned_parquet_file(
     meta: CacheMetadata,
     folder: str,

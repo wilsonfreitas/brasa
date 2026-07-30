@@ -32,7 +32,6 @@ __all__ = [
     "get_template_partitioning",
     "get_template_schema",
     "list_datasets",
-    "list_sql_tables",
     "show",
     "sql",
     "write_dataset",
@@ -91,14 +90,6 @@ class BrasaDB:
         )
         if not success:
             raise RuntimeError(f"Failed to create view '{view_name}': {msg}")
-
-    @classmethod
-    def create_views(cls) -> None:
-        """Create views for all datasets (legacy method).
-
-        Deprecated: Use create_all_views() instead for layer-aware view creation.
-        """
-        cls.create_all_views()
 
     @classmethod
     def _create_single_view(
@@ -331,21 +322,6 @@ def sql(query_string: str) -> duckdb.DuckDBPyRelation:
         df = result.df()
     """
     return BrasaDB.query(query_string)
-
-
-def list_sql_tables() -> list[str]:
-    """List all available layer.dataset tables.
-
-    Delegates to BrasaDB.list_tables() for discovering available views.
-
-    Returns:
-        Sorted list of view names in "layer.dataset" format.
-
-    Example:
-        tables = list_sql_tables()
-        print(f"Available tables: {tables}")
-    """
-    return BrasaDB.list_tables()
 
 
 def _resolve_date_range(start, end) -> tuple[datetime, datetime]:

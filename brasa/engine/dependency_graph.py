@@ -629,40 +629,6 @@ class TemplateDependencyGraph:
             queue.extend(self.edges.get(tid, []))
         return visited
 
-    def get_descendants(self, template_id: str) -> set[str]:
-        """Return all transitive downstream templates for *template_id*.
-
-        Performs a breadth-first traversal to collect every template
-        that transitively depends on *template_id*.
-
-        Args:
-            template_id: The template to query.
-
-        Returns:
-            Set of downstream template ids (does not include
-            *template_id* itself).
-
-        Raises:
-            KeyError: If *template_id* is not in the graph.
-        """
-        if template_id not in self.templates:
-            raise KeyError(f"Template '{template_id}' is not in the dependency graph.")
-        # Build a reverse adjacency list (child → parents becomes parent → children)
-        children: dict[str, list[str]] = {tid: [] for tid in self.templates}
-        for tid, upstreams in self.edges.items():
-            for up in upstreams:
-                children[up].append(tid)
-
-        visited: set[str] = set()
-        queue = list(children.get(template_id, []))
-        while queue:
-            tid = queue.pop(0)
-            if tid in visited:
-                continue
-            visited.add(tid)
-            queue.extend(children.get(tid, []))
-        return visited
-
     # ------------------------------------------------------------------
     # Staleness detection (Phase 3)
     # ------------------------------------------------------------------

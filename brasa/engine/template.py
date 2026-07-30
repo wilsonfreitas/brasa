@@ -44,12 +44,6 @@ class DatasetConfig:
     fields: Fieldset
 
 
-class TemplatePart:
-    """Placeholder class for template parts."""
-
-    pass
-
-
 class MarketDataETL:
     """Configuration for pipeline-based ETL (Extract-Transform-Load) processes."""
 
@@ -805,27 +799,11 @@ def clear_template_cache() -> None:
     _template_cache.clear()
 
 
-def reload_template(template_name: str) -> MarketDataTemplate:
-    """Force reload a template from disk, bypassing the cache.
-
-    Args:
-        template_name: Name of the template (without .yaml extension).
-
-    Returns:
-        Freshly loaded MarketDataTemplate instance.
-
-    Raises:
-        ValueError: If the template is not found or has ID mismatch.
-    """
-    _template_cache.pop(template_name, None)
-    return retrieve_template(template_name)
-
-
 def retrieve_template(template_name: str) -> MarketDataTemplate:
     """Load a template by name from the discovered template roots.
 
-    Templates are cached after first load. Use reload_template() to force
-    a fresh load, or clear_template_cache() to clear all cached templates.
+    Templates are cached after first load. Use clear_template_cache() to
+    clear all cached templates.
 
     Args:
         template_name: Name of the template (without .yaml extension).

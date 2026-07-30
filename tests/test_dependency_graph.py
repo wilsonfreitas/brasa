@@ -930,51 +930,6 @@ class TestGetAncestorsDiamond:
 
 
 # ===================================================================
-# TEST: get_descendants
-# ===================================================================
-
-
-class TestGetDescendants:
-    """Verify get_descendants returns all transitive downstream templates."""
-
-    @pytest.fixture()
-    def graph(self) -> TemplateDependencyGraph:
-        src = _make_download_template("dl-root")
-        mid = _make_etl_template("etl-mid", input_datasets=["dl-root"])
-        leaf = _make_etl_template("etl-leaf", input_datasets=["staging.etl-mid"])
-        return _build_graph_from_templates([src, mid, leaf])
-
-    def test_root_descendants(self, graph: TemplateDependencyGraph):
-        assert graph.get_descendants("dl-root") == {"etl-mid", "etl-leaf"}
-
-    def test_mid_descendants(self, graph: TemplateDependencyGraph):
-        assert graph.get_descendants("etl-mid") == {"etl-leaf"}
-
-    def test_leaf_descendants(self, graph: TemplateDependencyGraph):
-        assert graph.get_descendants("etl-leaf") == set()
-
-    def test_unknown_raises(self, graph: TemplateDependencyGraph):
-        with pytest.raises(KeyError, match="not in the dependency graph"):
-            graph.get_descendants("ghost")
-
-
-class TestGetDescendantsDiamond:
-    """Verify get_descendants with diamond DAG."""
-
-    def test_diamond_descendants(self):
-        src = _make_download_template("root")
-        a = _make_etl_template("a", input_datasets=["root"])
-        b = _make_etl_template("b", input_datasets=["root"])
-        merge = _make_etl_template("merge", input_datasets=["staging.a", "staging.b"])
-        g = _build_graph_from_templates([src, a, b, merge])
-
-        assert g.get_descendants("root") == {"a", "b", "merge"}
-        assert g.get_descendants("a") == {"merge"}
-        assert g.get_descendants("b") == {"merge"}
-        assert g.get_descendants("merge") == set()
-
-
-# ===================================================================
 # Integration: Phase 2 with real templates
 # ===================================================================
 
@@ -1030,13 +985,6 @@ class TestIntegrationPhase2WithRealTemplates:
         ancestors = graph.get_ancestors("b3-equities-spot-market")
         assert "b3-bvbg028" in ancestors
         assert "b3-equities-register" in ancestors
-
-    def test_descendants_b3_bvbg028(self, graph: TemplateDependencyGraph):
-        """b3-bvbg028 should have b3-equities-register as a descendant."""
-        if "b3-bvbg028" not in graph:
-            pytest.skip("b3-bvbg028 template not available")
-        descendants = graph.get_descendants("b3-bvbg028")
-        assert "b3-equities-register" in descendants
 
     def test_source_node_topological_sort(self, graph: TemplateDependencyGraph):
         """Source nodes should return a single-element list."""
@@ -1697,27 +1645,6 @@ class TestIntegrationDownloadTemplateDeps:
         ancestors = graph.get_ancestors("b3-indexes-theoretical-portfolio")
         assert any("b3-indexes-composition" in a for a in ancestors), (
             f"Expected b3-indexes-composition in ancestors, got {ancestors}"
-        )
-
-    def test_b3_indexes_composition_consolidated_has_downstream(
-        self, graph: TemplateDependencyGraph
-    ):
-        """get_downstream() on the upstream ETL returns b3-indexes-theoretical-portfolio."""
-        upstream = next(
-            (
-                tid
-                for tid in graph.template_ids
-                if "b3-indexes-composition" in tid
-                and tid != "b3-indexes-theoretical-portfolio"
-            ),
-            None,
-        )
-        if upstream is None:
-            pytest.skip("b3-indexes-composition* template not available")
-        downstream = graph.get_descendants(upstream)
-        assert "b3-indexes-theoretical-portfolio" in downstream, (
-            f"Expected b3-indexes-theoretical-portfolio in descendants of {upstream}, "
-            f"got {downstream}"
         )
 
     def test_execution_plan_includes_composition_consolidated(
