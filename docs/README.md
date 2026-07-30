@@ -364,18 +364,6 @@ See: [Architecture - Extensibility](ARCHITECTURE.md#extensibility)
 - `brasa/util.py`: Utilities (205 lines)
 - `brasa/files/templates/*.yaml`: 100+ template definitions
 
-### Example Scripts
-- `cli.py`: Download current data
-- `cli-full.py`: Full data pipeline
-- `cli-companies.py`: Company data focus
-
-### Notebooks
-Located in `notebooks/` directory:
-- Equity analysis examples
-- Futures curve analysis
-- Portfolio optimization
-- Data exploration
-
 ### External Documentation
 - [B3 Data Documentation](https://www.b3.com.br/)
 - [ANBIMA Data Services](https://www.anbima.com.br/)
@@ -398,10 +386,9 @@ Located in `notebooks/` directory:
 ## Getting Help
 
 1. **Check documentation**: Start with relevant section above
-2. **Review examples**: Look at notebooks and example scripts
-3. **Inspect templates**: See how existing templates work
-4. **Check code**: Source code is well-documented
-5. **Debug**: Enable logging to see what's happening
+2. **Inspect templates**: See how existing templates work
+3. **Check code**: Source code is well-documented
+4. **Debug**: Enable logging to see what's happening
 
 ---
 

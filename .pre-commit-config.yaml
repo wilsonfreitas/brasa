@@ -1,9 +1,6 @@
 # Pre-commit hooks for brasa project
 # See https://pre-commit.com for more information
 
-# Global exclusions - applied to all hooks
-exclude: '\.ipynb$'
-
 repos:
   # Ruff - Fast Python linter and formatter
   - repo: https://github.com/astral-sh/ruff-pre-commit

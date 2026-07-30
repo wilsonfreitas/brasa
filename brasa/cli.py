@@ -892,8 +892,8 @@ def _cmd_init(args) -> None:
         )
 
 
-def main() -> None:
-    args = parser.parse_args()
+def main(argv: list[str] | None = None) -> None:
+    args = parser.parse_args(argv)
     if args.command == "init":
         _cmd_init(args)
         return

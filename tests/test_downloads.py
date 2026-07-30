@@ -1,3 +1,4 @@
+import io
 import time
 from datetime import datetime
 
@@ -5,6 +6,8 @@ import pytest
 
 from brasa.engine import CacheMetadata
 from brasa.engine.download import _download_marketdata
+from brasa.engine.exceptions import DownloadException
+from brasa.engine.template import MarketDataDownloader
 
 
 @pytest.mark.integration
@@ -106,3 +109,44 @@ def test_download_settlement_prices():
     meta = CacheMetadata("b3-futures-settlement-prices")
     _download_marketdata(meta, refdate=datetime(2023, 5, 10))
     assert len(meta.downloaded_files) == 1
+
+
+# --- merged from tests/test_acquisition_override.py ---
+
+
+def _make_downloader(**extra):
+    spec = {"function": "brasa.downloaders.simple_download", "args": {}}
+    spec.update(extra)
+    return MarketDataDownloader(spec)
+
+
+def test_download_uses_acquisition_function_override():
+    from brasa.downloaders import simple_download
+
+    called = {}
+
+    def fake(md, **kw):
+        called["yes"] = True
+        return io.BytesIO(b"data"), {"src": "local"}
+
+    dl = _make_downloader()
+    fp, response, _retry = dl.download(acquisition_function=fake)
+
+    assert called.get("yes") is True
+    assert response == {"src": "local"}
+    # shared object must not be mutated
+    assert dl.download_function is simple_download
+
+
+def test_download_retry_override_zero_means_no_retry():
+    dl = _make_downloader(retry_attempts=5)
+    attempts = {"n": 0}
+
+    def failing(md, **kw):
+        attempts["n"] += 1
+        raise DownloadException("boom")
+
+    with pytest.raises(DownloadException):
+        dl.download(acquisition_function=failing, retry_attempts=0)
+
+    assert attempts["n"] == 1

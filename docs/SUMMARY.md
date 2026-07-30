@@ -164,7 +164,6 @@ python -m brasa.cli query "SELECT * FROM 'b3-cotahist-daily'"
 **Data Analysts** → Practical focus:
 1. USER_GUIDE.md
 2. API_REFERENCE.md (Query API section)
-3. Example notebooks
 
 ## Key Insights
 
@@ -221,8 +220,7 @@ python -m brasa.cli query "SELECT * FROM 'b3-cotahist-daily'"
 1. Read USER_GUIDE.md
 2. Try examples from use cases
 3. Explore templates in brasa/files/templates/
-4. Review notebooks in notebooks/
-5. Check API_REFERENCE.md for functions
+4. Check API_REFERENCE.md for functions
 
 ### Advanced Usage
 1. Create custom templates

@@ -1,41 +1,38 @@
-"""Integration tests for the `brasa run-all` CLI command."""
+"""Integration tests for the `brasa run-all` CLI command (in-process)."""
 
 from __future__ import annotations
 
-import subprocess
-import sys
+import pytest
+
+from brasa import cli
 
 
-def test_run_all_help():
-    result = subprocess.run(
-        [sys.executable, "-m", "brasa.cli", "run-all", "--help"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0
-    assert "--dry-run" in result.stdout
-    assert "-v" in result.stdout
+def _run_cli(argv, capsys):
+    try:
+        cli.main(argv)
+        code = 0
+    except SystemExit as e:
+        code = int(e.code or 0)
+    return code, capsys.readouterr().out
 
 
-def test_run_all_dry_run_empty_cache():
+def test_run_all_help(capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["run-all", "--help"])
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "--dry-run" in out
+    assert "-v" in out
+
+
+def test_run_all_dry_run_empty_cache(capsys):
     """Dry-run on an empty cache: downloads blocked, no failures -> exit 0."""
-    result = subprocess.run(
-        [sys.executable, "-m", "brasa.cli", "run-all", "--dry-run"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0
-    assert "DRY RUN" in result.stdout or "Everything is up to date." in result.stdout
+    code, out = _run_cli(["run-all", "--dry-run"], capsys)
+    assert code == 0
+    assert "DRY RUN" in out or "Everything is up to date." in out
 
 
-def test_run_all_empty_cache_exits_zero():
+def test_run_all_empty_cache_exits_zero(capsys):
     """Real run on an empty cache: all downloads blocked (not failed) -> exit 0."""
-    result = subprocess.run(
-        [sys.executable, "-m", "brasa.cli", "run-all"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0
+    code, _ = _run_cli(["run-all"], capsys)
+    assert code == 0
