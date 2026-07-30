@@ -7,7 +7,7 @@ authors = [
 ]
 license = "MIT"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "lxml>=4.9.2",
     "bizdays>=1.0.15",
@@ -22,7 +22,6 @@ dependencies = [
     "openpyxl>=3.1.5",
     "requests>=2.28.0",
     "platformdirs>=4.0.0",
-    "tomli>=2.0.1; python_version < '3.11'",
 ]
 
 [dependency-groups]
@@ -71,7 +70,7 @@ markers = [
 
 [tool.ruff]
 # Target Python version
-target-version = "py310"
+target-version = "py311"
 
 # Line length (Black-compatible default)
 line-length = 88

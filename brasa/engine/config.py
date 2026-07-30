@@ -2,17 +2,12 @@
 
 import json
 import os
-import sys
+import tomllib
 from pathlib import Path
 
 import platformdirs
 
 from .exceptions import BrasaNotConfiguredError
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
 
 _APP_NAME = "brasa"
 
