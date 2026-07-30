@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -226,14 +227,11 @@ class DownloadPlanReport:
 
     @staticmethod
     def _report_status_str(report: TaskReport, include_duplicated: bool = False) -> str:
-        passed = sum(1 for r in report.results if r.status == TaskStatus.PASSED)
-        failed = sum(
-            1
-            for r in report.results
-            if r.status in (TaskStatus.FAILED, TaskStatus.ERROR)
-        )
-        skipped = sum(1 for r in report.results if r.status == TaskStatus.SKIPPED)
-        duplicated = sum(1 for r in report.results if r.status == TaskStatus.DUPLICATED)
+        counts = Counter(r.status for r in report.results)
+        passed = counts[TaskStatus.PASSED]
+        failed = counts[TaskStatus.FAILED] + counts[TaskStatus.ERROR]
+        skipped = counts[TaskStatus.SKIPPED]
+        duplicated = counts[TaskStatus.DUPLICATED]
         retries = sum(
             int(r.extra_info.get("retry_attempts_used") or 0) for r in report.results
         )
@@ -271,11 +269,8 @@ class DownloadPlanReport:
         fail_count = 0
         for template, report in self.task_reports.items():
             status_str = self._report_status_str(report, include_duplicated=True)
-            failed_count = sum(
-                1
-                for r in report.results
-                if r.status in (TaskStatus.FAILED, TaskStatus.ERROR)
-            )
+            counts = Counter(r.status for r in report.results)
+            failed_count = counts[TaskStatus.FAILED] + counts[TaskStatus.ERROR]
             lines.append(f"  {template:<40}  {status_str}")
             if failed_count:
                 fail_count += 1
