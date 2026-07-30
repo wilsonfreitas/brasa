@@ -18,7 +18,6 @@ reader:
     - step: read_fwf
       dtype: str
     - step: apply_fields
-      errors: coerce
     # preco_exercicio and variacao_minima carry an implied number of decimal
     # places given per row by num_casas_decimais (layout pos. 85). apply_fields
     # parses them as raw integers; scale them here.

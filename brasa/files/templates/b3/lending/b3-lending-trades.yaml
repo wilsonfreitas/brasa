@@ -32,7 +32,6 @@ reader:
         CodigoParticipanteTomador: borrow_code
 
     - step: apply_fields
-      errors: coerce
 
 writer:
   layer: input

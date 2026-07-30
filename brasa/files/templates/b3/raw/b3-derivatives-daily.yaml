@@ -28,7 +28,6 @@ reader:
     - step: read_fwf
       dtype: str
     - step: apply_fields
-      errors: coerce
     # Apply per-row dynamic decimals and +/- sign columns to the price/quote fields.
     # read_fwf derives column positions from every field width, and the writer
     # builds its parquet schema from the full `fields:` list, so the sign and

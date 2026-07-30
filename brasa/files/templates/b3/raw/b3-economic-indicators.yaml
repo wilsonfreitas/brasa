@@ -44,7 +44,6 @@ etl:
         from 'input.b3-economic-indicators-fwf'
 
     - step: apply_fields
-      errors: coerce
 
 writer:
   layer: staging

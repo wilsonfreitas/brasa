@@ -28,7 +28,6 @@ reader:
       pattern: "IMA - Geral"
       replacement: "IMA-GERAL"
     - step: apply_fields
-      errors: coerce
 writer:
   layer: input
 fields:

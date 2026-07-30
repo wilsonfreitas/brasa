@@ -42,7 +42,6 @@ reader:
         companyName: trading_name
     - step: select_fields
     - step: apply_fields
-      errors: coerce
 
 writer:
   layer: input

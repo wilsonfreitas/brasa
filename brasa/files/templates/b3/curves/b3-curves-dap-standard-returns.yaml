@@ -21,7 +21,6 @@ etl:
           refdate, symbol
 
     - step: apply_fields
-      errors: coerce
 
 writer:
   layer: staging

@@ -49,7 +49,6 @@ reader:
         - year
 
     - step: apply_fields
-      errors: coerce
 writer:
   layer: input
   partitioning: [refdate]

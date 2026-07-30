@@ -19,7 +19,6 @@ reader:
   pipeline:
     - step: b3_read_bdin_fwf
     - step: apply_fields_multi
-      errors: coerce
 
 writer:
   layer: input

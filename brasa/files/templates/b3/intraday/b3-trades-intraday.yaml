@@ -27,7 +27,6 @@ reader:
     # - step: parse_datetime
     #   columns: [trade_datetime]
     #   format: "%Y-%m-%d %H%M%S%f"
-    #   errors: coerce
 
     - step: rename_columns
       mapping:
@@ -44,7 +43,6 @@ reader:
         CodigoParticipanteVendedor: seller_code
 
     - step: apply_fields
-      errors: coerce
 
 writer:
   layer: input

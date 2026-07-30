@@ -157,7 +157,6 @@ etl:
         ORDER BY change_date, src_symbol
 
     - step: apply_fields
-      errors: coerce
 
 writer:
   layer: staging

@@ -24,7 +24,6 @@ reader:
 
     # Apply field type conversions from field definitions
     - step: apply_fields
-      errors: coerce
 
 writer:
   layer: input

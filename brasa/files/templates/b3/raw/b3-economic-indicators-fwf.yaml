@@ -19,7 +19,6 @@ reader:
     - step: read_fwf
       dtype: str
     - step: apply_fields
-      errors: coerce
 
 writer:
   layer: input
