@@ -89,19 +89,6 @@ from .layers import DEFAULT_ETL_LAYER, DEFAULT_LAYER, LAYER_ORDER, DataLayer
 # Orchestrator
 from .orchestrator import OrchestratorReport, PipelineOrchestrator, RunAllReport
 
-# Parsers
-from .parsers import (
-    CharacterFieldHandler,
-    DateFieldHandler,
-    FieldHandler,
-    FieldHandlerFactory,
-    NumericFieldHandler,
-    NumericParser,
-    PtBRNumericParser,
-    TemplateField,
-    TemplateFields,
-)
-
 # Pipeline map
 from .pipeline_map import TemplateStatus, build_pipeline_map
 
@@ -150,14 +137,12 @@ __all__ = [
     "BrasaNotConfiguredError",
     "CacheManager",
     "CacheMetadata",
-    "CharacterFieldHandler",
     "CorruptedContentException",
     "CyclicDependencyError",
     "DataLayer",
     "DatasetCatalog",
     "DatasetInfo",
     "DatasetOutput",
-    "DateFieldHandler",
     "DownloadAttemptStatus",
     "DownloadException",
     "DownloadPlan",
@@ -168,8 +153,6 @@ __all__ = [
     "DuplicatedFolderException",
     "ExecutionPlan",
     "ExecutionStep",
-    "FieldHandler",
-    "FieldHandlerFactory",
     "InvalidContentException",
     "MarketDataDownloader",
     "MarketDataETL",
@@ -177,20 +160,15 @@ __all__ = [
     "MarketDataTemplate",
     "MarketDataWriter",
     "MigrationReport",
-    "NumericFieldHandler",
-    "NumericParser",
     "OrchestratorReport",
     "PipelineOrchestrator",
     "ProgressDisplay",
-    "PtBRNumericParser",
     "RunAllReport",
     "Singleton",
     "TaskReport",
     "TaskResult",
     "TaskStatus",
     "TemplateDependencyGraph",
-    "TemplateField",
-    "TemplateFields",
     "TemplatePart",
     "TemplateStatus",
     "Verbosity",

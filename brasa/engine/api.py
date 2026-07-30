@@ -20,7 +20,6 @@ from brasa.util import DownloadArgs, KwargsIterator
 from .cache import CacheManager, CacheMetadata, DownloadResult
 from .exceptions import DownloadException
 from .reporting import (
-    DownloadAttemptStatus,
     TaskReport,
     TaskResult,
     TaskStatus,
@@ -29,7 +28,6 @@ from .reporting import (
     create_task_result_from_exception,
     create_task_result_skipped,
     create_task_result_success,
-    to_task_status,
 )
 from .template import retrieve_template
 
@@ -181,7 +179,7 @@ def _build_result_from_download(
     result.extra_info["download_status_reason"] = dl.reason
 
     # Override generic status with the precise download outcome
-    result.status = to_task_status(DownloadAttemptStatus(dl.status_name.lower()))
+    result.status = TaskStatus(dl.status_name.lower())
     if dl.http_status is not None:
         result.extra_info["http_status"] = str(dl.http_status)
 
