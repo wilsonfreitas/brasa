@@ -6,7 +6,7 @@ import pickle
 import re
 import warnings
 import zipfile
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import date, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
@@ -45,10 +45,6 @@ class SuppressUserWarnings:
         self._catcher.__exit__(exc_type, exc_value, traceback)
 
 
-_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_DATETIME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
-
-
 def _normalize_download_arg(value: Any) -> Any:
     """Normalize a download arg value to its canonical form.
 
@@ -61,19 +57,22 @@ def _normalize_download_arg(value: Any) -> Any:
         return datetime(value.year, value.month, value.day).strftime(
             "%Y-%m-%dT%H:%M:%S"
         )
-    if isinstance(value, str) and _DATE_RE.match(value):
-        return f"{value}T00:00:00"
+    if isinstance(value, str):
+        with suppress(ValueError):
+            date.fromisoformat(value)
+            return f"{value}T00:00:00"
     return value
 
 
 def _to_download_arg_object(value: Any) -> Any:
     """Reconstruct a rich Python object from a canonical download arg value."""
-    if isinstance(value, str) and _DATETIME_RE.match(value):
-        return datetime.fromisoformat(value)
+    if isinstance(value, str):
+        with suppress(ValueError):
+            return datetime.fromisoformat(value)
     return value
 
 
-class DownloadArgs:
+class DownloadArgs(dict):
     """Canonical, serialization-stable container for download arguments.
 
     Values are stored in canonical form: date/datetime always as
@@ -82,35 +81,15 @@ class DownloadArgs:
     """
 
     def __init__(self, data: dict[str, Any]) -> None:
-        self._data: dict[str, Any] = {
-            k: _normalize_download_arg(v) for k, v in data.items()
-        }
-
-    def __getitem__(self, key: str) -> Any:
-        return self._data[key]
-
-    def __contains__(self, key: object) -> bool:
-        return key in self._data
-
-    def get(self, key: str, default: Any = None) -> Any:
-        return self._data.get(key, default)
-
-    def items(self):
-        return self._data.items()
-
-    def keys(self):
-        return self._data.keys()
-
-    def __iter__(self):
-        return iter(self._data)
+        super().__init__({k: _normalize_download_arg(v) for k, v in data.items()})
 
     def get_object(self, key: str) -> Any:
         """Return the value as a rich Python type (datetime for date strings, etc.)."""
-        return _to_download_arg_object(self._data[key])
+        return _to_download_arg_object(self[key])
 
     def to_json(self) -> str:
         """Serialize to JSON — always stable, no custom encoder needed."""
-        return json.dumps(self._data)
+        return json.dumps(dict(self))
 
     @classmethod
     def from_json(cls, s: str) -> "DownloadArgs":
@@ -119,14 +98,11 @@ class DownloadArgs:
         Normalizes on load so existing DB rows with bare 'YYYY-MM-DD'
         strings are upgraded to 'YYYY-MM-DDTHH:MM:SS' on first read.
         """
-        obj = cls.__new__(cls)
-        raw = json.loads(s)
-        obj._data = {k: _normalize_download_arg(v) for k, v in raw.items()}
-        return obj
+        return cls(json.loads(s))
 
     def to_dict(self) -> dict[str, Any]:
         """Return a plain dict copy (for **unpacking into downloaders)."""
-        return {k: _to_download_arg_object(v) for k, v in self._data.items()}
+        return {k: _to_download_arg_object(v) for k, v in self.items()}
 
 
 def generate_checksum_for_template(
@@ -454,10 +430,8 @@ def parse_arg_value(value: str, default_calendar: str = "B3"):
         calendar = default_calendar
         if "~" in date_str:
             date_str, calendar = date_str.rsplit("~", 1)
-        try:
+        with suppress(Exception):
             return DateRangeParser(calendar).parse(date_str)
-        except Exception:
-            pass
 
     # Comma-separated list
     if "," in value:

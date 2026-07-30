@@ -34,6 +34,14 @@ from .template import retrieve_template
 logger = logging.getLogger(__name__)
 
 
+def _save_report_if_requested(report_file: str | Path | None, report) -> None:
+    """Save a report to disk, inferring JSON vs TXT format from the extension."""
+    if report_file:
+        report_path = Path(report_file)
+        file_format = "json" if report_path.suffix == ".json" else "txt"
+        report.save_report(report_path, format=file_format)
+
+
 def _should_download(cache: CacheManager, meta: CacheMetadata, force: bool) -> bool:  # noqa: PLR0911
     """Determine if data should be downloaded.
 
@@ -340,10 +348,7 @@ def _run_acquisition(
     report.finish()
     report.dependency_reports = implicit_reports or []
 
-    if report_file:
-        report_path = Path(report_file)
-        file_format = "json" if report_path.suffix == ".json" else "txt"
-        report.save_report(report_path, format=file_format)
+    _save_report_if_requested(report_file, report)
 
     return report
 
@@ -727,10 +732,7 @@ def process_marketdata(  # noqa: PLR0915
 
     _touch_output_marker(cache, template, report)
 
-    if report_file:
-        report_path = Path(report_file)
-        file_format = "json" if report_path.suffix == ".json" else "txt"
-        report.save_report(report_path, format=file_format)
+    _save_report_if_requested(report_file, report)
 
     return report
 
@@ -782,10 +784,7 @@ def process_etl(
         # otherwise return the last report from the orchestration
         target_report = orch_report.step_reports.get(template_name)
         if target_report is not None:
-            if report_file:
-                report_path = Path(report_file)
-                file_format = "json" if report_path.suffix == ".json" else "txt"
-                target_report.save_report(report_path, format=file_format)
+            _save_report_if_requested(report_file, target_report)
             return target_report
 
         # If the target was skipped or orchestration failed before
@@ -812,10 +811,7 @@ def process_etl(
             report.add_result(result)
             report.finish()
 
-            if report_file:
-                report_path = Path(report_file)
-                file_format = "json" if report_path.suffix == ".json" else "txt"
-                report.save_report(report_path, format=file_format)
+            _save_report_if_requested(report_file, report)
 
             return report
 
@@ -866,9 +862,6 @@ def process_etl(
     report.add_result(result)
     report.finish()
 
-    if report_file:
-        report_path = Path(report_file)
-        file_format = "json" if report_path.suffix == ".json" else "txt"
-        report.save_report(report_path, format=file_format)
+    _save_report_if_requested(report_file, report)
 
     return report

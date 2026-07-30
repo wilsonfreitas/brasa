@@ -5,7 +5,7 @@ This module provides a type system that parses input strings into various
 data types based on string type definitions with optional parameters.
 """
 
-import re
+import ast
 from abc import ABC, abstractmethod
 from datetime import date, datetime, time
 from typing import Any, ClassVar
@@ -294,141 +294,31 @@ class TypeDefinitionParser:
     - "numeric(dec = 2, sign = '-')"
     """
 
-    # Regex pattern to match type definitions with optional parameters
-    PATTERN = re.compile(r"^(\w+)(?:\((.*)\))?$")
-
     @classmethod
     def parse(cls, type_definition: str) -> tuple[str, dict[str, Any]]:
+        """Parse a type definition string into (type_name, parameters).
+
+        Accepts a bare name ("date") or a call with keyword arguments
+        ("date(format='%Y%m%d')") — the expression must be valid Python.
         """
-        Parse a type definition string into type name and parameters.
-
-        Args:
-            type_definition: String like "date(format = '%Y%m%d')"
-
-        Returns:
-            Tuple of (type_name, parameters_dict)
-
-        Raises:
-            ValueError: If definition format is invalid
-        """
-        type_definition = type_definition.strip()
-
-        match = cls.PATTERN.match(type_definition)
-        if not match:
-            raise ValueError(f"Invalid type definition format: '{type_definition}'")
-
-        type_name = match.group(1)
-        params_string = match.group(2)
-
-        parameters = {}
-        if params_string:
-            parameters = cls._parse_parameters(params_string)
-
-        return type_name, parameters
-
-    @classmethod
-    def _parse_parameters(cls, params_string: str) -> dict[str, Any]:
-        """
-        Parse parameter string into dictionary.
-
-        Args:
-            params_string: String like "format = '%Y%m%d', dec = 2"
-
-        Returns:
-            Dictionary of parameters
-
-        Raises:
-            ValueError: If parameter format is invalid
-        """
-        parameters = {}
-
-        # Split by comma, but be careful with quoted strings
-        param_pairs = cls._split_parameters(params_string)
-
-        for pair in param_pairs:
-            if "=" not in pair:
-                raise ValueError(
-                    f"Invalid parameter format: '{pair}'. Expected 'key = value'"
-                )
-
-            key, value = pair.split("=", 1)
-            key = key.strip()
-            value = value.strip()
-
-            # Remove quotes if present
-            if (value.startswith("'") and value.endswith("'")) or (
-                value.startswith('"') and value.endswith('"')
-            ):
-                value = value[1:-1]
-            else:
-                # Try to convert to appropriate type
-                value = cls._convert_value(value)
-
-            parameters[key] = value
-
-        return parameters
-
-    @classmethod
-    def _split_parameters(cls, params_string: str) -> list[str]:
-        """
-        Split parameter string by comma, respecting quoted strings.
-
-        Args:
-            params_string: Parameter string
-
-        Returns:
-            List of parameter pairs
-        """
-        params = []
-        current_param = []
-        in_quotes = False
-        quote_char = None
-
-        for char in params_string:
-            if char in ('"', "'") and not in_quotes:
-                in_quotes = True
-                quote_char = char
-                current_param.append(char)
-            elif char == quote_char and in_quotes:
-                in_quotes = False
-                quote_char = None
-                current_param.append(char)
-            elif char == "," and not in_quotes:
-                params.append("".join(current_param))
-                current_param = []
-            else:
-                current_param.append(char)
-
-        if current_param:
-            params.append("".join(current_param))
-
-        return params
-
-    @classmethod
-    def _convert_value(cls, value: str) -> Any:
-        """
-        Convert string value to appropriate Python type.
-
-        Args:
-            value: String value
-
-        Returns:
-            Converted value (int, float, or str)
-        """
-        # Try integer
+        s = type_definition.strip()
         try:
-            return int(value)
-        except ValueError:
-            pass
-
-        # Try float
-        try:
-            return float(value)
-        except ValueError:
-            pass
-
-        # Keep as string
-        return value
+            node = ast.parse(s, mode="eval").body
+        except SyntaxError as e:
+            raise ValueError(f"Invalid type definition format: '{s}'") from e
+        if isinstance(node, ast.Name):
+            return node.id, {}
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and not node.args
+        ):
+            try:
+                params = {kw.arg: ast.literal_eval(kw.value) for kw in node.keywords}
+            except ValueError as e:
+                raise ValueError(f"Invalid parameters in '{s}'") from e
+            return node.func.id, params
+        raise ValueError(f"Invalid type definition format: '{s}'")
 
 
 class TypeParserFactory:

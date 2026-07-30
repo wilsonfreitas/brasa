@@ -50,15 +50,13 @@ class DataLayer(str, Enum):
         if not value:
             return cls.INPUT
 
-        value_lower = value.lower().strip()
-        for layer in cls:
-            if layer.value == value_lower:
-                return layer
-
-        valid_layers = [layer.value for layer in cls]
-        raise ValueError(
-            f"Invalid layer '{value}'. Valid layers are: {', '.join(valid_layers)}"
-        )
+        try:
+            return cls(value.lower().strip())
+        except ValueError:
+            valid_layers = [layer.value for layer in cls]
+            raise ValueError(
+                f"Invalid layer '{value}'. Valid layers are: {', '.join(valid_layers)}"
+            ) from None
 
     def __str__(self) -> str:
         """Return the string value for use in paths."""

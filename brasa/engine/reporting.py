@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import traceback
 import warnings
+from collections import Counter
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -27,6 +28,13 @@ from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    TextColumn,
+    TimeElapsedColumn,
+)
 from rich.text import Text
 
 
@@ -141,8 +149,8 @@ class TaskResult:
 class ProgressDisplay:
     """Handles real-time progress display.
 
-    Shows pytest-style symbols (. for pass, F for fail, etc.) and
-    a counter of completed/total tasks.
+    Shows a progress bar (NORMAL) or per-task detail lines (VERBOSE),
+    plus a counter of completed/total tasks.
     """
 
     def __init__(
@@ -170,20 +178,28 @@ class ProgressDisplay:
         self.template_name = template_name
         self.verbosity = verbosity
         self.console = console or Console(stderr=True)
-        self._line_length = 0
         self._start_time = datetime.now()
         self.show_skipped = show_skipped
-        self._symbols_printed = 0
+        self._progress: Progress | None = None
+        self._task_id: int | None = None
 
     def start(self) -> None:
         """Start the progress display."""
         if self.verbosity == Verbosity.QUIET:
             return
 
-        header = f"{self.operation.capitalize()} {self.template_name} "
+        header = f"{self.operation.capitalize()} {self.template_name}"
         if self.verbosity == Verbosity.NORMAL:
-            self.console.print(header, end="")
-            self._line_length = len(header)
+            self._progress = Progress(
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                MofNCompleteColumn(),
+                TimeElapsedColumn(),
+                console=self.console,
+                transient=False,
+            )
+            self._progress.start()
+            self._task_id = self._progress.add_task(header, total=self.total)
         elif self.verbosity == Verbosity.VERBOSE:
             self.console.print(header)
 
@@ -199,39 +215,8 @@ class ProgressDisplay:
             return
 
         if self.verbosity == Verbosity.NORMAL:
-            # Show symbol only if not suppressed (S when not show_skipped)
-            should_show_symbol = not (
-                result.status == TaskStatus.SKIPPED and not self.show_skipped
-            )
-
-            if should_show_symbol:
-                retries = int(result.extra_info.get("retry_attempts_used") or 0)
-                if retries:
-                    self.console.print(Text("r" * retries, style="yellow dim"), end="")
-                    self._line_length += retries
-                symbol = Text(result.status.symbol, style=result.status.color)
-                self.console.print(symbol, end="")
-                self._line_length += 1
-                self._symbols_printed += 1
-
-            # Show counter every 50 printed symbols or at the end
-            at_50_boundary = (
-                self._symbols_printed > 0 and self._symbols_printed % 50 == 0
-            )
-            if at_50_boundary or self.current == self.total:
-                counter = f" [{self.current}/{self.total}]"
-                self.console.print(counter, end="")
-                self._line_length += len(counter)
-
-                # Newline every 50 symbols
-                if at_50_boundary and self.current < self.total:
-                    self.console.print()
-                    # Indent continuation lines
-                    indent = " " * len(
-                        f"{self.operation.capitalize()} {self.template_name} "
-                    )
-                    self.console.print(indent, end="")
-                    self._line_length = len(indent)
+            if self._progress is not None and self._task_id is not None:
+                self._progress.advance(self._task_id)
 
         elif self.verbosity == Verbosity.VERBOSE:
             status_text = Text(result.status.value.upper(), style=result.status.color)
@@ -255,6 +240,8 @@ class ProgressDisplay:
             return
 
         if self.verbosity == Verbosity.NORMAL:
+            if self._progress is not None:
+                self._progress.stop()
             elapsed = (datetime.now() - self._start_time).total_seconds()
             self.console.print(f" ({elapsed:.1f}s)")
 
@@ -495,13 +482,14 @@ class TaskReport:
 
     def _print_summary(self) -> None:
         """Print the summary line."""
-        passed = sum(1 for r in self.results if r.status == TaskStatus.PASSED)
-        failed = sum(1 for r in self.results if r.status == TaskStatus.FAILED)
-        errors = sum(1 for r in self.results if r.status == TaskStatus.ERROR)
-        skipped = sum(1 for r in self.results if r.status == TaskStatus.SKIPPED)
-        duplicated = sum(1 for r in self.results if r.status == TaskStatus.DUPLICATED)
-        invalid = sum(1 for r in self.results if r.status == TaskStatus.INVALID)
-        corrupted = sum(1 for r in self.results if r.status == TaskStatus.CORRUPTED)
+        counts = Counter(r.status for r in self.results)
+        passed = counts[TaskStatus.PASSED]
+        failed = counts[TaskStatus.FAILED]
+        errors = counts[TaskStatus.ERROR]
+        skipped = counts[TaskStatus.SKIPPED]
+        duplicated = counts[TaskStatus.DUPLICATED]
+        invalid = counts[TaskStatus.INVALID]
+        corrupted = counts[TaskStatus.CORRUPTED]
         warnings_count = sum(
             1 for r in self.results if r.status == TaskStatus.WARNING or r.warnings
         )
@@ -564,6 +552,7 @@ class TaskReport:
         if self._start_time and self._end_time:
             elapsed = (self._end_time - self._start_time).total_seconds()
 
+        counts = Counter(r.status for r in self.results)
         report = {
             "template_name": self.template_name,
             "operation": self.operation,
@@ -572,21 +561,13 @@ class TaskReport:
             "elapsed_seconds": elapsed,
             "summary": {
                 "total": len(self.results),
-                "passed": sum(1 for r in self.results if r.status == TaskStatus.PASSED),
-                "failed": sum(1 for r in self.results if r.status == TaskStatus.FAILED),
-                "errors": sum(1 for r in self.results if r.status == TaskStatus.ERROR),
-                "skipped": sum(
-                    1 for r in self.results if r.status == TaskStatus.SKIPPED
-                ),
-                "duplicated": sum(
-                    1 for r in self.results if r.status == TaskStatus.DUPLICATED
-                ),
-                "invalid": sum(
-                    1 for r in self.results if r.status == TaskStatus.INVALID
-                ),
-                "corrupted": sum(
-                    1 for r in self.results if r.status == TaskStatus.CORRUPTED
-                ),
+                "passed": counts[TaskStatus.PASSED],
+                "failed": counts[TaskStatus.FAILED],
+                "errors": counts[TaskStatus.ERROR],
+                "skipped": counts[TaskStatus.SKIPPED],
+                "duplicated": counts[TaskStatus.DUPLICATED],
+                "invalid": counts[TaskStatus.INVALID],
+                "corrupted": counts[TaskStatus.CORRUPTED],
                 "warnings": sum(
                     1
                     for r in self.results
@@ -600,84 +581,16 @@ class TaskReport:
             json.dump(report, f, indent=2, ensure_ascii=False)
 
     def _save_text_report(self, filepath: Path) -> None:
-        """Save report as plain text."""
-        console = Console(
-            file=filepath.open("w", encoding="utf-8"), force_terminal=False
-        )
-
-        # Re-print the report to file
-        failures = [
-            r
-            for r in self.results
-            if r.status
-            in (
-                TaskStatus.FAILED,
-                TaskStatus.INVALID,
-                TaskStatus.CORRUPTED,
-            )
-        ]
-        errors = [r for r in self.results if r.status == TaskStatus.ERROR]
-        warnings_results = [
-            r for r in self.results if r.status == TaskStatus.WARNING or r.warnings
-        ]
-
-        console.print(f"Report for {self.template_name} {self.operation}")
-        console.print(f"Generated at: {datetime.now().isoformat()}")
-        console.print()
-
-        if failures or errors:
-            console.print("=" * 60)
-            console.print("FAILURES / ERRORS")
-            console.print("=" * 60)
-
-            for idx, result in enumerate(failures + errors, 1):
-                console.print(
-                    f"\n[{idx}] {result.status.value.upper()} {result.args_summary}"
-                )
-                console.print(f"  Template: {result.template_name}")
-                console.print(f"  Error: {result.error_type}: {result.error_message}")
-                if result.error_traceback:
-                    console.print(f"  Traceback:\n{result.error_traceback}")
-
-        if warnings_results:
-            console.print("\n" + "=" * 60)
-            console.print("WARNINGS")
-            console.print("=" * 60)
-
-            for idx, result in enumerate(warnings_results, 1):
-                console.print(f"\n[{idx}] {result.args_summary}")
-                for warning in result.warnings:
-                    console.print(f"  ⚠ {warning}")
-
-        # Summary
-        console.print("\n" + "=" * 60)
-        console.print("SUMMARY")
-        console.print("=" * 60)
-
-        passed = sum(1 for r in self.results if r.status == TaskStatus.PASSED)
-        failed = sum(1 for r in self.results if r.status == TaskStatus.FAILED)
-        error_count = sum(1 for r in self.results if r.status == TaskStatus.ERROR)
-        skipped = sum(1 for r in self.results if r.status == TaskStatus.SKIPPED)
-        duplicated_count = sum(
-            1 for r in self.results if r.status == TaskStatus.DUPLICATED
-        )
-        invalid_count = sum(1 for r in self.results if r.status == TaskStatus.INVALID)
-        corrupted_count = sum(
-            1 for r in self.results if r.status == TaskStatus.CORRUPTED
-        )
-        warning_count = sum(
-            1 for r in self.results if r.status == TaskStatus.WARNING or r.warnings
-        )
-
-        console.print(f"Total: {len(self.results)}")
-        console.print(f"Passed: {passed}")
-        console.print(f"Failed: {failed}")
-        console.print(f"Errors: {error_count}")
-        console.print(f"Skipped: {skipped}")
-        console.print(f"Duplicated: {duplicated_count}")
-        console.print(f"Invalid: {invalid_count}")
-        console.print(f"Corrupted: {corrupted_count}")
-        console.print(f"Warnings: {warning_count}")
+        """Save report as plain text, reusing the rich detail/summary printers."""
+        with filepath.open("w", encoding="utf-8") as fh:
+            file_console = Console(file=fh, force_terminal=False, width=100)
+            original = self.console
+            self.console = file_console
+            try:
+                self._print_detailed_report()
+                self._print_summary()
+            finally:
+                self.console = original
 
 
 @contextmanager
