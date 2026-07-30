@@ -739,118 +739,72 @@ class CacheManager(Singleton):
                 retry_attempts_configured=retry_info.get("attempts_configured"),
                 retry_success_on_attempt=retry_info.get("success_on_attempt"),
             )
-        except DuplicatedFolderException as e:
-            self.save_trial(
-                meta,
-                downloaded=True,
-                status_code="D",
-                status_name="DUPLICATED",
-                reason=str(e),
-            )
-            self.clean_meta_db(meta)
-            result = DownloadResult(
-                status_code="D",
-                status_name="DUPLICATED",
-                reason=str(e),
-                retry_attempts_used=retry_count,
-                exception=e,
-            )
-        except InvalidContentException as e:
-            self.save_trial(
-                meta,
-                downloaded=False,
-                status_code="I",
-                status_name="INVALID",
-                reason=str(e),
-            )
-            self.clean_meta_db(meta)
-            self.clean_meta_raw_folder(meta)
-            result = DownloadResult(
-                status_code="I",
-                status_name="INVALID",
-                reason=str(e),
-                is_success=False,
-                is_expected_error=True,
-                retry_attempts_used=retry_count,
-                exception=e,
-            )
-        except CorruptedContentException as e:
-            self.save_trial(
-                meta,
-                downloaded=False,
-                status_code="C",
-                status_name="CORRUPTED",
-                reason=str(e),
-            )
-            self.clean_meta_db(meta)
-            self.clean_meta_raw_folder(meta)
-            result = DownloadResult(
-                status_code="C",
-                status_name="CORRUPTED",
-                reason=str(e),
-                is_success=False,
-                is_expected_error=True,
-                retry_attempts_used=retry_count,
-                exception=e,
-            )
-        except NoDataException as e:
-            # Source returned successfully but has no data (e.g. empty zip for
-            # an out-of-retention date). Not an error and not persisted as a
-            # permanent skip — a recent date can be retried on the next run.
-            self.save_trial(
-                meta,
-                downloaded=False,
-                status_code="N",
-                status_name="NO_DATA",
-                reason=str(e),
-            )
-            self.clean_meta_db(meta)
-            self.clean_meta_raw_folder(meta)
-            result = DownloadResult(
-                status_code="N",
-                status_name="NO_DATA",
-                reason=str(e),
-                is_success=False,
-                is_expected_error=True,
-                retry_attempts_used=retry_count,
-                exception=e,
-            )
-        except DownloadException as e:
-            http_status = _extract_status_code_from_exception(e)
-            self.save_trial(
-                meta,
-                downloaded=False,
-                status_code="F",
-                status_name="FAILED",
-                reason=str(e),
-                http_status=http_status,
-            )
-            result = DownloadResult(
-                status_code="F",
-                status_name="FAILED",
-                reason=str(e),
-                http_status=http_status,
-                is_success=False,
-                is_expected_error=True,
-                retry_attempts_used=retry_count,
-                exception=e,
-            )
         except Exception as e:
+            # (code, name, downloaded, clean_db, clean_raw, extract_http,
+            #  is_success, is_expected_error) — order significant: first
+            #  isinstance match wins, mirroring the original except-clause order.
+            failure_table: list[
+                tuple[
+                    type[Exception], tuple[str, str, bool, bool, bool, bool, bool, bool]
+                ]
+            ] = [
+                (
+                    DuplicatedFolderException,
+                    ("D", "DUPLICATED", True, True, False, False, True, False),
+                ),
+                (
+                    InvalidContentException,
+                    ("I", "INVALID", False, True, True, False, False, True),
+                ),
+                (
+                    CorruptedContentException,
+                    ("C", "CORRUPTED", False, True, True, False, False, True),
+                ),
+                (
+                    NoDataException,
+                    ("N", "NO_DATA", False, True, True, False, False, True),
+                ),
+                (
+                    DownloadException,
+                    ("F", "FAILED", False, False, False, True, False, True),
+                ),
+                (Exception, ("E", "ERROR", False, True, True, False, False, False)),
+            ]
+            (
+                code,
+                name,
+                downloaded,
+                clean_db,
+                clean_raw,
+                extract_http,
+                is_success,
+                is_expected_error,
+            ) = next(
+                fields for exc_type, fields in failure_table if isinstance(e, exc_type)
+            )
+
+            http_status = (
+                _extract_status_code_from_exception(e) if extract_http else None
+            )
             self.save_trial(
                 meta,
-                downloaded=False,
-                status_code="E",
-                status_name="ERROR",
+                downloaded=downloaded,
+                status_code=code,
+                status_name=name,
                 reason=str(e),
+                http_status=http_status,
             )
-            self.clean_meta_db(meta)
-            self.clean_meta_raw_folder(meta)
+            if clean_db:
+                self.clean_meta_db(meta)
+            if clean_raw:
+                self.clean_meta_raw_folder(meta)
             result = DownloadResult(
-                status_code="E",
-                status_name="ERROR",
+                status_code=code,
+                status_name=name,
                 reason=str(e),
-                is_success=False,
-                is_expected_error=False,
+                http_status=http_status,
+                is_success=is_success,
+                is_expected_error=is_expected_error,
                 retry_attempts_used=retry_count,
                 exception=e,
             )
