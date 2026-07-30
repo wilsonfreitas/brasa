@@ -59,7 +59,6 @@ reader:
 
     # Step 9: Apply field type conversions
     - step: apply_fields
-      errors: coerce
 
 writer:
   partitioning: [refdate]

@@ -57,7 +57,6 @@ etl:
 
     - step: select_fields
     - step: apply_fields
-      errors: coerce
 
 writer:
   layer: input

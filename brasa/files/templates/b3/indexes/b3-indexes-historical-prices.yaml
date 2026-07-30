@@ -49,7 +49,6 @@ reader:
     # 4. Apply field types
     - step: apply_fields
       set_columns: true
-      errors: coerce
 
 writer:
   layer: input

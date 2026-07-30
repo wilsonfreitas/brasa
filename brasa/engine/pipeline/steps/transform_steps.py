@@ -21,10 +21,10 @@ class ApplyFieldsStep(PipelineStep):
     """Apply field definitions from the template to the DataFrame.
 
     Uses the Fieldset's PandasAdapter to convert columns to their
-    defined types (dates, numbers, etc.).
+    defined types (dates, numbers, etc.). Conversion errors are
+    coerced to null values.
 
     Parameters:
-        errors: How to handle conversion errors ('raise', 'coerce', 'ignore')
         set_columns: Whether to set DataFrame columns to field names
     """
 
@@ -34,9 +34,8 @@ class ApplyFieldsStep(PipelineStep):
 
         from brasa.fieldsets import PandasAdapter
 
-        errors = self.get_param("errors", "coerce")
         set_columns = self.get_param("set_columns", False)
-        adapter = PandasAdapter(context.fields, errors=errors)
+        adapter = PandasAdapter(context.fields)
         if set_columns:
             data.columns = context.fields.get_field_names()
         return adapter.apply_types(data)
@@ -47,10 +46,8 @@ class ApplyFieldsMultiStep(PipelineStep):
     """Apply field definitions to multiple DataFrames in a dict.
 
     For multi-output pipelines, applies the corresponding fieldset to each
-    dataset using the dataset configurations from context.
-
-    Parameters:
-        errors: How to handle conversion errors ('raise', 'coerce', 'ignore')
+    dataset using the dataset configurations from context. Conversion
+    errors are coerced to null values.
     """
 
     def execute(
@@ -63,13 +60,12 @@ class ApplyFieldsMultiStep(PipelineStep):
 
         from brasa.fieldsets import PandasAdapter
 
-        errors = self.get_param("errors", "coerce")
         result: dict[str, pd.DataFrame] = {}
 
         for dataset_name, df in data.items():
             fieldset = context.get_dataset_fieldset(dataset_name)
             if fieldset and len(fieldset) > 0:
-                adapter = PandasAdapter(fieldset, errors=errors)
+                adapter = PandasAdapter(fieldset)
                 result[dataset_name] = adapter.apply_types(df)
             else:
                 # No fieldset defined, pass through unchanged

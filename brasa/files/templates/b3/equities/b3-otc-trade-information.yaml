@@ -73,7 +73,6 @@ reader:
         key: refdate
       name: refdate
     - step: apply_fields
-      errors: coerce
 
 writer:
   layer: input

@@ -65,7 +65,6 @@ etl:
         ORDER BY event_date, symbol
 
     - step: apply_fields
-      errors: coerce
 
 writer:
   layer: staging

@@ -71,7 +71,6 @@ reader:
         AUDITOR: auditor
 
     - step: apply_fields
-      errors: coerce
 
 writer:
   layer: input
