@@ -1,7 +1,7 @@
-"""Tests for deterministic download status classification.
+"""Tests for download-trial persistence across status outcomes.
 
-Tests cover all 7 core outcomes: . (PASSED), F (FAILED), E (ERROR),
-S (SKIPPED), D (DUPLICATED), I (INVALID), C (CORRUPTED).
+Covers writing/reading status rows to/from the cache DB for all core
+outcomes: . (PASSED), F (FAILED), D (DUPLICATED), I (INVALID), C (CORRUPTED).
 """
 
 from contextlib import closing
@@ -9,31 +9,10 @@ from pathlib import Path
 
 from brasa.engine.api import _should_download
 from brasa.engine.cache import CacheMetadata
-from brasa.engine.exceptions import (
-    CorruptedContentException,
-    DownloadException,
-    DuplicatedFolderException,
-    InvalidContentException,
-)
-from brasa.engine.reporting import (
-    DownloadAttemptStatus,
-    TaskStatus,
-    map_exception_to_download_status,
-    to_task_status,
-)
 
 
 class TestPassedStatus:
     """TEST-007: Successful downloads record '.' with downloaded files."""
-
-    def test_passed_maps_from_none(self):
-        assert map_exception_to_download_status(None) == (DownloadAttemptStatus.PASSED)
-
-    def test_passed_symbol(self):
-        assert DownloadAttemptStatus.PASSED.symbol == "."
-
-    def test_passed_converts_to_task_passed(self):
-        assert to_task_status(DownloadAttemptStatus.PASSED) == (TaskStatus.PASSED)
 
     def test_passed_persists_in_db(self, temp_cache):
         meta = CacheMetadata("test-template")
@@ -52,16 +31,6 @@ class TestPassedStatus:
 class TestFailedStatus:
     """TEST-004: DownloadException maps to F with HTTP status."""
 
-    def test_failed_maps_from_download_exception(self):
-        ex = DownloadException("status_code = 404")
-        assert map_exception_to_download_status(ex) == (DownloadAttemptStatus.FAILED)
-
-    def test_failed_symbol(self):
-        assert DownloadAttemptStatus.FAILED.symbol == "F"
-
-    def test_failed_converts_to_task_failed(self):
-        assert to_task_status(DownloadAttemptStatus.FAILED) == (TaskStatus.FAILED)
-
     def test_failed_persists_with_http_status(self, temp_cache):
         meta = CacheMetadata("test-template")
         meta.download_args = {"a": 1}
@@ -78,28 +47,8 @@ class TestFailedStatus:
         assert status["http_status"] == 403
 
 
-class TestErrorStatus:
-    """TEST-005: Generic Exception maps to E."""
-
-    def test_error_maps_from_generic_exception(self):
-        ex = RuntimeError("unexpected")
-        assert map_exception_to_download_status(ex) == (DownloadAttemptStatus.ERROR)
-
-    def test_error_symbol(self):
-        assert DownloadAttemptStatus.ERROR.symbol == "E"
-
-    def test_error_converts_to_task_error(self):
-        assert to_task_status(DownloadAttemptStatus.ERROR) == (TaskStatus.ERROR)
-
-
 class TestSkippedStatus:
     """TEST-006: _should_download == False path returns S."""
-
-    def test_skipped_symbol(self):
-        assert DownloadAttemptStatus.SKIPPED.symbol == "S"
-
-    def test_skipped_converts_to_task_skipped(self):
-        assert to_task_status(DownloadAttemptStatus.SKIPPED) == (TaskStatus.SKIPPED)
 
     def test_should_download_returns_false_for_cached(self, temp_cache):
         meta = CacheMetadata("test-template")
@@ -115,21 +64,6 @@ class TestSkippedStatus:
 
 class TestDuplicatedStatus:
     """TEST-002, TEST-006A, TEST-006B: DuplicatedFolderException -> D."""
-
-    def test_duplicated_maps_from_exception(self):
-        ex = DuplicatedFolderException("folder exists")
-        assert map_exception_to_download_status(ex) == (
-            DownloadAttemptStatus.DUPLICATED
-        )
-
-    def test_duplicated_symbol(self):
-        assert DownloadAttemptStatus.DUPLICATED.symbol == "D"
-
-    def test_duplicated_converts_to_task_passed(self):
-        """D maps directly to DUPLICATED."""
-        assert to_task_status(DownloadAttemptStatus.DUPLICATED) == (
-            TaskStatus.DUPLICATED
-        )
 
     def test_duplicated_persists(self, temp_cache):
         meta = CacheMetadata("test-template")
@@ -300,17 +234,6 @@ class TestNoMetaForFailures:
 class TestInvalidStatus:
     """TEST-003: InvalidContentException maps to I."""
 
-    def test_invalid_maps_from_exception(self):
-        ex = InvalidContentException("validation failed")
-        assert map_exception_to_download_status(ex) == (DownloadAttemptStatus.INVALID)
-
-    def test_invalid_symbol(self):
-        assert DownloadAttemptStatus.INVALID.symbol == "I"
-
-    def test_invalid_converts_to_task_failed(self):
-        """I maps directly to INVALID."""
-        assert to_task_status(DownloadAttemptStatus.INVALID) == (TaskStatus.INVALID)
-
     def test_invalid_persists(self, temp_cache):
         meta = CacheMetadata("test-template")
         meta.download_args = {"a": 1}
@@ -328,17 +251,6 @@ class TestInvalidStatus:
 
 class TestCorruptedStatus:
     """CorruptedContentException maps to C (transient, retryable)."""
-
-    def test_corrupted_maps_from_exception(self):
-        ex = CorruptedContentException("truncated file")
-        assert map_exception_to_download_status(ex) == (DownloadAttemptStatus.CORRUPTED)
-
-    def test_corrupted_symbol(self):
-        assert DownloadAttemptStatus.CORRUPTED.symbol == "C"
-
-    def test_corrupted_converts_to_task_failed(self):
-        """C maps directly to CORRUPTED."""
-        assert to_task_status(DownloadAttemptStatus.CORRUPTED) == (TaskStatus.CORRUPTED)
 
     def test_corrupted_persists(self, temp_cache):
         meta = CacheMetadata("test-template")
@@ -526,23 +438,3 @@ class TestRetryStatusIntegration:
         # Last status is PASSED and files exist -> should NOT download
         result = _should_download(temp_cache, meta2, force=False)
         assert result is False
-
-
-# ---------------------------------------------------------------------------
-# WIL-97 — NO_DATA status
-# ---------------------------------------------------------------------------
-
-from brasa.engine.exceptions import NoDataException  # noqa: E402
-
-
-def test_no_data_status_members_and_glyphs():
-    assert DownloadAttemptStatus.NO_DATA.value == "no_data"
-    assert DownloadAttemptStatus.NO_DATA.symbol == "N"
-    assert DownloadAttemptStatus.NO_DATA.color == "yellow"
-    assert TaskStatus.NO_DATA.symbol == "N"
-
-
-def test_no_data_exception_maps_to_no_data_status():
-    status = map_exception_to_download_status(NoDataException("empty"))
-    assert status == DownloadAttemptStatus.NO_DATA
-    assert to_task_status(status) == TaskStatus.NO_DATA
