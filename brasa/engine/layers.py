@@ -10,10 +10,10 @@ Layers:
     CURATED: Analytics-ready data - final aggregated datasets
 """
 
-from enum import Enum
+from enum import StrEnum
 
 
-class DataLayer(str, Enum):
+class DataLayer(StrEnum):
     """Data layer enumeration for organizing datasets by processing stage.
 
     The layers follow a logical progression from raw downloads to
@@ -57,10 +57,6 @@ class DataLayer(str, Enum):
             raise ValueError(
                 f"Invalid layer '{value}'. Valid layers are: {', '.join(valid_layers)}"
             ) from None
-
-    def __str__(self) -> str:
-        """Return the string value for use in paths."""
-        return self.value
 
 
 # Default layer for templates without explicit specification
