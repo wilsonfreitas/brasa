@@ -1,11 +1,9 @@
-"""
-Adapters for integrating Fieldset with external data processing libraries.
-"""
+"""Adapters for integrating Fieldset with external data processing libraries."""
 
 from .pandas_adapter import PandasAdapter
-from .pyarrow_adapter import PyArrowAdapter
+from .pyarrow_adapter import get_target_schema
 
 __all__ = [
     "PandasAdapter",
-    "PyArrowAdapter",
+    "get_target_schema",
 ]

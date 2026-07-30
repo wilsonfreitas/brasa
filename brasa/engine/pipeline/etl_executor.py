@@ -6,6 +6,7 @@ of ETL steps and writes the result to the output dataset.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -16,7 +17,7 @@ import pyarrow.parquet as pq
 
 from brasa.engine.cache import CacheManager
 from brasa.engine.exceptions import DOMAIN_EXCEPTIONS
-from brasa.fieldsets.adapters import PyArrowAdapter
+from brasa.fieldsets import get_target_schema
 
 from .etl_context import ETLPipelineContext
 from .etl_results import ETLWriteComplete
@@ -179,11 +180,8 @@ class ETLPipeline:
         # Get schema from fields if available
         schema = None
         if fields is not None:
-            try:
-                adapter = PyArrowAdapter(fields, verbose_warnings=False)
-                schema = adapter.get_target_schema()
-            except Exception:
-                pass
+            with contextlib.suppress(Exception):
+                schema = get_target_schema(fields)
 
         # Convert DataFrame to PyArrow Table
         if schema:

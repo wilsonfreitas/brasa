@@ -11,7 +11,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from brasa.fieldsets.adapters import PyArrowAdapter
+from brasa.fieldsets.adapters import get_target_schema
 
 from .cache import CacheManager, CacheMetadata
 from .template import retrieve_template
@@ -137,8 +137,7 @@ def _get_schema_from_fields(fields):
     if not fields:
         return None
     try:
-        adapter = PyArrowAdapter(fields, verbose_warnings=False)
-        return adapter.get_target_schema()
+        return get_target_schema(fields)
     except Exception as exc:
         logger.warning(
             "Could not build schema from template fields; data will be "

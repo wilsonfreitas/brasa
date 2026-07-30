@@ -12,7 +12,7 @@ from bizdays import Calendar
 
 from .engine import CacheManager, DatasetCatalog, DatasetInfo, retrieve_template
 from .engine.exceptions import BrasaNotConfiguredError
-from .fieldsets import PyArrowAdapter
+from .fieldsets import get_target_schema
 from .util import bizdays_mode
 
 logger = logging.getLogger(__name__)
@@ -468,8 +468,7 @@ def get_template_schema(name: str) -> pyarrow.Schema | None:
     try:
         template = retrieve_template(name)
         if hasattr(template, "fields") and template.fields is not None:
-            adapter = PyArrowAdapter(template.fields, verbose_warnings=False)
-            return adapter.get_target_schema()
+            return get_target_schema(template.fields)
     except ValueError:
         # Template not found
         pass

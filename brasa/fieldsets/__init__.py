@@ -1,14 +1,9 @@
-"""
-fieldset-schema
-
-A library for defining, managing, and applying data schemas with integrated
-type parsing and data reading capabilities.
-"""
+"""fieldset-schema"""
 
 __version__ = "0.1.0"
 
 from .adapters.pandas_adapter import PandasAdapter
-from .adapters.pyarrow_adapter import PyArrowAdapter
+from .adapters.pyarrow_adapter import get_target_schema
 from .exceptions import FieldError, FieldsetError, TypeDefinitionError, TypeParseError
 from .field import Field
 from .fieldset import Fieldset
@@ -36,7 +31,6 @@ __all__ = [
     "IntegerParser",
     "NumericParser",
     "PandasAdapter",
-    "PyArrowAdapter",
     "StringParser",
     "TimeParser",
     "TypeDefinitionError",
@@ -44,4 +38,5 @@ __all__ = [
     "TypeParseError",
     "TypeParser",
     "TypeParserFactory",
+    "get_target_schema",
 ]
