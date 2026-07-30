@@ -840,7 +840,6 @@ print(f"Cache size: {cache_size:.2f} GB")
 ## Next Steps
 
 - Explore available templates in `brasa/files/templates/` directory
-- Review example notebooks in `notebooks/` directory
 - Check API reference for detailed function documentation
 - Consult architecture documentation for system internals
 
