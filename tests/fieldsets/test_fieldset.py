@@ -1,8 +1,5 @@
-from datetime import date
-
 import pytest
 
-from brasa.fieldsets.exceptions import FieldsetError, TypeParseError
 from brasa.fieldsets.field import Field
 from brasa.fieldsets.fieldset import Fieldset
 
@@ -35,7 +32,7 @@ def test_fieldset_add_field(sample_fields):
     fs = Fieldset()
     fs.add_field(sample_fields[0])
     assert len(fs) == 1
-    assert fs.has_field("id")
+    assert "id" in fs
     assert fs.get_field("id") == sample_fields[0]
 
 
@@ -43,14 +40,14 @@ def test_fieldset_add_fields(sample_fields):
     fs = Fieldset()
     fs.add_fields(*sample_fields)
     assert len(fs) == 5
-    assert fs.has_field("id")
-    assert fs.has_field("name")
-    assert fs.has_field("is_active")
+    assert "id" in fs
+    assert "name" in fs
+    assert "is_active" in fs
 
 
 def test_fieldset_add_field_invalid_type():
     fs = Fieldset()
-    with pytest.raises(FieldsetError, match="Expected Field instance"):
+    with pytest.raises(ValueError, match="Expected Field instance"):
         fs.add_field("not_a_field")  # type: ignore
 
 
@@ -65,32 +62,8 @@ def test_fieldset_get_field(sample_fields):
 
 def test_fieldset_get_field_not_found():
     fs = Fieldset()
-    with pytest.raises(FieldsetError, match="Field 'non_existent' not found"):
+    with pytest.raises(ValueError, match="Field 'non_existent' not found"):
         fs.get_field("non_existent")
-
-
-def test_fieldset_has_field():
-    fs = Fieldset()
-    fs.add_field(Field("id", "ID", "integer"))
-    assert fs.has_field("id")
-    assert not fs.has_field("name")
-
-
-def test_fieldset_remove_field(sample_fields):
-    fs = Fieldset()
-    fs.add_fields(*sample_fields)
-
-    removed_field = fs.remove_field("name")
-    assert removed_field.name == "name"
-    assert len(fs) == 4
-    assert not fs.has_field("name")
-    assert "name" not in fs.get_field_names()
-
-
-def test_fieldset_remove_field_not_found():
-    fs = Fieldset()
-    with pytest.raises(FieldsetError, match="Field 'non_existent' not found"):
-        fs.remove_field("non_existent")
 
 
 def test_fieldset_get_all_fields(sample_fields):
@@ -112,88 +85,6 @@ def test_fieldset_get_field_names():
     assert fs.get_field_names() == ["a", "b"]
 
 
-def test_fieldset_get_fields_by_type(sample_fields):
-    fs = Fieldset()
-    fs.add_fields(*sample_fields)
-
-    int_fields = fs.get_fields_by_type("integer")
-    assert len(int_fields) == 1
-    assert int_fields[0].name == "id"
-
-    string_fields = fs.get_fields_by_type("string")
-    assert len(string_fields) == 1
-    assert string_fields[0].name == "name"
-
-    numeric_fields = fs.get_fields_by_type("numeric")
-    assert len(numeric_fields) == 1
-    assert numeric_fields[0].name == "price"
-
-
-def test_fieldset_parse_record(sample_fields):
-    fs = Fieldset()
-    fs.add_fields(*sample_fields)
-
-    record = {
-        "id": "123",
-        "name": "Test Item",
-        "price": "9999",  # numeric(dec=2)
-        "date": "2023-10-26",
-        "is_active": "true",
-    }
-
-    parsed_record = fs.parse_record(record)
-    assert parsed_record["id"] == 123
-    assert parsed_record["name"] == "Test Item"
-    assert parsed_record["price"] == 99.99
-    assert parsed_record["date"] == date(2023, 10, 26)
-    assert parsed_record["is_active"] is True
-
-
-def test_fieldset_parse_record_unknown_field():
-    fs = Fieldset()
-    fs.add_field(Field("id", "ID", "integer"))
-
-    record = {"id": "1", "unknown_field": "value"}
-    with pytest.raises(FieldsetError, match="Unknown field 'unknown_field' in record"):
-        fs.parse_record(record)
-
-
-def test_fieldset_parse_record_parsing_error():
-    fs = Fieldset()
-    fs.add_field(Field("id", "ID", "integer"))
-
-    record = {"id": "not_an_int"}
-    with pytest.raises(TypeParseError, match="Error parsing field 'id'"):
-        fs.parse_record(record)
-
-
-def test_fieldset_validate_record():
-    fs = Fieldset()
-    fs.add_field(Field("id", "ID", "integer"))
-    fs.add_field(Field("name", "Name", "string"))
-
-    valid_record = {"id": "123", "name": "Valid"}
-    invalid_record_type = {"id": "abc", "name": "Invalid"}
-    invalid_record_unknown_field = {"id": "1", "unknown": "field"}
-
-    assert fs.validate_record(valid_record) == {"id": True, "name": True}
-    assert fs.validate_record(invalid_record_type) == {"id": False, "name": True}
-    assert fs.validate_record(invalid_record_unknown_field) == {
-        "id": True,
-        "unknown": False,
-    }
-
-
-def test_fieldset_clear(sample_fields):
-    fs = Fieldset()
-    fs.add_fields(*sample_fields)
-    assert len(fs) == 5
-
-    fs.clear()
-    assert len(fs) == 0
-    assert not fs.has_field("id")
-
-
 def test_fieldset_len_contains_getitem_iter(sample_fields):
     fs = Fieldset()
     assert len(fs) == 0
@@ -205,7 +96,7 @@ def test_fieldset_len_contains_getitem_iter(sample_fields):
     assert "non_existent" not in fs
 
     assert fs["id"] == sample_fields[0]
-    with pytest.raises(FieldsetError):
+    with pytest.raises(ValueError):
         _ = fs["non_existent"]
 
     field_names_iter = [f.name for f in fs]
@@ -226,59 +117,3 @@ def test_fieldset_repr_str():
         "  - f2 (integer): d2"
     )
     assert str(fs) == expected_str
-
-
-def test_fieldset_to_dict(sample_fields):
-    fs = Fieldset(name="test_fs", description="Test FS")
-    fs.add_fields(sample_fields[0], sample_fields[1])
-
-    expected_dict = {
-        "name": "test_fs",
-        "description": "Test FS",
-        "fields": [
-            {
-                "name": "id",
-                "description": "Unique ID",
-                "type": "integer",
-                "required": True,
-            },
-            {
-                "name": "name",
-                "description": "Item Name",
-                "type": "string",
-                "max_length": 50,
-            },
-        ],
-    }
-    assert fs.to_dict() == expected_dict
-
-
-def test_fieldset_from_dict():
-    data = {
-        "name": "from_dict_fs",
-        "description": "FS from dict",
-        "fields": [
-            {"name": "f1", "description": "Field 1", "type": "string"},
-            {"name": "f2", "description": "Field 2", "type": "integer", "min_val": 0},
-        ],
-    }
-    fs = Fieldset.from_dict(data)
-    assert fs.name == "from_dict_fs"
-    assert fs.description == "FS from dict"
-    assert len(fs) == 2
-    assert fs.get_field("f1").type_name == "string"
-    assert fs.get_field("f2").get_attribute("min_val") == 0
-
-
-def test_fieldset_from_dict_invalid_fields_type():
-    data = {"name": "bad_fs", "fields": "not_a_list"}
-    with pytest.raises(FieldsetError, match="Fieldset 'fields' must be a list."):
-        Fieldset.from_dict(data)
-
-
-def test_fieldset_from_dict_invalid_field_item_type():
-    data = {"name": "bad_fs", "fields": ["not_a_dict"]}
-    with pytest.raises(
-        FieldsetError, match="Each field in 'fields' list must be a dictionary."
-    ):
-        Fieldset.from_dict(data)

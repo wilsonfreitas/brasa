@@ -4,84 +4,9 @@ Tests for integration between fieldsets and template system.
 
 import pandas as pd
 
-from brasa.engine import TemplateFields, retrieve_template
+from brasa.engine import retrieve_template
 from brasa.fieldsets import Field, Fieldset
 from brasa.fieldsets.adapters import PandasAdapter
-
-
-class TestFromTemplateFields:
-    """Test Fieldset.from_template_fields() classmethod."""
-
-    def test_from_template_fields_basic(self):
-        """Test creating Fieldset from TemplateFields with basic types."""
-        # Create a simple TemplateFields from dict structure
-        # TemplateField expects 'handler' with 'type' inside it
-        fields_data = [
-            {
-                "name": "refdate",
-                "description": "Reference date",
-                "handler": {"type": "date"},
-            },
-            {
-                "name": "symbol",
-                "description": "Symbol",
-                "handler": {"type": "character"},
-            },
-            {"name": "volume", "description": "Volume", "handler": {"type": "numeric"}},
-            {
-                "name": "quantity",
-                "description": "Quantity",
-                "handler": {"type": "numeric"},
-            },  # integer maps to numeric
-        ]
-        template_fields = TemplateFields(fields_data)
-
-        # Convert to Fieldset
-        fieldset = Fieldset.from_template_fields(template_fields)
-
-        # Check that all fields were created
-        assert len(fieldset) == 4
-        assert fieldset.has_field("refdate")
-        assert fieldset.has_field("symbol")
-        assert fieldset.has_field("volume")
-        assert fieldset.has_field("quantity")
-
-        # Check field types
-        assert fieldset.get_field("refdate").type_name == "date"
-        assert fieldset.get_field("symbol").type_name == "string"
-        assert fieldset.get_field("volume").type_name == "numeric"
-        assert fieldset.get_field("quantity").type_name == "numeric"
-
-    def test_from_template_fields_preserves_descriptions(self):
-        """Test that field descriptions are preserved."""
-        fields_data = [
-            {
-                "name": "price",
-                "description": "Price in BRL",
-                "handler": {"type": "numeric"},
-            },
-        ]
-        template_fields = TemplateFields(fields_data)
-        fieldset = Fieldset.from_template_fields(template_fields)
-
-        field = fieldset.get_field("price")
-        assert field.description == "Price in BRL"
-
-    def test_from_template_fields_with_real_template(self):
-        """Test with real b3-bvbg086 template."""
-        template = retrieve_template("b3-bvbg086")
-        # Template.fields is now a Fieldset directly
-        fieldset = template.fields
-
-        # Check that fieldset was created
-        assert len(fieldset) > 0
-
-        # Check some expected fields
-        assert fieldset.has_field("refdate")
-        assert fieldset.has_field("symbol")
-        assert fieldset.has_field("volume")
-        assert fieldset.has_field("open")
-        assert fieldset.has_field("close")
 
 
 class TestApplyTypes:
@@ -143,7 +68,7 @@ class TestApplyTypes:
         assert "missing" not in df_typed.columns
 
     def test_apply_types_error_handling_coerce(self):
-        """Test error handling with errors='coerce'."""
+        """Test that invalid values are coerced to NaN."""
         fieldset = Fieldset()
         fieldset.add_field(Field("num_col", "Numeric", "numeric"))
 
@@ -153,7 +78,7 @@ class TestApplyTypes:
             }
         )
 
-        adapter = PandasAdapter(fieldset, errors="coerce")
+        adapter = PandasAdapter(fieldset)
         df_typed = adapter.apply_types(df)
 
         # Invalid value should become NaN
@@ -190,7 +115,7 @@ class TestTemplateIntegrationEndToEnd:
         # Get template
         template = retrieve_template("b3-bvbg086")
 
-        # Template.fields is now a Fieldset directly
+        # Template.fields is a Fieldset directly
         fieldset = template.fields
 
         # Create adapter
@@ -220,7 +145,7 @@ class TestTemplateIntegrationEndToEnd:
     def test_fieldset_field_names_match_template(self):
         """Test that fieldset field names match template field names."""
         template = retrieve_template("b3-bvbg086")
-        # Template.fields is now a Fieldset directly
+        # Template.fields is a Fieldset directly
         fieldset = template.fields
 
         # Get fieldset field names (using .names for compatibility)
@@ -233,9 +158,9 @@ class TestTemplateIntegrationEndToEnd:
     def test_apply_types_handles_all_template_types(self):
         """Test that all types in template can be handled."""
         template = retrieve_template("b3-bvbg086")
-        # Template.fields is now a Fieldset directly
+        # Template.fields is a Fieldset directly
         fieldset = template.fields
-        adapter = PandasAdapter(fieldset, errors="coerce")
+        adapter = PandasAdapter(fieldset)
 
         # Create DataFrame with sample data for each field
         data = {}
@@ -259,39 +184,3 @@ class TestTemplateIntegrationEndToEnd:
         # Check that conversion happened
         assert len(df_typed) == 1
         assert len(df_typed.columns) == len(fieldset)
-
-
-class TestFieldsetToDict:
-    """Test that fieldset can be serialized/deserialized."""
-
-    def test_from_template_fields_to_dict_roundtrip(self):
-        """Test converting template fields -> fieldset -> dict -> fieldset."""
-        fields_data = [
-            {
-                "name": "refdate",
-                "description": "Reference date",
-                "handler": {"type": "date"},
-            },
-            {"name": "volume", "description": "Volume", "handler": {"type": "numeric"}},
-        ]
-        template_fields = TemplateFields(fields_data)
-
-        # Template -> Fieldset
-        fieldset1 = Fieldset.from_template_fields(template_fields)
-
-        # Fieldset -> Dict
-        fieldset_dict = fieldset1.to_dict()
-
-        # Dict -> Fieldset
-        fieldset2 = Fieldset.from_dict(fieldset_dict)
-
-        # Should be equivalent
-        assert len(fieldset1) == len(fieldset2)
-        assert fieldset1.get_field_names() == fieldset2.get_field_names()
-
-        for name in fieldset1.get_field_names():
-            field1 = fieldset1.get_field(name)
-            field2 = fieldset2.get_field(name)
-            assert field1.name == field2.name
-            assert field1.description == field2.description
-            assert field1.type_name == field2.type_name

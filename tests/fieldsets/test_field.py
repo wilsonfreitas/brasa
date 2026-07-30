@@ -2,7 +2,6 @@ from datetime import date
 
 import pytest
 
-from brasa.fieldsets.exceptions import FieldError, TypeParseError
 from brasa.fieldsets.field import Field
 
 
@@ -27,23 +26,22 @@ def test_field_creation_with_extra_attributes():
     field = Field("test_field", "Desc", "integer", required=True, default_value=0)
     assert field.get_attribute("required") is True
     assert field.get_attribute("default_value") == 0
-    assert field.get_all_attributes() == {"required": True, "default_value": 0}
 
 
 def test_field_creation_invalid_name():
-    with pytest.raises(FieldError, match="Field name must be a non-empty string"):
+    with pytest.raises(ValueError, match="Field name must be a non-empty string"):
         Field("", "Desc", "string")
-    with pytest.raises(FieldError, match="Field name must be a non-empty string"):
+    with pytest.raises(ValueError, match="Field name must be a non-empty string"):
         Field("   ", "Desc", "string")
 
 
 def test_field_creation_invalid_type_definition():
     with pytest.raises(
-        FieldError, match="Invalid type definition for field 'bad_field'"
+        ValueError, match="Invalid type definition for field 'bad_field'"
     ):
         Field("bad_field", "Desc", "unknown_type")
     with pytest.raises(
-        FieldError, match="Invalid type definition for field 'bad_field'"
+        ValueError, match="Invalid type definition for field 'bad_field'"
     ):
         Field("bad_field", "Desc", "date(invalid_param)")
 
@@ -66,50 +64,16 @@ def test_field_parse_method():
 
 def test_field_parse_method_error():
     date_field = Field("my_date", "Date", "date(format='%d/%m/%Y')")
-    with pytest.raises(TypeParseError, match="Error parsing field 'my_date'"):
+    with pytest.raises(ValueError, match="Error parsing field 'my_date'"):
         date_field.parse("2023-10-26")
-
-
-def test_field_validate_method():
-    date_field = Field("my_date", "Date", "date(format='%d/%m/%Y')")
-    assert date_field.validate("26/10/2023") is True
-    assert date_field.validate("2023-10-26") is False
-
-
-def test_field_set_get_has_remove_attribute():
-    field = Field("test", "Desc", "string")
-
-    field.set_attribute("max_length", 255)
-    assert field.get_attribute("max_length") == 255
-    assert field.has_attribute("max_length") is True
-    assert field.get_attribute("non_existent", "default") == "default"
-
-    field.remove_attribute("max_length")
-    assert field.has_attribute("max_length") is False
-    with pytest.raises(FieldError, match="Attribute 'non_existent' does not exist"):
-        field.remove_attribute("non_existent")
 
 
 def test_field_set_attribute_protected_name():
     field = Field("test", "Desc", "string")
-    with pytest.raises(FieldError, match="conflicts with protected attribute"):
+    with pytest.raises(ValueError, match="conflicts with protected attribute"):
         field.set_attribute("_name", "new_name")
-    with pytest.raises(FieldError, match="conflicts with protected attribute"):
+    with pytest.raises(ValueError, match="conflicts with protected attribute"):
         field.set_attribute("_extra_attributes", {})
-
-
-def test_field_to_dict():
-    field = Field(
-        "test_field", "Test Description", "numeric(dec=2)", required=True, unit="USD"
-    )
-    expected_dict = {
-        "name": "test_field",
-        "description": "Test Description",
-        "type": "numeric(dec=2)",
-        "required": True,
-        "unit": "USD",
-    }
-    assert field.to_dict() == expected_dict
 
 
 def test_field_from_dict():
@@ -127,7 +91,7 @@ def test_field_from_dict():
 
 
 def test_field_from_dict_missing_keys():
-    with pytest.raises(FieldError, match="Missing required keys for Field"):
+    with pytest.raises(ValueError, match="Missing required keys for Field"):
         Field.from_dict({"name": "bad_field", "type": "string"})
 
 

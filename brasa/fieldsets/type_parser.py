@@ -10,8 +10,6 @@ from abc import ABC, abstractmethod
 from datetime import date, datetime, time
 from typing import Any, ClassVar
 
-from .exceptions import TypeDefinitionError, TypeParseError
-
 
 class TypeParser(ABC):
     """
@@ -42,7 +40,7 @@ class TypeParser(ABC):
             The parsed value in the appropriate type
 
         Raises:
-            TypeParseError: If parsing fails
+            ValueError: If parsing fails
         """
         pass
 
@@ -73,14 +71,14 @@ class DateParser(TypeParser):
             date object
 
         Raises:
-            TypeParseError: If date parsing fails
+            ValueError: If date parsing fails
         """
         date_format = self.parameters.get("format", self.DEFAULT_FORMAT)
 
         try:
             return datetime.strptime(value, date_format).date()
         except ValueError as e:
-            raise TypeParseError(
+            raise ValueError(
                 f"Failed to parse '{value}' as date with format '{date_format}': {e}"
             ) from e
 
@@ -101,14 +99,14 @@ class DateTimeParser(TypeParser):
             datetime object
 
         Raises:
-            TypeParseError: If datetime parsing fails
+            ValueError: If datetime parsing fails
         """
         datetime_format = self.parameters.get("format", self.DEFAULT_FORMAT)
 
         try:
             return datetime.strptime(value, datetime_format)
         except ValueError as e:
-            raise TypeParseError(
+            raise ValueError(
                 f"Failed to parse '{value}' as datetime with format '{datetime_format}': {e}"
             ) from e
 
@@ -129,14 +127,14 @@ class TimeParser(TypeParser):
             time object
 
         Raises:
-            TypeParseError: If time parsing fails
+            ValueError: If time parsing fails
         """
         time_format = self.parameters.get("format", self.DEFAULT_FORMAT)
 
         try:
             return datetime.strptime(value, time_format).time()
         except ValueError as e:
-            raise TypeParseError(
+            raise ValueError(
                 f"Failed to parse '{value}' as time with format '{time_format}': {e}"
             ) from e
 
@@ -161,7 +159,7 @@ class NumericParser(TypeParser):
             float value
 
         Raises:
-            TypeParseError: If numeric parsing fails
+            ValueError: If numeric parsing fails
 
         Examples:
             - "1.234.567,89" with thousands=".", decimal="," -> 1234567.89
@@ -177,7 +175,7 @@ class NumericParser(TypeParser):
 
             # Validate separators are different
             if thousands_sep and thousands_sep == decimal_sep:
-                raise TypeParseError(
+                raise ValueError(
                     f"Thousands separator '{thousands_sep}' cannot be the same as "
                     f"decimal separator '{decimal_sep}'"
                 )
@@ -204,14 +202,14 @@ class NumericParser(TypeParser):
             if sign == "-":
                 numeric_value = -numeric_value
             elif sign != "+":
-                raise TypeParseError(
+                raise ValueError(
                     f"Invalid sign parameter: '{sign}'. Must be '+' or '-'"
                 )
 
             return numeric_value
 
         except ValueError as e:
-            raise TypeParseError(f"Failed to parse '{value}' as numeric: {e}") from e
+            raise ValueError(f"Failed to parse '{value}' as numeric: {e}") from e
 
 
 class IntegerParser(TypeParser):
@@ -228,12 +226,12 @@ class IntegerParser(TypeParser):
             int value
 
         Raises:
-            TypeParseError: If integer parsing fails
+            ValueError: If integer parsing fails
         """
         try:
             return int(value)
         except ValueError as e:
-            raise TypeParseError(f"Failed to parse '{value}' as integer: {e}") from e
+            raise ValueError(f"Failed to parse '{value}' as integer: {e}") from e
 
 
 class StringParser(TypeParser):
@@ -271,7 +269,7 @@ class BooleanParser(TypeParser):
             bool value
 
         Raises:
-            TypeParseError: If boolean parsing fails
+            ValueError: If boolean parsing fails
         """
         normalized_value = value.lower().strip()
 
@@ -280,7 +278,7 @@ class BooleanParser(TypeParser):
         elif normalized_value in self.FALSE_VALUES:
             return False
         else:
-            raise TypeParseError(
+            raise ValueError(
                 f"Failed to parse '{value}' as boolean. "
                 f"Valid values: {self.TRUE_VALUES | self.FALSE_VALUES}"
             )
@@ -311,15 +309,13 @@ class TypeDefinitionParser:
             Tuple of (type_name, parameters_dict)
 
         Raises:
-            TypeDefinitionError: If definition format is invalid
+            ValueError: If definition format is invalid
         """
         type_definition = type_definition.strip()
 
         match = cls.PATTERN.match(type_definition)
         if not match:
-            raise TypeDefinitionError(
-                f"Invalid type definition format: '{type_definition}'"
-            )
+            raise ValueError(f"Invalid type definition format: '{type_definition}'")
 
         type_name = match.group(1)
         params_string = match.group(2)
@@ -342,7 +338,7 @@ class TypeDefinitionParser:
             Dictionary of parameters
 
         Raises:
-            TypeDefinitionError: If parameter format is invalid
+            ValueError: If parameter format is invalid
         """
         parameters = {}
 
@@ -351,7 +347,7 @@ class TypeDefinitionParser:
 
         for pair in param_pairs:
             if "=" not in pair:
-                raise TypeDefinitionError(
+                raise ValueError(
                     f"Invalid parameter format: '{pair}'. Expected 'key = value'"
                 )
 
@@ -454,12 +450,7 @@ class TypeParserFactory:
         "int": IntegerParser,  # Alias for integer
         "string": StringParser,
         "character": StringParser,  # Alias for string
-        "char": StringParser,  # Alias for string
         "boolean": BooleanParser,
-        "bool": BooleanParser,  # Alias for boolean
-        # R-style type aliases
-        "posixct": DateTimeParser,  # R datetime type
-        "posixlt": DateTimeParser,  # R datetime type
     }
 
     @classmethod
@@ -474,7 +465,7 @@ class TypeParserFactory:
             Instance of appropriate TypeParser subclass
 
         Raises:
-            TypeDefinitionError: If type is not recognized or definition is invalid
+            ValueError: If type is not recognized or definition is invalid
         """
         # Parse the type definition
         type_name, parameters = TypeDefinitionParser.parse(type_definition)
@@ -482,42 +473,10 @@ class TypeParserFactory:
         # Look up parser class
         parser_class = cls._registry.get(type_name.lower())
         if parser_class is None:
-            raise TypeDefinitionError(
+            raise ValueError(
                 f"Unrecognized type: '{type_name}'. "
                 f"Available types: {list(cls._registry.keys())}"
             )
 
         # Create and return parser instance
         return parser_class(parameters)
-
-    @classmethod
-    def register_parser(cls, type_name: str, parser_class: type[TypeParser]) -> None:
-        """
-        Register a new type parser.
-
-        This allows extending the type system with custom parsers.
-
-        Args:
-            type_name: Name of the type
-            parser_class: Parser class (must inherit from TypeParser)
-
-        Raises:
-            ValueError: If parser_class doesn't inherit from TypeParser
-        """
-        if not issubclass(parser_class, TypeParser):
-            raise ValueError(
-                f"Parser class must inherit from TypeParser. "
-                f"Got: {parser_class.__name__}"
-            )
-
-        cls._registry[type_name.lower()] = parser_class
-
-    @classmethod
-    def get_available_types(cls) -> list[str]:
-        """
-        Get list of available type names.
-
-        Returns:
-            List of registered type names
-        """
-        return list(cls._registry.keys())
