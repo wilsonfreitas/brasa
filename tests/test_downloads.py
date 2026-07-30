@@ -3,7 +3,8 @@ from datetime import datetime
 
 import pytest
 
-from brasa.engine import CacheMetadata, _download_marketdata
+from brasa.engine import CacheMetadata
+from brasa.engine.download import _download_marketdata
 
 
 @pytest.mark.integration

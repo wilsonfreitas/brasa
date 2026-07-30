@@ -7,11 +7,11 @@ from brasa.engine import (
     CacheManager,
     CacheMetadata,
     MarketDataTemplate,
-    _download_marketdata,
-    _read_marketdata,
     get_marketdata,
     retrieve_template,
 )
+from brasa.engine.download import _download_marketdata
+from brasa.engine.processing import _read_marketdata
 from brasa.fieldsets import Fieldset
 
 

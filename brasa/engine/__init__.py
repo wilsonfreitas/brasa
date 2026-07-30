@@ -59,9 +59,6 @@ from .dependency_graph import (
     TemplateDependencyGraph,
 )
 
-# Download internal function (for backwards compatibility)
-from .download import _download_marketdata
-
 # Download plan
 from .download_plan import (
     DownloadPlan,
@@ -90,12 +87,8 @@ from .orchestrator import OrchestratorReport, PipelineOrchestrator, RunAllReport
 # Pipeline map
 from .pipeline_map import TemplateStatus, build_pipeline_map
 
-# Processing functions (including internal for backwards compatibility)
-from .processing import (
-    _read_marketdata,
-    get_fname_part,
-    save_partitioned_parquet_file,
-)
+# Processing functions
+from .processing import save_partitioned_parquet_file
 
 # Reporting classes
 from .reporting import (
@@ -161,8 +154,6 @@ __all__ = [
     "TemplateDependencyGraph",
     "TemplateStatus",
     "Verbosity",
-    "_download_marketdata",
-    "_read_marketdata",
     "build_pipeline_map",
     "capture_warnings",
     "clear_template_cache",
@@ -171,7 +162,6 @@ __all__ = [
     "create_task_result_success",
     "download_marketdata",
     "execute_download_plan",
-    "get_fname_part",
     "get_marketdata",
     "import_marketdata",
     "json_convert_from_object",
