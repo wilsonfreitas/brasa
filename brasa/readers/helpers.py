@@ -6,32 +6,6 @@ import pandas as pd
 from ..engine import CacheManager, CacheMetadata, retrieve_template
 
 
-def read_b3_economic_indicators_price(meta: CacheMetadata) -> pd.DataFrame:
-    fname = meta.downloaded_files[0]
-    man = CacheManager()
-    fname = man.cache_path(fname)
-    template = retrieve_template(meta.template)
-    reader = template.reader
-    converters = {
-        "refdate": str,
-    }
-    df = pd.read_csv(
-        fname,
-        encoding=reader.encoding,
-        header=None,
-        skiprows=reader.skip,
-        sep=reader.separator,
-        converters=converters,
-        names=reader.fields.names,
-        dtype_backend="pyarrow",
-    )
-
-    df["price"] = pd.to_numeric(df["price"].str.replace(",", "."), errors="coerce")
-    df["refdate"] = pd.to_datetime(df["refdate"], errors="coerce")
-
-    return df
-
-
 def read_b3_indexes_composition(meta: CacheMetadata) -> pd.DataFrame:
     fname = meta.downloaded_files[0]
     man = CacheManager()

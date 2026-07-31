@@ -676,11 +676,6 @@ python -m brasa.cli query "SELECT * FROM 'b3-cotahist-daily'" -o output.parquet
 - `b3-listed-fixed-income-etfs`: Fixed income ETFs
 - `b3-listed-reits`: Real estate funds
 
-**Lending**:
-- `b3-lending-trades`: Lending trades
-- `b3-lending-open-position`: Open positions
-- `b3-loan-balance`: Loan balances
-
 **OTC**:
 - `b3-otc-trade-information`: OTC trade data
 
