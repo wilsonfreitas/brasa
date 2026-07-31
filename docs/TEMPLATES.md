@@ -2,7 +2,7 @@
 
 This document provides comprehensive guidance on **pipeline-based templates** in brasa—the new approach using `reader.pipeline` and `etl.pipeline` with typed fields/datasets. These templates enable declarative, data-driven configurations for both download/read and ETL workflows.
 
-ETL is exclusively pipeline-based (`etl.pipeline`) — there is no function-based ETL mechanism. Some templates still use function-based readers (`reader.function`, documented in [CONFIGURATION.md](CONFIGURATION.md)); this guide focuses on the pipeline approach for both reading and ETL.
+ETL is exclusively pipeline-based (`etl.pipeline`) — there is no function-based ETL mechanism. Reading is also exclusively pipeline-based (`reader.pipeline`); the legacy `reader.function` mechanism was removed.
 
 ---
 
@@ -910,14 +910,13 @@ fields:
     description: <description>       # Recommended: human-readable description
     type: <type-definition>          # Required: data type with optional format
     tag: <source-path>               # Optional: path in source data (XML/JSON)
-    handler: <handler-name>          # Optional: custom parsing handler (legacy)
 ```
 
 ### Supported Types
 
 | Type | Syntax | Example | Notes |
 |------|--------|---------|-------|
-| String/Text | `character` | `character` | Default if no handler |
+| String/Text | `character` | `character` | Default |
 | Numeric | `number(decimal=..., thousands=...)` | `number(decimal=",", thousands=".")` | Supports optional separators (defaults to US format) |
 | Integer | `integer` | `integer` | Whole numbers |
 | Boolean | `boolean` | `boolean` | True/false |
@@ -1251,33 +1250,9 @@ datasets:
 
 ### Pitfall 3: Wrong Type Definition Syntax
 
-**Problem:** Inconsistent type syntax between old and new approaches.
+**Problem:** Old templates used `handler:` on fields. That syntax was removed — a `handler:` key is now ignored and the field silently falls back to `string`.
 
-**Legacy (handler-based):** Field handlers like `@CurrencyHandler`
-**New (type-based):** Type strings like `character`, `number`, `date(...)`
-
-**Example (wrong mix):**
-```yaml
-fields:
-  - name: price
-    handler: CurrencyHandler  # Old syntax—may not work with pipeline!
-  - name: date
-    type: date(format="%d/%m/%Y")  # New syntax
-```
-
-**Fix:** Use only `type:` with new pipelines.
-```yaml
-fields:
-  - name: price
-    type: number
-  - name: date
-    type: date(format="%d/%m/%Y")
-```
-
-**Best practice:**
-- New templates always use `type:` not `handler:`
-- Apply `apply_fields` step to convert types
-- Legacy `handler:` only in old function-based templates
+**Fix:** Always declare `type:` on every field, e.g. `type: number` or `type: date(format="%d/%m/%Y")`.
 
 ---
 
@@ -1597,7 +1572,7 @@ reader:
 
 ## Related Documentation
 
-- [CONFIGURATION.md](CONFIGURATION.md) - Function-based readers (`reader.function`) and general config
+- [CONFIGURATION.md](CONFIGURATION.md) - Environment, calendar, and DuckDB configuration
 - [ETL_PIPELINE_DESIGN.md](ETL_PIPELINE_DESIGN.md) - Detailed ETL design, step reference, examples
 - [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md) - Architecture overview
 - [USER_GUIDE.md](USER_GUIDE.md) - Getting started, common tasks
