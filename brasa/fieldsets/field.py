@@ -199,24 +199,10 @@ class Field:
         name = data["name"]
         description = data["description"]
 
-        # Determine type definition
-        # Priority: 1) top-level 'type', 2) handler.type with format, 3) default 'string'
-        if "type" in data:
-            type_definition = data["type"]
-        elif "handler" in data and isinstance(data["handler"], dict):
-            handler = data["handler"]
-            handler_type = handler.get("type", "string")
-            handler_format = handler.get("format")
-            # Build type definition from handler
-            if handler_format:
-                type_definition = f"{handler_type}(format='{handler_format}')"
-            else:
-                type_definition = handler_type
-        else:
-            type_definition = "string"
+        type_definition = data.get("type", "string")
 
         # Extract extra attributes (exclude core keys)
-        core_keys = {"name", "description", "type", "handler"}
+        core_keys = {"name", "description", "type"}
         extra_attrs = {k: v for k, v in data.items() if k not in core_keys}
 
         return cls(name, description, type_definition, **extra_attrs)
