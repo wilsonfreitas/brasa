@@ -305,7 +305,7 @@ Company registries, profiles, sector classification, and listed funds.
 
 ## Intraday & OTC Trades
 
-Tick-level trades and OTC/lending trade information.
+Tick-level trades and OTC trade information.
 
 | Dataset | Description | Key Columns | Status |
 |---------|-------------|-------------|--------|
@@ -313,7 +313,6 @@ Tick-level trades and OTC/lending trade information.
 | `input.b3-trades-intraday` | Intraday trades (tick) | refdate, symbol, traded_price, traded_quantity, trade_time | **canonical** (deepest intraday history) — input-only |
 | `input.b3-trades-intraday-equities` | Intraday equity trades | refdate, symbol, traded_price, traded_quantity, trade_time | input-only |
 | `input.b3-trades-intraday-derivatives` | Intraday derivative trades | refdate, symbol, traded_price, traded_quantity, trade_time | input-only |
-| `input.b3-lending-trades` | Securities-lending trades | refdate, symbol, interest_rate_term_trade, trade_quantity, trade_date | input-only |
 | `input.b3-otc-trade-information` | OTC trade information | refdate, symbol, traded_price, volume, traded_interest_rate | input-only |
 
 ## Synthetic / Internal Price Series
