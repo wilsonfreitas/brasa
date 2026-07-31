@@ -731,7 +731,7 @@ python -m brasa.cli query "SELECT * FROM 'b3-cotahist-daily'" -o output.parquet
 
 - `bcb-data`: Economic indicators (CDI, SELIC, IPCA, IGPM)
 - `bcb-currency-data`: Exchange rates
-- `bcb-sgs-data`: SGS time series
+- `bcb-sgs`: SGS time series
 
 ### ANBIMA Data Sources
 
