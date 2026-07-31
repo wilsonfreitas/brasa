@@ -85,7 +85,7 @@ Brazilian ETFs pay no dividends) **except `NDIV11`, `DIVD11`, `SPYI11`**.
 | Dataset | Description | Key Columns | Status |
 |---------|-------------|-------------|--------|
 | `staging.b3-cotahist` | Unified COTAHIST quotations — deepest history for stocks/ETFs/options; volume, nº de negócios, nº de trades | refdate, symbol, open, high, low, average, close, volume, trade_quantity, traded_contracts, isin | **canonical** (daily stock/ETF/option OHLC & volume) |
-| `staging.b3-equities-spot-market` | Which stocks trade on the spot market (non-fractional); a filtered summary of `b3-bvbg028-equities` | refdate, symbol, isin, corporation_name, close, open | canonical (spot-market membership) |
+| `staging.b3-equities-spot-market` | Spot-market membership over time — **full-span** (all refdates of the register, 2016-01-15→); excludes B3 test instruments. For *current* members filter `refdate = (SELECT max(refdate) …)` | refdate, symbol, isin, corporation_name, close, open | canonical (spot-market membership) |
 | `staging.b3-equities-adjusted-prices` | **Adjusted equity OHLC** — back-adjusted continuous price series built from `staging.b3-equities-returns`; real trading rows only (no calendar gap-filling) | refdate, symbol, open, high, low, close | **canonical** (adjusted equity OHLC) |
 | `staging.b3-equities-adjusted-prices-filled` | Same series, calendar-dense: gap days within each symbol's own [first, last] range get return 0 / carried-forward prices | refdate, symbol, open, high, low, close | calendar-dense variant |
 | `staging.b3-equities-unadjusted-prices` | Unadjusted OHLC+volume for the spot-market universe, from `input.b3-bvbg086`; the two whole-market gap days patched — **2016-02-29** (BDIN, `cod_bdi=2`) and **2021-06-10** (cotahist). `distribution_id` from the bvbg028 register (null only on 2022-04-26, 2023-12-08 and one symbol on 2021-06-11). Complements `staging.b3-cotahist` (deeper history) and the adjusted-prices datasets above | refdate, symbol, trade_quantity, traded_contracts, volume, open, low, high, close, average, distribution_id | **canonical** (unadjusted spot-market OHLC+volume) |
@@ -171,7 +171,7 @@ is the options registry (strikes/maturities).
 | `input.b3-bvbg028-cash` | Cash-market instrument definitions | refdate, instrument_asset, security_category, currency_code |
 | `input.b3-bvbg028-securities_lending` | Securities-lending instruments | refdate, symbol, instrument_asset, fungibility_indicator |
 | `input.b3-bvbg028-otc_derivatives` | OTC derivative instruments | refdate, instrument_asset, contract_type |
-| `staging.b3-equities-register` | Processed equity register | refdate, symbol, isin, corporation_name |
+| `staging.b3-equities-register` | **Full-span** daily equity registry — faithful mirror of `input.b3-bvbg028-equities` across all refdates, incl. same-day `distribution_id` duplicates (no dedup). For today's listing filter `refdate = max(refdate)` | refdate, symbol, isin, corporation_name |
 | `staging.b3-equities-instrument-assets` | Distinct equity instrument assets | refdate, instrument_asset |
 | `staging.b3-futures-register` | Processed futures register | refdate, symbol, maturity_date, contract_multiplier |
 

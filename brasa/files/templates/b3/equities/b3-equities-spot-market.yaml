@@ -1,9 +1,9 @@
 id: b3-equities-spot-market
 description: >
-  | Dataset de dados cadastrais de ações fitrando mercado à vista (instrument_market = 10),
-  | segmento de ações (instrument_segment = 1) da B3 (Bolsa de Valores do Brasil)
-  | e instrumentos válidos para análise de ações, excluindo instrumentos como 'TAXA' e '9999-12-31'
-  | e filtrando por categorias específicas.
+  | Universo spot-market full-span (todos os refdates) derivado de
+  | staging.b3-equities-register: mercado à vista (instrument_market = 10),
+  | segmento de ações (instrument_segment = 1), instrumentos válidos
+  | (exclui 'TAXA' e trading_start_date '9999-12-31') nas categorias:
   |
   | 1 - BDR
   | 3 - ETF EQUITIES
@@ -11,23 +11,26 @@ description: >
   | 11 - SHARES
   | 13 - UNIT
   | 21 - ETF FOREIGN INDEX
+  |
+  | Exclui instrumentos de teste da B3 (corporation_name contendo 'TESTE'
+  | ou igual a 'XX' — séries fictícias TF4xx-TF6xx, IPNN3; WIL-132).
+  | Para "membros atuais", filtre refdate = max(refdate).
 etl:
   pipeline:
-    - step: sql_query
+    - step: sql_export
       datasets:
         - staging.b3-equities-register
-      query: |+
-        -- B3 Equities Spot Market dataset
-        select
-          *
-        from
-          'staging.b3-equities-register'
-        where
-          instrument_market = 10 and
-          instrument_segment = 1 and
-          instrument_asset <> 'TAXA' and
-          trading_start_date <> '9999-12-31' and
-          security_category in (1, 11, 6, 21, 3, 13)
+      query: |
+        SELECT *
+        FROM 'staging.b3-equities-register'
+        WHERE instrument_market = 10
+          AND instrument_segment = 1
+          AND instrument_asset <> 'TAXA'
+          AND trading_start_date <> DATE '9999-12-31'
+          AND security_category IN (1, 11, 6, 21, 3, 13)
+          AND corporation_name NOT ILIKE '%TESTE%'
+          AND corporation_name <> 'XX'
 
 writer:
   layer: staging
+  partitioning: [refdate]

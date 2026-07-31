@@ -71,7 +71,8 @@ Selection questions arrive as *information needs*, not table names. Match the ne
 - **Equity-option OHLC** → `staging.b3-cotahist`. Longest history.
 - **Volume / nº de negócios / nº de trades (deepest history)** → `staging.b3-cotahist`.
 - **"What stocks/assets exist" (registry)** → `input.b3-bvbg028-equities`. Daily registry of everything listed (stocks, fractional…); also `market_capitalisation`.
-- **Which stocks trade on the spot market (non-fractional)** → `staging.b3-equities-spot-market`.
+- **Which stocks trade on the spot market (non-fractional)** → `staging.b3-equities-spot-market`. Full-span since WIL-132: filter `refdate = (SELECT max(refdate) FROM "staging.b3-equities-spot-market")` for current members.
+- **Historical listing / registry as of a past date** → `staging.b3-equities-register` (full-span mirror of bvbg028; same-day `distribution_id` duplicates kept — dedup with `max(distribution_id)` when you need one row per day).
 
 ### Returns
 
@@ -168,7 +169,7 @@ These are the most commonly used datasets, with their actual column names verifi
 | Table | Description | Key Columns |
 |-------|-------------|-------------|
 | `staging.b3-cotahist` | Daily OHLC + volume for stocks / ETFs / options — deepest history; **unadjusted** | refdate, symbol, open, high, low, average, close, volume, trade_quantity, traded_contracts |
-| `staging.b3-equities-spot-market` | Stocks trading on the spot market (non-fractional) | refdate, symbol, isin, corporation_name, close, open |
+| `staging.b3-equities-spot-market` | Stocks trading on the spot market (non-fractional) (full-span, all refdates) | refdate, symbol, isin, corporation_name, close, open |
 | `input.b3-bvbg028-equities` | Asset registry — "what stocks exist" (BVBG028) | refdate, symbol, isin, corporation_name, market_capitalisation |
 | `input.b3-bvbg028-options_on_equities` | Options-on-equities registry (strikes/maturities) | refdate, symbol, exercise_price, option_type, maturity_date |
 | `input.b3-bvbg086` | Market data for all B3 assets — has `oscillation`; **no `settlement_value`** | refdate, symbol, open, high, low, close, oscillation, open_interest, volume, adjusted_quote, adjusted_tax |
@@ -234,8 +235,8 @@ These are the most commonly used datasets, with their actual column names verifi
 | Table | Description | Key Columns |
 |-------|-------------|-------------|
 | `staging.b3-equities-instrument-assets` | Instrument asset mapping | refdate, instrument_asset |
-| `staging.b3-equities-register` | Equities register | refdate, symbol, isin, corporation_name |
-| `staging.b3-equities-spot-market` | Spot market data | refdate, symbol, isin, corporation_name |
+| `staging.b3-equities-register` | Equities register (full-span, all refdates) | refdate, symbol, isin, corporation_name |
+| `staging.b3-equities-spot-market` | Spot market data (full-span, all refdates) | refdate, symbol, isin, corporation_name |
 
 ### Futures & Options
 
