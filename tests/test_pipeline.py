@@ -79,7 +79,6 @@ def test_template_loading():
     assert template.id == "b3-futures-settlement-prices"
     assert template.has_reader
     assert template.reader.has_pipeline
-    assert template.reader.read_function is None
 
 
 def test_etl_pipeline_template_loading():

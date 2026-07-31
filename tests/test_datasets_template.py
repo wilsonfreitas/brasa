@@ -212,10 +212,9 @@ class TestBackwardCompatibility:
         assert tpl.has_reader
 
     def test_current_bvbg087_template_loads(self):
-        """Test that current BVBG087 template loads (before migration)."""
+        """Test that current BVBG087 template loads."""
         tpl = retrieve_template("b3-bvbg087")
 
         assert tpl.id == "b3-bvbg087"
         assert tpl.has_reader
-        # Currently uses function-based reader
-        assert tpl.reader.read_function is not None or tpl.reader.has_pipeline
+        assert tpl.reader.has_pipeline

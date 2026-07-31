@@ -83,7 +83,7 @@ class MarketDataReader:
     """Configuration for reading market data files.
 
     Defines how to read downloaded files and convert them to DataFrames.
-    Supports both legacy function-based readers and the new pipeline approach.
+    Uses the declarative pipeline approach.
     """
 
     def __init__(self, reader: dict, template_id: str = ""):
@@ -102,18 +102,11 @@ class MarketDataReader:
         self.datasets: dict[str, DatasetConfig] | None = None
         self.output_filename_format = reader.get("output-filename-format", "%Y-%m-%d")
 
-        # Check for pipeline-based reader (new approach)
         self._pipeline = None
         if "pipeline" in reader:
             from .pipeline import ReaderPipeline
 
             self._pipeline = ReaderPipeline.from_config(reader["pipeline"])
-            self.read_function = None
-        elif "function" in reader:
-            # Legacy function-based reader
-            self.read_function = load_function_by_name(reader["function"])
-        else:
-            self.read_function = None
 
     @property
     def has_pipeline(self) -> bool:
@@ -145,7 +138,7 @@ class MarketDataReader:
         return self.attributes.get(key, default)
 
     def read(self, meta: CacheMetadata) -> pd.DataFrame | dict[str, pd.DataFrame]:
-        """Read data using the configured read function or pipeline.
+        """Read data using the configured pipeline.
 
         Args:
             meta: Cache metadata containing file paths and context.
@@ -153,20 +146,15 @@ class MarketDataReader:
         Returns:
             DataFrame or dictionary of DataFrames with the read data.
         """
-        if self._pipeline is not None:
-            # Use the new pipeline approach
-            return self._pipeline.execute(
-                meta=meta,
-                reader_config=self.attributes,
-                fields=self.fields,
-                datasets=self.datasets,
-                template_id=self._template_id,
-            )
-        elif self.read_function is not None:
-            # Use the legacy function approach
-            return self.read_function(meta)
-        else:
-            raise ValueError("Reader has no pipeline or function configured")
+        if self._pipeline is None:
+            raise ValueError("Reader has no pipeline configured")
+        return self._pipeline.execute(
+            meta=meta,
+            reader_config=self.attributes,
+            fields=self.fields,
+            datasets=self.datasets,
+            template_id=self._template_id,
+        )
 
 
 class MarketDataWriter:
