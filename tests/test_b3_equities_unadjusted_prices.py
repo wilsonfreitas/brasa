@@ -66,6 +66,7 @@ def test_unadjusted_prices_pre2016_cotahist_branch_with_isin_guard():
                 "high": pa.array([8.5, 11.0, 10.8, 28.5], pa.float64()),
                 "close": pa.array([8.2, 10.5, 10.7, 28.0], pa.float64()),
                 "average": pa.array([8.1, 10.2, 10.6, 27.5], pa.float64()),
+                "distribution_id": pa.array([90, 102, 102, 205], pa.int64()),
             }
         ),
     )
@@ -74,16 +75,16 @@ def test_unadjusted_prices_pre2016_cotahist_branch_with_isin_guard():
         "b3-bvbg086",
         pa.table(
             {
-                "refdate": pa.array([date(2016, 3, 1)], pa.date32()),
-                "symbol": ["PETR4"],
-                "traded_quantity": pa.array([200.0], pa.float64()),
-                "traded_contracts": pa.array([2000.0], pa.float64()),
-                "volume": pa.array([25000.0], pa.float64()),
-                "open": pa.array([12.0], pa.float64()),
-                "low": pa.array([11.8], pa.float64()),
-                "high": pa.array([12.8], pa.float64()),
-                "close": pa.array([12.5], pa.float64()),
-                "average": pa.array([12.4], pa.float64()),
+                "refdate": pa.array([date(2016, 3, 1), date(2016, 3, 2)], pa.date32()),
+                "symbol": ["PETR4", "PETR4"],
+                "traded_quantity": pa.array([200.0, 210.0], pa.float64()),
+                "traded_contracts": pa.array([2000.0, 2100.0], pa.float64()),
+                "volume": pa.array([25000.0, 26000.0], pa.float64()),
+                "open": pa.array([12.0, 12.5], pa.float64()),
+                "low": pa.array([11.8, 12.3], pa.float64()),
+                "high": pa.array([12.8, 13.2], pa.float64()),
+                "close": pa.array([12.5, 13.0], pa.float64()),
+                "average": pa.array([12.4, 12.9], pa.float64()),
             }
         ),
     )
@@ -104,6 +105,25 @@ def test_unadjusted_prices_pre2016_cotahist_branch_with_isin_guard():
                 "preco_max": pa.array([11.2], pa.float64()),
                 "preco_ult": pa.array([11.0], pa.float64()),
                 "preco_med": pa.array([10.9], pa.float64()),
+                "num_dist": pa.array([115.0], pa.float64()),
+            }
+        ),
+    )
+    _seed(
+        "input",
+        "b3-bvbg028-equities",
+        pa.table(
+            {
+                "refdate": pa.array(
+                    [date(2016, 3, 1), date(2016, 3, 1), date(2016, 3, 1)],
+                    pa.date32(),
+                ),
+                "symbol": ["PETR4", "PETR4", "PETR4"],
+                "distribution_id": pa.array([137, 138, 999], pa.int64()),
+                "instrument_market": pa.array([10, 10, 20], pa.int64()),
+                "instrument_segment": pa.array([1, 1, 1], pa.int64()),
+                "instrument_asset": ["PETR", "PETR", "PETR"],
+                "security_category": pa.array([11, 11, 11], pa.int64()),
             }
         ),
     )
@@ -128,8 +148,20 @@ def test_unadjusted_prices_pre2016_cotahist_branch_with_isin_guard():
         (date(2010, 6, 15), 10.5),
         (date(2016, 2, 29), 11.0),
         (date(2016, 3, 1), 12.5),
+        (date(2016, 3, 2), 13.0),
         (date(2021, 6, 10), 28.0),
     }
     assert set(zip(df["refdate"], df["close"], strict=True)) == expected
-    assert len(df) == 4
+    assert len(df) == 5
     assert df.groupby(["symbol", "refdate"]).size().max() == 1
+
+    # distribution_id per branch: cotahist native (pre-2016 and 2021-06-10),
+    # BDIN num_dist cast (2016-02-29), register max() dedup picking 138 over
+    # 137 and ignoring the market=20 row (2016-03-01), null when the register
+    # has no same-day row (2016-03-02).
+    dist = df.set_index("refdate")["distribution_id"]
+    assert dist[date(2010, 6, 15)] == 102
+    assert dist[date(2016, 2, 29)] == 115
+    assert dist[date(2016, 3, 1)] == 138
+    assert pd.isna(dist[date(2016, 3, 2)])
+    assert dist[date(2021, 6, 10)] == 205

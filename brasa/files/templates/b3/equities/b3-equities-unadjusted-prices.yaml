@@ -9,6 +9,7 @@ etl:
         - staging.b3-cotahist
         - input.b3-bdin-stocks-summary
         - staging.b3-equities-spot-market
+        - input.b3-bvbg028-equities
       query: |+
         -- Unadjusted OHLC+volume for the spot-market universe.
         -- bvbg086 is the base (starts 2016-02-01) with two whole-market
@@ -26,26 +27,45 @@ etl:
         -- The bvbg086 base joins by symbol only (same era as the universe);
         -- universe_symbols keeps it duplicate-free if a symbol ever maps to
         -- more than one isin in the register.
+        -- distribution_id (WIL-136): cotahist and BDIN branches carry it
+        -- natively; the bvbg086 base left-joins the bvbg028 register deduped
+        -- by max(distribution_id) — around corporate events B3 lists the old
+        -- and new distribution on the same day and max() picks the trading
+        -- one (validated vs cotahist 2024: 3 mismatches in 638k pairs).
+        -- Nulls only on register gap days: 2022-04-26, 2023-12-08 (whole
+        -- market) and 2021-06-11 (one symbol).
         with universe as (
           select distinct symbol, isin from 'staging.b3-equities-spot-market'
         ),
         universe_symbols as (
           select distinct symbol from universe
+        ),
+        register_dist as (
+          select refdate, symbol, max(distribution_id) as distribution_id
+          from 'input.b3-bvbg028-equities'
+          where instrument_market = 10 and instrument_segment = 1
+            and instrument_asset <> 'TAXA'
+            and security_category in (1, 11, 6, 21, 3, 13)
+          group by refdate, symbol
         )
         select
           q.refdate, q.symbol,
           q.traded_quantity as trade_quantity,
           q.traded_contracts, q.volume,
-          q.open, q.low, q.high, q.close, q.average
+          q.open, q.low, q.high, q.close, q.average,
+          rd.distribution_id
         from 'input.b3-bvbg086' q
         join universe_symbols u on u.symbol = q.symbol
+        left join register_dist rd
+          on rd.refdate = q.refdate and rd.symbol = q.symbol
 
         union all
 
         select
           c.refdate, c.symbol,
           c.trade_quantity, c.traded_contracts, c.volume,
-          c.open, c.low, c.high, c.close, c.average
+          c.open, c.low, c.high, c.close, c.average,
+          c.distribution_id
         from 'staging.b3-cotahist' c
         join universe u on u.symbol = c.symbol and u.isin = c.isin
         where c.refdate = '2021-06-10'
@@ -62,7 +82,8 @@ etl:
           b.preco_min as low,
           b.preco_max as high,
           b.preco_ult as close,
-          b.preco_med as average
+          b.preco_med as average,
+          cast(b.num_dist as integer) as distribution_id
         from 'input.b3-bdin-stocks-summary' b
         join universe u on u.symbol = b.cod_negociacao and u.isin = b.cod_isin
         where b.refdate = '2016-02-29' and b.cod_bdi = 2
@@ -72,7 +93,8 @@ etl:
         select
           c.refdate, c.symbol,
           c.trade_quantity, c.traded_contracts, c.volume,
-          c.open, c.low, c.high, c.close, c.average
+          c.open, c.low, c.high, c.close, c.average,
+          c.distribution_id
         from 'staging.b3-cotahist' c
         join universe u on u.symbol = c.symbol and u.isin = c.isin
         where c.refdate < date '2016-02-01' and c.instrument_market = 10
@@ -116,3 +138,6 @@ fields:
   - name: average
     description: Average price (unadjusted)
     type: numeric
+  - name: distribution_id
+    description: Distribution number of the security (register)
+    type: integer
