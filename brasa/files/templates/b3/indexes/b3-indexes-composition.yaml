@@ -16,7 +16,6 @@ downloader:
   extra-key: date
 reader:
   locale: pt
-  function: brasa.readers.read_b3_indexes_composition
   encoding: latin1
   pipeline:
     - step: read_json

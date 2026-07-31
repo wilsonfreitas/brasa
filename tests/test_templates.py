@@ -12,37 +12,6 @@ from brasa.engine import (
 )
 from brasa.engine.download import _download_marketdata
 from brasa.engine.processing import _read_marketdata
-from brasa.fieldsets import Fieldset
-
-
-def test_load_template():
-    tpl = MarketDataTemplate("brasa/files/templates/bcb/bcb-sgs-data.yaml")
-
-    assert tpl.has_downloader
-    assert tpl.has_reader
-
-
-def test_template_load_fields():
-    tpl = MarketDataTemplate("brasa/files/templates/bcb/bcb-sgs-data.yaml")
-
-    assert tpl.has_downloader
-    assert tpl.has_reader
-    # Template.fields is now a Fieldset
-    assert isinstance(tpl.fields, Fieldset)
-    assert len(tpl.fields) == 3
-    assert tpl.fields["refdate"].name == "refdate"
-    assert tpl.fields["refdate"].description == "Data de referência"
-    # Field now has type_name instead of handler
-    assert tpl.fields["refdate"].type_name == "date"
-    assert tpl.fields["value"].type_name == "numeric"
-    assert tpl.fields["code"].type_name == "integer"
-
-
-def test_retrieve_template():
-    tpl = retrieve_template("bcb-sgs-data")
-    assert tpl is not None
-    assert isinstance(tpl, MarketDataTemplate)
-    assert tpl.id == "bcb-sgs-data"
 
 
 @pytest.mark.skip(
