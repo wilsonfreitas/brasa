@@ -1,6 +1,6 @@
 [project]
 name = "brasa-marketdata"
-version = "0.2.0"
+version = "0.3.0"
 description = "Python library to extract finance market data from brazillian financial institutions: B3, ANBIMA, Tesouro Direto, CVM."
 authors = [
     { name = "wilsonfreitas", email = "wilson.freitas@gmail.com" },
