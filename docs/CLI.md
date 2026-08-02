@@ -19,6 +19,7 @@ brasa <command> [options]
 | Group | Command | Purpose |
 |-------|---------|---------|
 | Setup | `init` | Choose the data directory and persist it |
+| Setup | `info` | Show version and configuration status (also: `brasa --version`) |
 | Execution | `download` | Download raw market data files |
 | Execution | `import` | Import local files into a template (no download) |
 | Execution | `process` | Parse raw files into Parquet datasets |
@@ -60,6 +61,27 @@ brasa init [--data-path PATH] [--yes]
 | `-y`, `--yes` | Accept the suggested default without prompting |
 
 Without flags in an interactive terminal, `init` suggests a default (the previously persisted path, or the platform data dir such as `~/.local/share/brasa`) and asks for confirmation or a custom path. With non-interactive stdin it accepts the default automatically. Re-running `init` reconfigures: the current persisted value becomes the suggestion. The cache substructure (`raw/`, `db/`, `meta/`, metadata DB) is created lazily on first use.
+
+### `info`
+
+Shows the brasa version, whether brasa is configured, how it is configured (`BRASA_DATA_PATH` environment variable or the config file written by `brasa init`), and the resolved data path. `brasa --version` prints just the first line.
+
+```bash
+brasa info
+brasa --version
+```
+
+Example output:
+
+```
+brasa 0.2.0
+
+data path:  /home/user/brasa-data  (exists)
+source:     BRASA_DATA_PATH environment variable
+config:     /home/user/.config/brasa/config.toml  (data_path = /other/path — overridden by BRASA_DATA_PATH)
+```
+
+Exit code is `0` when brasa is configured and the data path exists on disk, `1` otherwise (not configured, missing directory, or invalid config file) — useful as a preflight in scripts: `brasa info && brasa run-all`.
 
 ---
 

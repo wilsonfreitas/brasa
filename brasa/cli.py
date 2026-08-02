@@ -4,7 +4,9 @@ import os
 import shutil
 import subprocess
 import sys
+import tomllib
 from contextlib import suppress
+from importlib import metadata
 from pathlib import Path
 
 import pandas as pd
@@ -136,6 +138,11 @@ def _parse_layer_dataset(value: str) -> tuple[str, str]:
 parser = argparse.ArgumentParser(
     description="Brasa CLI for downloading and processing market data",
 )
+parser.add_argument(
+    "--version",
+    action="version",
+    version=f"brasa {metadata.version('brasa-marketdata')}",
+)
 
 subparsers = parser.add_subparsers(dest="command", title="Commands")
 
@@ -151,6 +158,10 @@ parser_init.add_argument(
     "--yes",
     action="store_true",
     help="accept the suggested default without prompting",
+)
+
+parser_info = subparsers.add_parser(
+    "info", help="show version and environment configuration status"
 )
 
 parser_download = subparsers.add_parser("download", help="download market data")
@@ -892,10 +903,63 @@ def _cmd_init(args) -> None:
         )
 
 
+def _cmd_info() -> None:
+    """Handle `brasa info`: show version and configuration diagnostics.
+
+    Exits with code 1 when brasa is not configured, the data path is
+    missing on disk, or the config file contains invalid TOML.
+    """
+    from .engine.config import config_file_path, load_config
+
+    print(f"brasa {metadata.version('brasa-marketdata')}")
+    print()
+
+    env_path = os.environ.get("BRASA_DATA_PATH")
+    cfg_file = config_file_path()
+    cfg_error: str | None = None
+    cfg: dict = {}
+    if cfg_file.exists():
+        try:
+            cfg = load_config()
+        except tomllib.TOMLDecodeError as exc:
+            cfg_error = str(exc)
+    cfg_path = cfg.get("data_path")
+
+    data_path = env_path or cfg_path
+    if data_path is None:
+        if cfg_error is not None:
+            print(f"config:     {cfg_file}  (INVALID TOML: {cfg_error})")
+        elif cfg_file.exists():
+            print(f"config:     {cfg_file}  (no data_path key)")
+        print("not configured: no BRASA_DATA_PATH and no config file.")
+        print("Run `brasa init` to set up your data directory, or set BRASA_DATA_PATH.")
+        sys.exit(1)
+
+    exists = Path(data_path).expanduser().is_dir()
+    marker = "(exists)" if exists else "(MISSING)"
+    print(f"data path:  {data_path}  {marker}")
+    if env_path:
+        print("source:     BRASA_DATA_PATH environment variable")
+    else:
+        print(f"source:     config file ({cfg_file})")
+    if cfg_error is not None:
+        print(f"config:     {cfg_file}  (INVALID TOML: {cfg_error})")
+    elif env_path and cfg_path:
+        print(
+            f"config:     {cfg_file}  "
+            f"(data_path = {cfg_path} — overridden by BRASA_DATA_PATH)"
+        )
+    if not exists:
+        sys.exit(1)
+
+
 def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.command == "init":
         _cmd_init(args)
+        return
+    if args.command == "info":
+        _cmd_info()
         return
     try:
         _run_command(args)
