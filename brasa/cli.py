@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 from contextlib import suppress
+from importlib import metadata
 from pathlib import Path
 
 import pandas as pd
@@ -135,6 +136,11 @@ def _parse_layer_dataset(value: str) -> tuple[str, str]:
 
 parser = argparse.ArgumentParser(
     description="Brasa CLI for downloading and processing market data",
+)
+parser.add_argument(
+    "--version",
+    action="version",
+    version=f"brasa {metadata.version('brasa-marketdata')}",
 )
 
 subparsers = parser.add_subparsers(dest="command", title="Commands")
