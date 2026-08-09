@@ -1,17 +1,28 @@
 id: b3-cotahist
 
-description: Dataset dos arquivos COTAHIST
+description: >
+  | Dataset dos arquivos COTAHIST — série unificada (anual + diário).
+  | Escrito via sql_export (streaming DuckDB → parquet), pois o volume
+  | (~28M linhas) não cabe em memória via concat_datasets.
 
 etl:
   pipeline:
-    - step: concat_datasets
-      inputs:
-        - b3-cotahist-yearly
-        - b3-cotahist-daily
-      layer: input
-
-    - step: sort
-      by: [refdate]
+    - step: sql_export
+      datasets:
+        - input.b3-cotahist-yearly
+        - input.b3-cotahist-daily
+      query: |
+        -- Boundary declared once: os arquivos anuais são a fonte
+        -- consolidada; o diário só entra depois do último refdate anual
+        -- (os dois inputs se sobrepõem, e concatenar duplicava as linhas
+        -- do período coberto pelos dois).
+        select * from 'input.b3-cotahist-yearly'
+        union all
+        select * from 'input.b3-cotahist-daily'
+        where refdate > (
+          select max(refdate) from 'input.b3-cotahist-yearly'
+        )
 
 writer:
   layer: staging
+  partitioning: [refdate]
