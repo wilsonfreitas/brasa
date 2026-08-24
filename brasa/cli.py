@@ -1084,22 +1084,29 @@ def _run_command(args) -> None:  # noqa: PLR0912, PLR0915
     elif args.command == "process":
         verbosity = get_verbosity(args)
         report_file = getattr(args, "report", None)
+        reports = []
         for template in args.template:
             _template = retrieve_template(template)
             if _template.is_etl:
-                process_etl(
-                    template,
-                    verbosity=verbosity,
-                    report_file=report_file,
+                reports.append(
+                    process_etl(
+                        template,
+                        verbosity=verbosity,
+                        report_file=report_file,
+                    )
                 )
             else:
-                process_marketdata(
-                    template,
-                    reprocess=args.reprocess,
-                    verbosity=verbosity,
-                    report_file=report_file,
-                    show_skipped=args.show_skipped,
+                reports.append(
+                    process_marketdata(
+                        template,
+                        reprocess=args.reprocess,
+                        verbosity=verbosity,
+                        report_file=report_file,
+                        show_skipped=args.show_skipped,
+                    )
                 )
+        if not all(r.success for r in reports):
+            sys.exit(1)
     elif args.command == "create-views":
         layers = [args.layer] if hasattr(args, "layer") and args.layer else None
         results = BrasaDB.create_all_views(layers)

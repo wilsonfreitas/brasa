@@ -109,11 +109,11 @@ def _run_sql(datasets: list[str], query: str) -> list:
     Raises:
         RuntimeError: If query execution fails.
     """
-    import duckdb
-
     from brasa.queries import get_dataset
 
-    conn = duckdb.connect(":memory:")
+    from .duck import connect_memory
+
+    conn = connect_memory()
     try:
         for dataset_ref in datasets:
             if "." in dataset_ref:

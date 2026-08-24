@@ -182,7 +182,7 @@ class TestOrchestratorDryRun:
         etl = _make_etl_template("my-etl", input_datasets=["dl-src"])
         graph = _build_graph_from_templates([src, etl])
 
-        orchestrator = PipelineOrchestrator(graph=graph)
+        orchestrator = PipelineOrchestrator(graph=graph, isolated=False)
 
         with (
             patch.object(
@@ -209,7 +209,7 @@ class TestOrchestratorDryRun:
         etl = _make_etl_template("my-etl", input_datasets=["dl-src"])
         graph = _build_graph_from_templates([src, etl])
 
-        orchestrator = PipelineOrchestrator(graph=graph)
+        orchestrator = PipelineOrchestrator(graph=graph, isolated=False)
 
         with (
             patch.object(
@@ -241,7 +241,7 @@ class TestOrchestratorExecute:
         etl = _make_etl_template("my-etl", input_datasets=["dl-src"])
         graph = _build_graph_from_templates([src, etl])
 
-        orchestrator = PipelineOrchestrator(graph=graph)
+        orchestrator = PipelineOrchestrator(graph=graph, isolated=False)
 
         call_order = []
 
@@ -283,7 +283,7 @@ class TestOrchestratorExecute:
         end = _make_etl_template("etl-end", input_datasets=["staging.etl-mid"])
         graph = _build_graph_from_templates([src, mid, end])
 
-        orchestrator = PipelineOrchestrator(graph=graph)
+        orchestrator = PipelineOrchestrator(graph=graph, isolated=False)
         call_order = []
 
         def mock_process_marketdata(template_name, **kwargs):
@@ -327,7 +327,7 @@ class TestOrchestratorExecute:
         etl = _make_etl_template("my-etl", input_datasets=["dl-src"])
         graph = _build_graph_from_templates([src, etl])
 
-        orchestrator = PipelineOrchestrator(graph=graph)
+        orchestrator = PipelineOrchestrator(graph=graph, isolated=False)
 
         def mock_process_etl(template_name, **kwargs):
             return _make_success_report(template_name, "etl")
@@ -356,7 +356,7 @@ class TestOrchestratorExecute:
         etl = _make_etl_template("my-etl", input_datasets=["dl-src"])
         graph = _build_graph_from_templates([src, etl])
 
-        orchestrator = PipelineOrchestrator(graph=graph)
+        orchestrator = PipelineOrchestrator(graph=graph, isolated=False)
 
         def mock_process_marketdata(template_name, **kwargs):
             return _make_error_report(template_name, "process")
@@ -394,7 +394,7 @@ class TestOrchestratorForceMode:
         etl = _make_etl_template("my-etl", input_datasets=["dl-src"])
         graph = _build_graph_from_templates([src, etl])
 
-        orchestrator = PipelineOrchestrator(graph=graph)
+        orchestrator = PipelineOrchestrator(graph=graph, isolated=False)
         call_order = []
 
         def mock_process_marketdata(template_name, **kwargs):
@@ -563,7 +563,7 @@ class TestOrchestratorLazyGraph:
 
     def test_graph_created_on_access(self):
         """Graph should be created when first accessed."""
-        orchestrator = PipelineOrchestrator()
+        orchestrator = PipelineOrchestrator(isolated=False)
         assert orchestrator._graph is None
 
         with (
@@ -586,7 +586,7 @@ class TestOrchestratorLazyGraph:
         src = _make_download_template("dl-src")
         graph = _build_graph_from_templates([src])
 
-        orchestrator = PipelineOrchestrator(graph=graph)
+        orchestrator = PipelineOrchestrator(graph=graph, isolated=False)
         assert orchestrator.graph is graph
 
 
@@ -673,7 +673,7 @@ class TestETLStalenessReEvaluation:
         etl = _make_etl_template("my-etl", input_datasets=["dl-src"])
         graph = _build_graph_from_templates([src, etl])
 
-        orchestrator = PipelineOrchestrator(graph=graph)
+        orchestrator = PipelineOrchestrator(graph=graph, isolated=False)
 
         call_order = []
 
@@ -730,7 +730,7 @@ class TestETLStalenessReEvaluation:
         etl = _make_etl_template("my-etl", input_datasets=["dl-src"])
         graph = _build_graph_from_templates([src, etl])
 
-        orchestrator = PipelineOrchestrator(graph=graph)
+        orchestrator = PipelineOrchestrator(graph=graph, isolated=False)
 
         def mock_process_marketdata(template_name, **kwargs):
             return _make_success_report(template_name, "process")
@@ -759,7 +759,7 @@ class TestETLStalenessReEvaluation:
         etl = _make_etl_template("my-etl", input_datasets=["dl-src"])
         graph = _build_graph_from_templates([src, etl])
 
-        orchestrator = PipelineOrchestrator(graph=graph)
+        orchestrator = PipelineOrchestrator(graph=graph, isolated=False)
         staleness_calls: list[str] = []
 
         def staleness_side_effect(template_id):
@@ -831,7 +831,7 @@ class TestExecuteAll:
         mid = _make_etl_template("etl-mid", input_datasets=["dl-src"])
         end = _make_etl_template("etl-end", input_datasets=["staging.etl-mid"])
         graph = _build_graph_from_templates([src, mid, end])
-        orch = PipelineOrchestrator(graph=graph)
+        orch = PipelineOrchestrator(graph=graph, isolated=False)
 
         call_order = []
 
@@ -863,7 +863,7 @@ class TestExecuteAll:
         src = _make_download_template("dl-src")
         mid = _make_etl_template("etl-mid", input_datasets=["dl-src"])
         graph = _build_graph_from_templates([src, mid])
-        orch = PipelineOrchestrator(graph=graph)
+        orch = PipelineOrchestrator(graph=graph, isolated=False)
 
         with (
             patch.object(
@@ -888,7 +888,7 @@ class TestExecuteAll:
         mid = _make_etl_template("etl-mid", input_datasets=["dl-src"])
         end = _make_etl_template("etl-end", input_datasets=["staging.etl-mid"])
         graph = _build_graph_from_templates([src, mid, end])
-        orch = PipelineOrchestrator(graph=graph)
+        orch = PipelineOrchestrator(graph=graph, isolated=False)
 
         def mpm(template_name, **kwargs):
             return _make_error_report(template_name, "process")
@@ -912,7 +912,7 @@ class TestExecuteAll:
         src = _make_download_template("dl-src")
         mid = _make_etl_template("etl-mid", input_datasets=["dl-src"])
         graph = _build_graph_from_templates([src, mid])
-        orch = PipelineOrchestrator(graph=graph)
+        orch = PipelineOrchestrator(graph=graph, isolated=False)
 
         with (
             patch.object(graph, "get_download_status", return_value=("stale", "x")),
@@ -929,3 +929,64 @@ class TestExecuteAll:
         assert [e.template_id for e in report.executed] == ["dl-src", "etl-mid"]
         mid_entry = next(e for e in report.entries if e.template_id == "etl-mid")
         assert "downstream" in mid_entry.reason
+
+
+class TestSubprocessIsolation:
+    """WIL-178: isolated mode runs steps via `python -m brasa process`."""
+
+    def _step(self):
+        from brasa.engine.dependency_graph import ExecutionStep
+
+        return ExecutionStep(
+            template_id="tpl-x",
+            action="process",
+            reason="test",
+            template_type="download",
+        )
+
+    def _run_with_returncode(self, monkeypatch, returncode):
+        from types import SimpleNamespace
+
+        from brasa.engine.orchestrator import PipelineOrchestrator
+        from brasa.engine.reporting import Verbosity
+
+        calls = {}
+
+        def fake_run(cmd, **kwargs):
+            calls["cmd"] = cmd
+            return SimpleNamespace(returncode=returncode)
+
+        monkeypatch.setattr("brasa.engine.orchestrator.subprocess.run", fake_run)
+        orchestrator = PipelineOrchestrator()  # isolated=True is the default
+        report = orchestrator._execute_step(self._step(), Verbosity.QUIET)
+        return report, calls
+
+    def test_success_exit_zero(self, monkeypatch):
+        import sys
+
+        report, calls = self._run_with_returncode(monkeypatch, 0)
+        assert report.success
+        assert calls["cmd"][:5] == [sys.executable, "-m", "brasa", "process", "tpl-x"]
+
+    def test_nonzero_exit_is_failure(self, monkeypatch):
+        report, _ = self._run_with_returncode(monkeypatch, 2)
+        assert not report.success
+        assert "exit code 2" in report.results[0].error_message
+
+    def test_sigkill_reported_as_likely_oom(self, monkeypatch):
+        report, _ = self._run_with_returncode(monkeypatch, -9)
+        assert not report.success
+        assert "SIGKILL" in report.results[0].error_message
+        assert "likely OOM" in report.results[0].error_message
+
+    def test_log_line_written(self, monkeypatch):
+        import os
+        from pathlib import Path
+
+        self._run_with_returncode(monkeypatch, 0)
+        log = Path(os.environ["BRASA_DATA_PATH"]) / "logs" / "run-all.log"
+        assert log.exists()
+        last = log.read_text(encoding="utf-8").strip().splitlines()[-1]
+        assert "template=tpl-x" in last
+        assert "exit=0" in last
+        assert "peak_child_rss=" in last

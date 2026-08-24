@@ -14,15 +14,21 @@ Classes:
 from __future__ import annotations
 
 import logging
+import signal
+import subprocess
+import sys
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 
 from .dependency_graph import ExecutionPlan, ExecutionStep, TemplateDependencyGraph
 from .reporting import (
     TaskReport,
     TaskStatus,
     Verbosity,
+    create_task_result_from_exception,
     create_task_result_skipped,
+    create_task_result_success,
 )
 
 logger = logging.getLogger(__name__)
@@ -286,8 +292,19 @@ class PipelineOrchestrator:
     def __init__(
         self,
         graph: TemplateDependencyGraph | None = None,
+        isolated: bool = True,
     ) -> None:
+        """Initialize the orchestrator.
+
+        Args:
+            graph: An optional pre-built dependency graph.
+            isolated: If ``True`` (default), execute each step in a child
+                process (``python -m brasa process <template>``) so a
+                memory-hungry template cannot OOM-kill the whole run.
+                Set ``False`` to run steps in-process (used by tests).
+        """
         self._graph = graph
+        self.isolated = isolated
 
     @property
     def graph(self) -> TemplateDependencyGraph:
@@ -412,6 +429,9 @@ class PipelineOrchestrator:
         Returns:
             A ``TaskReport`` from the executed operation.
         """
+        if self.isolated:
+            return self._execute_step_subprocess(step, verbosity)
+
         # Import here to avoid circular imports
         from .api import process_etl, process_marketdata
 
@@ -459,6 +479,112 @@ class PipelineOrchestrator:
         fallback_report.add_result(result)
         fallback_report.finish()
         return fallback_report
+
+    def _execute_step_subprocess(
+        self,
+        step: ExecutionStep,
+        verbosity: Verbosity,
+    ) -> TaskReport:
+        """Run one step in a child process (memory isolation, WIL-178).
+
+        The child is ``python -m brasa process <template_id>``, which
+        dispatches to ``process_marketdata`` or ``process_etl`` exactly
+        like the in-process path. A child killed by the kernel (e.g. the
+        OOM killer) surfaces as a failed step instead of taking down the
+        whole run; memory returns to the OS after every step.
+
+        Args:
+            step: The execution step to run.
+            verbosity: Verbosity forwarded to the child process.
+
+        Returns:
+            A single-result ``TaskReport`` synthesized from the child's
+            exit code (the child prints its own detailed progress).
+        """
+        cmd = [sys.executable, "-m", "brasa", "process", step.template_id]
+        if verbosity == Verbosity.VERBOSE:
+            cmd.append("--verbose")
+        elif verbosity == Verbosity.QUIET:
+            cmd.append("--quiet")
+
+        logger.info("Running '%s' in subprocess: %s", step.template_id, step.reason)
+        start = datetime.now()
+        proc = subprocess.run(cmd, check=False)
+        duration = (datetime.now() - start).total_seconds()
+
+        # QUIET: the child already printed its own progress display.
+        report = TaskReport(
+            operation=step.action,
+            template_name=step.template_id,
+            verbosity=Verbosity.QUIET,
+        )
+        report.start(total=1)
+        if proc.returncode == 0:
+            status = "executed"
+            result = create_task_result_success(
+                operation=step.action,
+                template_name=step.template_id,
+                args={},
+                duration=duration,
+            )
+        else:
+            if proc.returncode < 0:
+                sig = signal.Signals(-proc.returncode).name
+                message = f"terminated by {sig}"
+                if sig == "SIGKILL":
+                    message += " — likely OOM"
+            else:
+                message = f"exit code {proc.returncode}"
+            status = f"failed ({message})"
+            result = create_task_result_from_exception(
+                exception=RuntimeError(message),
+                operation=step.action,
+                template_name=step.template_id,
+                args={},
+                duration=duration,
+                is_expected_error=True,
+            )
+        report.add_result(result)
+        report.finish()
+        self._log_step(step.template_id, status, proc.returncode, duration)
+        return report
+
+    def _log_step(
+        self,
+        template_id: str,
+        status: str,
+        returncode: int,
+        duration: float,
+    ) -> None:
+        """Append one line per executed step to ``logs/run-all.log``.
+
+        The file lives under the brasa data path and survives a dead
+        terminal. ``ru_maxrss`` is a running max across all children, so
+        the offending template shows up as the line where the value jumps.
+
+        Args:
+            template_id: The template that was executed.
+            status: Human-readable outcome (``executed`` / ``failed (...)``).
+            returncode: The child's exit code.
+            duration: Wall-clock duration in seconds.
+        """
+        try:
+            import resource
+
+            peak_mib = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss // 1024
+        except ImportError:  # pragma: no cover - non-Unix
+            peak_mib = 0
+        from .config import resolve_data_path
+
+        log_dir = Path(resolve_data_path()) / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        line = (
+            f"{datetime.now().isoformat(timespec='seconds')} "
+            f"template={template_id} status={status} exit={returncode} "
+            f"duration={duration:.1f}s peak_child_rss={peak_mib}MiB\n"
+        )
+        with (log_dir / "run-all.log").open("a", encoding="utf-8") as f:
+            f.write(line)
 
     def _staleness_check(self, template_id: str) -> tuple[str, str]:
         """Return ``(action, reason)`` for a template, reusing run predicates.
