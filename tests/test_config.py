@@ -49,3 +49,13 @@ def test_load_config_missing_file_returns_empty(isolated_config):
 
 def test_default_data_path_is_absolute():
     assert Path(default_data_path()).is_absolute()
+
+
+def test_save_data_path_preserves_other_keys(isolated_config):
+    isolated_config.write_text(
+        'data_path = "/old"\nduckdb_memory_limit = "1GB"\n', encoding="utf-8"
+    )
+    save_data_path("/new")
+    cfg = load_config()
+    assert cfg["data_path"] == "/new"
+    assert cfg["duckdb_memory_limit"] == "1GB"
