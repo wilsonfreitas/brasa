@@ -430,8 +430,7 @@ class RunQueryStep(PipelineStep):
             ValueError: If required parameters are missing.
             RuntimeError: If query execution fails.
         """
-        import duckdb
-
+        from brasa.engine.duck import connect_memory
         from brasa.queries import get_dataset
 
         datasets = self.require_param("datasets")
@@ -443,7 +442,7 @@ class RunQueryStep(PipelineStep):
             raise ValueError("run_query requires a non-empty 'query' string")
 
         # Create an in-memory DuckDB connection
-        conn = duckdb.connect(":memory:")
+        conn = connect_memory()
 
         try:
             # Register each dataset as a view using its full name
@@ -523,11 +522,10 @@ class SqlExportStep(PipelineStep):
         import shutil
         from pathlib import Path
 
-        import duckdb
-
         from brasa.engine.cache import CacheManager
         from brasa.engine.catalog import DatasetCatalog
         from brasa.engine.dependency_resolver import _touch_marker
+        from brasa.engine.duck import connect_memory
         from brasa.queries import get_dataset
 
         datasets = self.require_param("datasets")
@@ -553,7 +551,7 @@ class SqlExportStep(PipelineStep):
         if Path(output_path).exists():
             shutil.rmtree(output_path)
 
-        conn = duckdb.connect(":memory:")
+        conn = connect_memory()
         try:
             for dataset_name in datasets:
                 if "." in dataset_name:
