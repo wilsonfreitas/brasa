@@ -343,6 +343,8 @@ brasa run b3-equities-returns --dry-run
 brasa run b3-equities-returns --force
 ```
 
+**Process isolation** (applies to `run` and `run-all`): each executed template runs in its own child process (`python -m brasa process <template>`), so a template killed by the kernel (e.g. out-of-memory) is reported as failed — with its dependents skipped — instead of crashing the whole run. Every executed step is appended to `<data_path>/logs/run-all.log` (timestamp, template, status, exit code, duration, peak child RSS), which survives a closed terminal.
+
 ---
 
 ## Templates

@@ -40,6 +40,15 @@ $BRASA_DATA_PATH/
 └── brasa.duckdb   # DuckDB database
 ```
 
+### Internal DuckDB queries (memory cap and disk spill)
+
+Brasa's internal ETL queries (`run_query`, `sql_export` steps and staleness checks) run on in-memory DuckDB connections that are capped and allowed to spill to disk, so a heavy query cannot exhaust RAM. Two optional keys in `~/.config/brasa/config.toml` control this:
+
+- `duckdb_memory_limit` (env: `BRASA_DUCKDB_MEMORY_LIMIT`) — memory cap for brasa's internal DuckDB queries, e.g. `"8GB"`. Default: 50% of physical RAM.
+- `duckdb_temp_directory` (env: `BRASA_DUCKDB_TEMP_DIRECTORY`) — directory where large queries spill to disk. Default: `<data_path>/tmp/duckdb`.
+
+Precedence for both: env var → config file → default.
+
 ## Template Configuration
 
 Template structure, downloader/reader/writer/fields configuration, and worked examples are documented in [TEMPLATES.md](TEMPLATES.md). The legacy function-based template format previously described here was removed.
