@@ -260,8 +260,8 @@ class BCBCurrencyDownloader:
                 endpoint.query()
                 .parameters(
                     moeda=self.args["currency"],
-                    dataInicial=self.args["start"].strftime("%m/%d/%Y"),
-                    dataFinalCotacao=self.args["end"].strftime("%m/%d/%Y"),
+                    dataInicial=self.args["start"],
+                    dataFinalCotacao=self.args["end"],
                 )
                 .collect()
             )

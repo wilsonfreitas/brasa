@@ -2,9 +2,7 @@
 name = "brasa-marketdata"
 version = "0.4.0"
 description = "Python library to extract finance market data from brazillian financial institutions: B3, ANBIMA, Tesouro Direto, CVM."
-authors = [
-    { name = "wilsonfreitas", email = "wilson.freitas@gmail.com" },
-]
+authors = [{ name = "wilsonfreitas", email = "wilson.freitas@gmail.com" }]
 license = "MIT"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -16,7 +14,7 @@ dependencies = [
     "regexparser>=0.1.0",
     "pyyaml>=6.0",
     "pyarrow>=19.0.0",
-    "python-bcb>=0.3.2",
+    "python-bcb>=0.4.1",
     "duckdb>=1.2.0",
     "rich>=13.0.0",
     "openpyxl>=3.1.5",
@@ -25,16 +23,8 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = [
-    "ipykernel>=6.15.3",
-    "ruff>=0.8.0",
-    "pre-commit>=4.0.0",
-]
-tests = [
-    "pytest>=7.1.3",
-    "pytest-cov>=7.1.0",
-    "pytest-timeout>=2.3.1",
-]
+dev = ["ipykernel>=6.15.3", "ruff>=0.8.0", "pre-commit>=4.0.0"]
+tests = ["pytest>=7.1.3", "pytest-cov>=7.1.0", "pytest-timeout>=2.3.1"]
 
 [project.scripts]
 brasa = "brasa.cli:main"
@@ -50,12 +40,7 @@ packages = ["brasa"]
 exclude = ["**/legacy/**"]
 
 [tool.hatch.build.targets.sdist]
-include = [
-    "/brasa",
-    "/README.md",
-    "/LICENSE",
-    "/pyproject.toml",
-]
+include = ["/brasa", "/README.md", "/LICENSE", "/pyproject.toml"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

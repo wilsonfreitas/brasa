@@ -92,7 +92,7 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.0.0" },
     { name = "platformdirs", specifier = ">=4.0.0" },
     { name = "pyarrow", specifier = ">=19.0.0" },
-    { name = "python-bcb", specifier = ">=0.3.2" },
+    { name = "python-bcb", specifier = ">=0.4.1" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "regexparser", specifier = ">=0.1.0" },
     { name = "requests", specifier = ">=2.28.0" },
@@ -1274,7 +1274,7 @@ wheels = [
 
 [[package]]
 name = "python-bcb"
-version = "0.3.6"
+version = "0.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -1282,9 +1282,9 @@ dependencies = [
     { name = "pandas" },
     { name = "tenacity" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4d/db/cc3de9adcce59b6eba528860960edaf482c0af26ba52027946bc6a28a2c2/python_bcb-0.3.6.tar.gz", hash = "sha256:966331e0c2b292889b811c1b08416b36acac349682ca12b2fc04bb081f63c4e4", size = 1536446, upload-time = "2026-03-27T08:52:56.741Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a6/38/ba1da27b483fd2b5dadef8567b17a8f53d65ce4c4421c7fc84a414b37f09/python_bcb-0.4.1.tar.gz", hash = "sha256:ca95995bb324e67a5e5f5a8157577f714de0be23ad273662f3ba5f7e95403b54", size = 1637804, upload-time = "2026-10-23T11:16:41.437Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/aa/71/2e89def82ec1abf69d7dbaecfbe0dd8d56a422af31163b7320bd82ecb055/python_bcb-0.3.6-py3-none-any.whl", hash = "sha256:e2f0a9d69ed0d4621ac6c9335b0a26c303fb8fba2147c1a3bb20b5f629755fa3", size = 30443, upload-time = "2026-03-27T08:52:54.288Z" },
+    { url = "https://files.pythonhosted.org/packages/f1/67/a88d74f9eea30d74afce4614930156f6f3c7e2f1fccd54a3b2472ac72ec0/python_bcb-0.4.1-py3-none-any.whl", hash = "sha256:5e5ce0a9aa328395934d8484ecf8d256ed44660b4ac5638f17be2c73bbb0a4a6", size = 35882, upload-time = "2026-10-23T11:16:39.454Z" },
 ]
 
 [[package]]
