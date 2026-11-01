@@ -1,6 +1,58 @@
 # Changelog
 
-## Unreleased
+## v0.5.0 (2026-11-01) — brasa-core: templates move to brasa-templates
+
+The PyPI distribution is renamed from `brasa-marketdata` to **`brasa-core`**,
+and the templates now live in their own repo,
+[brasa-templates](https://github.com/wilsonfreitas/brasa-templates). brasa is
+a template-driven ETL engine; the templates are the data. `import brasa` and
+the `brasa` command do not change.
+
+### Upgrading from 0.4
+
+1. `pip install brasa-core` — or `pip install -U brasa-marketdata`, which now
+   installs brasa-core.
+2. Run `brasa init`. It keeps your data directory and clones the official
+   templates into `<data path>/templates`. Use `brasa init --templates
+   <url|path>` for a fork or for a folder you already have.
+3. Personal templates: put them in a template folder (see *Template format
+   changes* below) and add it to `BRASA_TEMPLATE_PATH` or `template_path`.
+4. `brasa doctor --category validations --validations-file F` is now
+   `brasa validate --rules F`.
+
+### Breaking changes
+
+- brasa ships no templates. Templates come only from template folders:
+  `BRASA_TEMPLATE_PATH`, then `template_path` in `config.toml`. With none,
+  commands that load templates fail with "No template folders configured.
+  Run `brasa init` or set BRASA_TEMPLATE_PATH." and name any configured
+  folder that is missing; `brasa info` still works. (WIL-205)
+- The distribution is renamed `brasa-marketdata` → `brasa-core`. A last
+  `brasa-marketdata` 0.5.0 has no code and depends on `brasa-core`. (WIL-205)
+- `brasa doctor` has no validations category and no `--validations-file`;
+  use `brasa validate`. (WIL-201)
+- Templates are read only from a folder's `templates/` subfolder. (WIL-198)
+
+### Features
+
+- Template folders: `<folder>/{brasa.toml, templates/, plans/, validations/,
+  steps.py}`. `brasa.toml` declares `requires-brasa`, and a mismatch is an
+  error. `brasa info` lists the folders with their manifest status and git
+  origin and commit; `brasa list-templates` shows where each template comes
+  from and marks `*shadows`. (WIL-198)
+- `brasa init` clones brasa-templates; `brasa init --templates <url|path>`
+  uses a fork or an existing folder. `brasa update-templates` runs
+  `git pull --ff-only` in each git folder. (WIL-199)
+- `brasa validate [layer.dataset ...] [--rules FILE]` checks datasets against
+  rules from inline `validations:` blocks in templates, `validations/` files
+  in template folders, and an extra rules file. Skipped rules are shown.
+  Exit codes: 0 clean, 1 rule failures, 2 bad arguments. (WIL-201)
+- Download plans by name: `brasa download --plan daily-b3` finds
+  `plans/daily-b3.yaml` in the template folders; new `brasa list-plans`.
+  (WIL-202)
+- Custom pipeline steps: a template folder's `steps.py` (or `steps/`
+  package) is imported when templates load, so its `@StepRegistry.register`
+  steps work in its templates. (WIL-200)
 
 ### Fixes
 
@@ -10,6 +62,22 @@
   output schema is now read through a DuckDB relation, which works from
   DuckDB 1.2 to 2.0. CI also runs the tests on the newest DuckDB.
   (WIL-207)
+
+### Template format changes
+
+From this release on, every change to the template format is listed here,
+with migration notes. While brasa is 0.x there is no deprecation period;
+from 1.0, a change gets one release with a warning first.
+
+- **Templates live in a template folder's `templates/` subfolder.** A folder
+  with `.yaml` files at its top level loads nothing (brasa warns). Move them:
+  `mkdir templates && git mv *.yaml templates/`.
+- **`brasa.toml`** (optional) at the folder root: `name = "my-templates"` and
+  `requires-brasa = ">=0.5,<0.6"`.
+- **New optional folder parts:** `plans/` (download plans, called by name),
+  `validations/` (rule files) and `steps.py` (custom steps).
+- **Inline `validations:` block** in a template: rules for the dataset that
+  template writes.
 
 ## v0.4.0 (2026-08-24) — Memory-safe run-all
 
