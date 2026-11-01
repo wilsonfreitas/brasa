@@ -24,8 +24,6 @@ from brasa.engine.doctor import (
     DoctorReport,
     Issue,
     _calendar_completeness_gaps,
-    _load_validations_config,
-    _read_series_dates,
     check_corrupted_parquet,
     check_date_gaps,
     check_download_refdate_gaps,
@@ -36,9 +34,32 @@ from brasa.engine.doctor import (
     check_orphan_db,
     check_orphan_raw,
     check_unresolved_errors,
-    check_validations,
     run_doctor,
 )
+from brasa.engine.validations import (
+    _read_series_dates,
+    load_rules_file,
+    run_rules,
+)
+
+_load_validations_config = load_rules_file
+
+
+def check_validations(cfg):
+    """Run the rules in a rules file; a file that can't load is one error."""
+    try:
+        index = load_rules_file(cfg)
+    except Exception as exc:
+        return [
+            Issue(
+                category="Data Validation",
+                code="validation-config-error",
+                severity="error",
+                description=f"Cannot load validations config: {exc}",
+            )
+        ]
+    return run_rules(index)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -874,7 +895,13 @@ class TestCheckCalendarCompleteness:
                   CDI: {calendar: ANBIMA}
             """,
         )
-        assert check_validations(cfg) == []
+        # A dataset that was never downloaded is skipped visibly (info), not
+        # silently, and is never a failure (WIL-201).
+        issues = check_validations(cfg)
+        assert [(i.code, i.severity) for i in issues] == [
+            ("validation-skipped", "info")
+        ]
+        assert "dataset not in the datalake" in issues[0].description
 
     def test_single_series_shape(self, tmp_path):
         cal = Calendar.load("ANBIMA")
@@ -946,64 +973,21 @@ class TestCheckCalendarCompleteness:
         assert issues[0].code == "validation-config-error"
 
 
-class TestValidationsCategory:
-    def test_category_keys(self):
-        from brasa.engine.doctor import _CATEGORY_KEYS
-
-        assert _CATEGORY_KEYS["validations"] == ["validations"]
-
-    def test_explicit_validations_without_file_raises(self):
-        with pytest.raises(ValueError):
-            run_doctor(categories=["validations"])
-
-    def test_mixed_explicit_validations_without_file_raises(self):
-        with pytest.raises(ValueError):
-            run_doctor(categories=["validations", "meta"], validations_config=None)
-
-    def test_bare_run_skips_validations_with_note(self):
-        report = run_doctor()
-        codes = {i.code for i in report.issues}
-        assert "validations-skipped" in codes
-
-    def test_validations_with_file_runs(self, tmp_path):
-        cfg = _write_validations(
-            tmp_path,
-            """
-            staging.bcb-sgs:
-              - rule: calendar-completeness
-                group_column: symbol
-                series:
-                  CDI: {calendar: ANBIMA}
-            """,
-        )
-        report = run_doctor(categories=["validations"], validations_config=cfg)
-        assert isinstance(report, DoctorReport)
-
-    def test_bad_file_produces_config_error_finding(self, tmp_path):
-        # A supplied-but-unreadable file surfaces as an exit-1 finding
-        # (validation-config-error), not a usage error and not a crash.
-        report = run_doctor(
-            categories=["validations"], validations_config=tmp_path / "nope.yaml"
-        )
-        error = next(i for i in report.issues if i.code == "validation-config-error")
-        assert error.severity == "error"
-
-
 class TestPeriodCompletenessGaps:
     def test_monthly_complete_no_gaps(self):
-        from brasa.engine.doctor import _period_completeness_gaps
+        from brasa.engine.validations import _period_completeness_gaps
 
         present = {date(2024, 1, 15), date(2024, 2, 10), date(2024, 3, 5)}
         assert _period_completeness_gaps(present, "monthly", None, None) == []
 
     def test_monthly_one_missing_month(self):
-        from brasa.engine.doctor import _period_completeness_gaps
+        from brasa.engine.validations import _period_completeness_gaps
 
         present = {date(2024, 1, 15), date(2024, 3, 5)}  # Feb missing
         assert _period_completeness_gaps(present, "monthly", None, None) == ["2024-02"]
 
     def test_monthly_year_boundary(self):
-        from brasa.engine.doctor import _period_completeness_gaps
+        from brasa.engine.validations import _period_completeness_gaps
 
         present = {date(2023, 11, 2), date(2024, 2, 2)}  # Dec + Jan missing
         assert _period_completeness_gaps(present, "monthly", None, None) == [
@@ -1012,7 +996,7 @@ class TestPeriodCompletenessGaps:
         ]
 
     def test_quarterly_missing_quarter(self):
-        from brasa.engine.doctor import _period_completeness_gaps
+        from brasa.engine.validations import _period_completeness_gaps
 
         present = {date(2024, 1, 10), date(2024, 12, 10)}  # Q1 + Q4; Q2, Q3 missing
         assert _period_completeness_gaps(present, "quarterly", None, None) == [
@@ -1021,7 +1005,7 @@ class TestPeriodCompletenessGaps:
         ]
 
     def test_start_end_bucketed_from_mid_period(self):
-        from brasa.engine.doctor import _period_completeness_gaps
+        from brasa.engine.validations import _period_completeness_gaps
 
         present = {date(2024, 2, 15)}
         # start mid-Jan buckets to 2024-01; end mid-Mar buckets to 2024-03
@@ -1030,14 +1014,14 @@ class TestPeriodCompletenessGaps:
         ) == ["2024-01", "2024-03"]
 
     def test_default_end_is_last_observed(self):
-        from brasa.engine.doctor import _period_completeness_gaps
+        from brasa.engine.validations import _period_completeness_gaps
 
         present = {date(2024, 1, 15), date(2024, 2, 10)}
         # no fabricated gap past the newest observation
         assert _period_completeness_gaps(present, "monthly", None, None) == []
 
     def test_unsupported_frequency_raises(self):
-        from brasa.engine.doctor import _period_completeness_gaps
+        from brasa.engine.validations import _period_completeness_gaps
 
         with pytest.raises(ValueError):
             _period_completeness_gaps({date(2024, 1, 1)}, "weekly", None, None)
@@ -1046,7 +1030,7 @@ class TestPeriodCompletenessGaps:
 class TestFrequencyCompleteness:
     def _run(self, tmp_path, body):
         cfg = _write_validations(tmp_path, body)
-        report = run_doctor(categories=["validations"], validations_config=cfg)
+        report = DoctorReport(issues=check_validations(cfg))
         return report
 
     def test_monthly_series_complete_no_issue(self, tmp_path):
@@ -1168,7 +1152,7 @@ class TestUnexpectedObservations:
                   PETR4: {calendar: B3}
             """,
         )
-        report = run_doctor(categories=["validations"], validations_config=cfg)
+        report = DoctorReport(issues=check_validations(cfg))
         found = [i for i in report.issues if i.code == "no-unexpected-observations"]
         assert len(found) == 1
         assert found[0].severity == "error"
@@ -1188,7 +1172,7 @@ class TestUnexpectedObservations:
                   PETR4: {calendar: B3}
             """,
         )
-        report = run_doctor(categories=["validations"], validations_config=cfg)
+        report = DoctorReport(issues=check_validations(cfg))
         assert not [i for i in report.issues if i.code == "no-unexpected-observations"]
 
     def test_rule_skips_non_daily_frequency(self, tmp_path):
@@ -1207,7 +1191,7 @@ class TestUnexpectedObservations:
                   IPCA: {calendar: B3, frequency: monthly}
             """,
         )
-        report = run_doctor(categories=["validations"], validations_config=cfg)
+        report = DoctorReport(issues=check_validations(cfg))
         assert not [i for i in report.issues if i.code == "no-unexpected-observations"]
 
     def test_unknown_rule_type_is_config_error(self, tmp_path):
@@ -1218,20 +1202,20 @@ class TestUnexpectedObservations:
               - rule: no-such-rule
             """,
         )
-        report = run_doctor(categories=["validations"], validations_config=cfg)
+        report = DoctorReport(issues=check_validations(cfg))
         assert [i for i in report.issues if i.code == "validation-config-error"]
 
 
 class TestReadColumns:
     def test_absent_dataset_returns_none(self):
-        from brasa.engine.doctor import _read_columns
+        from brasa.engine.validations import _read_columns
 
         man = CacheManager()
         path = Path(man.db_path("staging/does-not-exist"))
         assert _read_columns("staging.does-not-exist", path, ["refdate"]) is None
 
     def test_reads_requested_columns(self):
-        from brasa.engine.doctor import _read_columns
+        from brasa.engine.validations import _read_columns
 
         ds_dir = _write_series_parquet(
             "staging/rc-basic", None, [date(2021, 1, 4), date(2021, 1, 5)]
@@ -1242,7 +1226,7 @@ class TestReadColumns:
         assert table.num_rows == 2
 
     def test_missing_column_raises_keyerror(self):
-        from brasa.engine.doctor import _read_columns
+        from brasa.engine.validations import _read_columns
 
         ds_dir = _write_series_parquet("staging/rc-missing", None, [date(2021, 1, 4)])
         with pytest.raises(KeyError):
@@ -1252,7 +1236,7 @@ class TestReadColumns:
 class TestValueRangeRule:
     def _run(self, tmp_path, body):
         cfg = _write_validations(tmp_path, body)
-        return run_doctor(categories=["validations"], validations_config=cfg)
+        return DoctorReport(issues=check_validations(cfg))
 
     def test_below_min_flagged(self, tmp_path):
         man = CacheManager()
@@ -1341,7 +1325,7 @@ class TestValueRangeRule:
 class TestNotNullRule:
     def _run(self, tmp_path, body):
         cfg = _write_validations(tmp_path, body)
-        return run_doctor(categories=["validations"], validations_config=cfg)
+        return DoctorReport(issues=check_validations(cfg))
 
     def _write(self, rel, cols):
         man = CacheManager()
@@ -1397,7 +1381,7 @@ class TestNotNullRule:
 class TestNoDuplicatesRule:
     def _run(self, tmp_path, body):
         cfg = _write_validations(tmp_path, body)
-        return run_doctor(categories=["validations"], validations_config=cfg)
+        return DoctorReport(issues=check_validations(cfg))
 
     def _write(self, rel, cols):
         man = CacheManager()

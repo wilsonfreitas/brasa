@@ -24,8 +24,6 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 # ---------------------------------------------------------------------------
 # Data types
 # ---------------------------------------------------------------------------
@@ -214,164 +212,6 @@ def _iter_layer_dataset_dirs(
             yield layer_dir, dataset_dir
 
 
-def _load_validations_config(path: Path) -> dict[str, Any]:
-    """Load the validations config mapping (layer.dataset -> list of rules).
-
-    Args:
-        path: Path to a validations YAML file. Required — there is no
-            packaged default.
-
-    Returns:
-        Parsed mapping of ``"layer.dataset"`` to a list of rules.
-
-    Raises:
-        FileNotFoundError: If ``path`` does not exist.
-        ValueError: If the file is empty or its YAML root is not a mapping.
-        yaml.YAMLError: If the file cannot be parsed.
-    """
-    cfg_path = Path(path)
-    if not cfg_path.exists():
-        raise FileNotFoundError(f"validations file not found: {cfg_path}")
-    with cfg_path.open() as f:
-        data = yaml.safe_load(f)
-    if data is None:
-        raise ValueError(f"validations file is empty: {cfg_path}")
-    if not isinstance(data, dict):
-        raise ValueError(
-            "validations config root must be a mapping of "
-            "'layer.dataset' -> list of rules"
-        )
-    return data
-
-
-def _resolve_series_dataset(
-    dataset_key: str,
-    dataset_path: Path,
-    date_column: str,
-    group_column: str | None,
-) -> Any | None:
-    """Open ``dataset_path`` typed via the template/catalog schema when possible.
-
-    Falls back to naive Hive partition discovery (partition columns typed as
-    strings) when there's no template/catalog schema covering the columns
-    this rule needs, e.g. ad hoc datasets with no registered template.
-    """
-    import pyarrow.dataset as ds
-
-    from brasa.queries import get_dataset
-
-    layer, _, name = dataset_key.partition(".")
-    try:
-        dataset = get_dataset(name, layer=layer)
-    except Exception:
-        dataset = None
-
-    columns_covered = dataset is not None and date_column in dataset.schema.names
-    if columns_covered and group_column is not None:
-        columns_covered = group_column in dataset.schema.names
-    if columns_covered:
-        return dataset
-
-    try:
-        return ds.dataset(str(dataset_path), partitioning="hive")
-    except Exception:
-        return None
-
-
-def _read_series_dates(
-    dataset_key: str,
-    dataset_path: Path,
-    date_column: str,
-    group_column: str | None,
-    group_value: str | None,
-) -> set[date]:
-    """Return the distinct dates present for one series.
-
-    Args:
-        dataset_key: ``"layer.dataset"`` key (e.g. ``"input.b3-bvbg086"``),
-            used to look up the template/catalog schema so partition columns
-            (e.g. a Hive-partitioned ``refdate``) are typed correctly instead
-            of being inferred as plain strings.
-        dataset_path: Absolute path to the dataset folder under db/.
-        date_column: Column holding the observation date.
-        group_column: Column separating series (e.g. ``symbol``); ``None``
-            for single-series datasets.
-        group_value: The series value to filter on when ``group_column`` is set.
-
-    Returns:
-        Set of distinct dates; empty when the dataset/series is absent or
-        unreadable.
-    """
-    import pyarrow.compute as pc
-
-    if not dataset_path.exists():
-        return set()
-
-    dataset = _resolve_series_dataset(
-        dataset_key, dataset_path, date_column, group_column
-    )
-    if dataset is None or date_column not in dataset.schema.names:
-        return set()
-
-    filt = None
-    if group_column is not None:
-        if group_column not in dataset.schema.names:
-            return set()
-        filt = pc.field(group_column) == group_value
-
-    try:
-        table = dataset.to_table(columns=[date_column], filter=filt)
-    except Exception:
-        return set()
-
-    result: set[date] = set()
-    for v in table.column(date_column).to_pylist():
-        if v is None:
-            continue
-        if isinstance(v, str):
-            result.add(date.fromisoformat(v))
-        elif hasattr(v, "date"):
-            result.add(v.date())
-        else:
-            result.add(v)
-    return result
-
-
-def _read_columns(
-    dataset_key: str, dataset_path: Path, columns: list[str]
-) -> Any | None:
-    """Read the requested columns from a dataset as a pyarrow Table.
-
-    Reuses the typed-schema resolution used by the calendar rules so
-    Hive-partitioned columns are typed correctly. Reads only the requested
-    columns.
-
-    Args:
-        dataset_key: ``"layer.dataset"`` key (for schema lookup).
-        dataset_path: Absolute path to the dataset folder under db/.
-        columns: Column names to read (non-empty).
-
-    Returns:
-        A pyarrow Table of ``columns``, or ``None`` when the dataset is absent.
-
-    Raises:
-        KeyError: If any requested column is not present in the schema.
-    """
-    if not dataset_path.exists():
-        return None
-    dataset = _resolve_series_dataset(dataset_key, dataset_path, columns[0], None)
-    if dataset is None:
-        return None
-    schema_names = set(dataset.schema.names)
-    missing = [c for c in columns if c not in schema_names]
-    if missing:
-        raise KeyError(f"column(s) not found: {', '.join(missing)}")
-    try:
-        return dataset.to_table(columns=columns)
-    except Exception:
-        return None
-
-
 def _as_date(value: Any) -> date:
     """Coerce a bizdays/datetime/date/ISO-string value to a ``date``."""
     if isinstance(value, datetime):
@@ -422,62 +262,6 @@ def _calendar_completeness_gaps(
 
     biz = [_as_date(d) for d in cal.seq(lower, upper)]
     return sorted(d for d in biz if d not in present_dates)
-
-
-def _period_completeness_gaps(
-    present_dates: set[date],
-    frequency: str,
-    start_cfg: str | None,
-    end_cfg: str | None,
-) -> list[str]:
-    """Return missing calendar periods for a non-daily series, sorted ascending.
-
-    Calendar-agnostic: a period (month or quarter) is "present" if it holds at
-    least one observation. Weekends and holidays are irrelevant to "does this
-    period have data", so no bizdays calendar is consulted.
-
-    Args:
-        present_dates: Dates actually present for the series (non-empty).
-        frequency: Either ``"monthly"`` or ``"quarterly"``.
-        start_cfg: Optional ISO start date; defaults to the first present date.
-            Bucketed to its period.
-        end_cfg: Optional ISO end date, or the keyword ``today``; defaults to
-            the last present date. Bucketed to its period.
-
-    Returns:
-        Sorted list of period labels (``"YYYY-MM"`` monthly, ``"YYYY-Qn"``
-        quarterly) that have no observation.
-
-    Raises:
-        ValueError: If ``frequency`` is not ``"monthly"`` or ``"quarterly"``.
-        Exception: If ``start_cfg``/``end_cfg`` are malformed dates.
-    """
-    if frequency not in ("monthly", "quarterly"):
-        raise ValueError(f"unsupported frequency: {frequency}")
-
-    def index(d: date) -> int:
-        if frequency == "monthly":
-            return d.year * 12 + (d.month - 1)
-        return d.year * 4 + (d.month - 1) // 3
-
-    def label(i: int) -> str:
-        if frequency == "monthly":
-            return f"{i // 12:04d}-{i % 12 + 1:02d}"
-        return f"{i // 4:04d}-Q{i % 4 + 1}"
-
-    if start_cfg is not None:
-        lower = index(_as_date(start_cfg))
-    else:
-        lower = index(min(present_dates))
-    if end_cfg is None:
-        upper = index(max(present_dates))
-    elif str(end_cfg) == "today":
-        upper = index(date.today())
-    else:
-        upper = index(_as_date(end_cfg))
-
-    present_idx = {index(d) for d in present_dates}
-    return [label(i) for i in range(lower, upper + 1) if i not in present_idx]
 
 
 def _unexpected_observations(
@@ -1299,406 +1083,6 @@ def check_date_gaps(  # noqa: PLR0912
     return issues
 
 
-# ---------------------------------------------------------------------------
-# Category: Data Validation
-# ---------------------------------------------------------------------------
-
-
-def _validation_config_error(dataset_key: str, msg: str) -> Issue:
-    """Build a config-error Issue for a malformed validation entry."""
-    return Issue(
-        category="Data Validation",
-        code="validation-config-error",
-        severity="error",
-        description=f"Malformed validation config for {dataset_key}: {msg}",
-        details=[],
-        fixable=False,
-    )
-
-
-def _expand_series_items(
-    dataset_key: str, rule: dict[str, Any]
-) -> tuple[list[tuple[str | None, dict[str, Any]]] | None, Issue | None]:
-    """Expand a validation rule into ``(series_name, series_cfg)`` items.
-
-    Grouped rules (``group_column`` set) draw one item per entry in the
-    ``series:`` map; single-series rules yield one ``(None, rule)`` item.
-
-    Args:
-        dataset_key: ``"layer.dataset"`` key, used only for error messages.
-        rule: The rule mapping from the validations config.
-
-    Returns:
-        ``(series_items, None)`` on success, or ``(None, error_issue)`` when a
-        grouped rule is missing a non-empty ``series:`` map.
-    """
-    group_column = rule.get("group_column")
-    if group_column is not None:
-        series = rule.get("series")
-        if not isinstance(series, dict) or not series:
-            return None, _validation_config_error(
-                dataset_key, "grouped rule requires a non-empty 'series' map"
-            )
-        return [
-            (name, cfg if isinstance(cfg, dict) else {}) for name, cfg in series.items()
-        ], None
-    return [(None, rule)], None
-
-
-def _run_calendar_completeness_rule(
-    dataset_key: str, dataset_path: Path, rule: dict[str, Any]
-) -> list[Issue]:
-    """Evaluate a single calendar-completeness rule for one dataset."""
-    date_column = rule.get("date_column", "refdate")
-    group_column = rule.get("group_column")
-
-    series_items, err = _expand_series_items(dataset_key, rule)
-    if err is not None:
-        return [err]
-
-    issues: list[Issue] = []
-    for series_name, scfg in series_items:
-        calendar_name = scfg.get("calendar", "ANBIMA")
-        start_cfg = scfg.get("start")
-        end_cfg = scfg.get("end")
-        frequency = scfg.get("frequency", "daily")
-        label = f"{dataset_key}/{series_name}" if series_name else dataset_key
-
-        if frequency not in ("daily", "monthly", "quarterly"):
-            issues.append(
-                _validation_config_error(
-                    label,
-                    f"unknown frequency '{frequency}' "
-                    "(expected daily, monthly, or quarterly)",
-                )
-            )
-            continue
-
-        present = _read_series_dates(
-            dataset_key, dataset_path, date_column, group_column, series_name
-        )
-        if not present:
-            continue  # absent dataset/series -> skip silently
-
-        missing: list[Any]
-        try:
-            if frequency == "daily":
-                missing = _calendar_completeness_gaps(
-                    present, calendar_name, start_cfg, end_cfg
-                )
-                noun = f"{calendar_name} business day"
-            elif frequency == "monthly":
-                missing = _period_completeness_gaps(
-                    present, "monthly", start_cfg, end_cfg
-                )
-                noun = "month"
-            else:  # quarterly
-                missing = _period_completeness_gaps(
-                    present, "quarterly", start_cfg, end_cfg
-                )
-                noun = "quarter"
-        except Exception as exc:
-            issues.append(
-                _validation_config_error(
-                    label, f"invalid calendar-completeness config ({exc})"
-                )
-            )
-            continue
-
-        if missing:
-            issues.append(
-                Issue(
-                    category="Data Validation",
-                    code="calendar-completeness",
-                    severity="error",
-                    description=(
-                        f"{label}: {len(missing)} missing {noun}(s) "
-                        f"between {missing[0]} and {missing[-1]}"
-                    ),
-                    details=[str(d) for d in missing],
-                    fixable=False,
-                )
-            )
-    return issues
-
-
-def _run_no_unexpected_observations_rule(
-    dataset_key: str, dataset_path: Path, rule: dict[str, Any]
-) -> list[Issue]:
-    """Evaluate a single no-unexpected-observations rule for one dataset."""
-    date_column = rule.get("date_column", "refdate")
-    group_column = rule.get("group_column")
-
-    series_items, err = _expand_series_items(dataset_key, rule)
-    if err is not None:
-        return [err]
-
-    issues: list[Issue] = []
-    for series_name, scfg in series_items:
-        if scfg.get("frequency", "daily") != "daily":
-            continue  # non-daily series: rule is meaningless -> skip silently
-        calendar_name = scfg.get("calendar", "ANBIMA")
-        label = f"{dataset_key}/{series_name}" if series_name else dataset_key
-
-        present = _read_series_dates(
-            dataset_key, dataset_path, date_column, group_column, series_name
-        )
-        if not present:
-            continue  # absent dataset/series -> skip silently
-
-        try:
-            unexpected = _unexpected_observations(present, calendar_name)
-        except Exception as exc:
-            issues.append(
-                _validation_config_error(
-                    label, f"invalid no-unexpected-observations config ({exc})"
-                )
-            )
-            continue
-
-        if unexpected:
-            issues.append(
-                Issue(
-                    category="Data Validation",
-                    code="no-unexpected-observations",
-                    severity="error",
-                    description=(
-                        f"{label}: {len(unexpected)} observation(s) on non-business "
-                        f"days ({calendar_name}) between "
-                        f"{unexpected[0]} and {unexpected[-1]}"
-                    ),
-                    details=[str(d) for d in unexpected],
-                    fixable=False,
-                )
-            )
-    return issues
-
-
-def _run_value_range_rule(  # noqa: PLR0911
-    dataset_key: str, dataset_path: Path, rule: dict[str, Any]
-) -> list[Issue]:
-    """Evaluate a value-range rule: a numeric column within [min, max]."""
-    import pyarrow as pa
-    import pyarrow.compute as pc
-
-    column = rule.get("column")
-    if not isinstance(column, str) or not column:
-        return [
-            _validation_config_error(dataset_key, "value-range requires a 'column'")
-        ]
-    min_v = rule.get("min")
-    max_v = rule.get("max")
-    if min_v is None and max_v is None:
-        return [
-            _validation_config_error(
-                dataset_key, "value-range requires 'min' and/or 'max'"
-            )
-        ]
-
-    try:
-        table = _read_columns(dataset_key, dataset_path, [column])
-    except KeyError as exc:
-        return [_validation_config_error(dataset_key, str(exc))]
-    if table is None:
-        return []
-
-    col = table.column(column)
-    if not (pa.types.is_floating(col.type) or pa.types.is_integer(col.type)):
-        return [
-            _validation_config_error(
-                dataset_key, f"value-range column '{column}' is not numeric"
-            )
-        ]
-
-    valid = pc.is_valid(col)
-    below = pc.less(col, min_v) if min_v is not None else None
-    above = pc.greater(col, max_v) if max_v is not None else None
-    if below is not None and above is not None:
-        out_of_range = pc.or_(below, above)
-    elif below is not None:
-        out_of_range = below
-    else:
-        out_of_range = above
-
-    offending = col.filter(pc.and_(valid, out_of_range))
-    n = len(offending)
-    if n == 0:
-        return []
-
-    valid_vals = col.filter(valid)
-    obs_min = pc.min(valid_vals).as_py()
-    obs_max = pc.max(valid_vals).as_py()
-    sample = [str(v) for v in offending.slice(0, 20).to_pylist()]
-    return [
-        Issue(
-            category="Data Validation",
-            code="value-range",
-            severity="error",
-            description=(
-                f"{dataset_key}: {n} row(s) with {column} outside "
-                f"[{min_v}, {max_v}] (observed [{obs_min}, {obs_max}])"
-            ),
-            details=sample,
-            fixable=False,
-        )
-    ]
-
-
-def _run_not_null_rule(
-    dataset_key: str, dataset_path: Path, rule: dict[str, Any]
-) -> list[Issue]:
-    """Evaluate a not-null rule: configured columns must have no nulls."""
-    columns = rule.get("columns")
-    if not isinstance(columns, list) or not columns:
-        return [
-            _validation_config_error(
-                dataset_key, "not-null requires a non-empty 'columns' list"
-            )
-        ]
-
-    try:
-        table = _read_columns(dataset_key, dataset_path, columns)
-    except KeyError as exc:
-        return [_validation_config_error(dataset_key, str(exc))]
-    if table is None:
-        return []
-
-    violating = [(c, table.column(c).null_count) for c in columns]
-    violating = [(c, n) for c, n in violating if n > 0]
-    if not violating:
-        return []
-    return [
-        Issue(
-            category="Data Validation",
-            code="not-null",
-            severity="error",
-            description=(
-                f"{dataset_key}: null values in {len(violating)} required column(s)"
-            ),
-            details=[f"{c}: {n} null(s)" for c, n in violating],
-            fixable=False,
-        )
-    ]
-
-
-def _run_no_duplicates_rule(
-    dataset_key: str, dataset_path: Path, rule: dict[str, Any]
-) -> list[Issue]:
-    """Evaluate a no-duplicates rule: no duplicate rows for the key columns."""
-    import pyarrow.compute as pc
-
-    key = rule.get("key")
-    if not isinstance(key, list) or not key:
-        return [
-            _validation_config_error(
-                dataset_key, "no-duplicates requires a non-empty 'key' list"
-            )
-        ]
-
-    try:
-        table = _read_columns(dataset_key, dataset_path, key)
-    except KeyError as exc:
-        return [_validation_config_error(dataset_key, str(exc))]
-    if table is None:
-        return []
-
-    grouped = table.group_by(key).aggregate([([], "count_all")])
-    dup = grouped.filter(pc.greater(grouped.column("count_all"), 1))
-    n_dup_keys = dup.num_rows
-    if n_dup_keys == 0:
-        return []
-
-    excess = pc.sum(dup.column("count_all")).as_py() - n_dup_keys
-    details = []
-    for row in dup.slice(0, 20).to_pylist():
-        keyvals = ", ".join(str(row[k]) for k in key)
-        details.append(f"({keyvals}): {row['count_all']} rows")
-    return [
-        Issue(
-            category="Data Validation",
-            code="no-duplicates",
-            severity="error",
-            description=(
-                f"{dataset_key}: {n_dup_keys} duplicated key(s) on "
-                f"[{', '.join(key)}] ({excess} excess row(s))"
-            ),
-            details=details,
-            fixable=False,
-        )
-    ]
-
-
-def check_validations(
-    validations_config: Path,
-) -> list[Issue]:
-    """Run all configured validation rules against the stored datasets.
-
-    Loads the validations spec and dispatches each rule by its ``rule:``
-    discriminator (``calendar-completeness``, ``no-unexpected-observations``).
-
-    Args:
-        validations_config: Path to the validations YAML file. Required;
-            ``run_doctor`` guarantees a non-None path before calling.
-
-    Returns:
-        List of issues (findings and config errors). Never raises.
-    """
-    from .cache import CacheManager
-
-    man = CacheManager()
-
-    try:
-        config = _load_validations_config(validations_config)
-    except Exception as exc:
-        return [
-            Issue(
-                category="Data Validation",
-                code="validation-config-error",
-                severity="error",
-                description=f"Cannot load validations config: {exc}",
-                details=[],
-                fixable=False,
-            )
-        ]
-
-    issues: list[Issue] = []
-    for dataset_key, rules in config.items():
-        if not isinstance(rules, list):
-            issues.append(_validation_config_error(dataset_key, "rules must be a list"))
-            continue
-        dataset_path = Path(man.db_path(dataset_key.replace(".", "/", 1)))
-        for rule in rules:
-            if not isinstance(rule, dict):
-                issues.append(
-                    _validation_config_error(dataset_key, "rule must be a mapping")
-                )
-                continue
-            rule_type = rule.get("rule")
-            if rule_type == "calendar-completeness":
-                issues.extend(
-                    _run_calendar_completeness_rule(dataset_key, dataset_path, rule)
-                )
-            elif rule_type == "no-unexpected-observations":
-                issues.extend(
-                    _run_no_unexpected_observations_rule(
-                        dataset_key, dataset_path, rule
-                    )
-                )
-            elif rule_type == "value-range":
-                issues.extend(_run_value_range_rule(dataset_key, dataset_path, rule))
-            elif rule_type == "not-null":
-                issues.extend(_run_not_null_rule(dataset_key, dataset_path, rule))
-            elif rule_type == "no-duplicates":
-                issues.extend(_run_no_duplicates_rule(dataset_key, dataset_path, rule))
-            else:
-                issues.append(
-                    _validation_config_error(
-                        dataset_key, f"unknown validation rule '{rule_type}'"
-                    )
-                )
-    return issues
-
-
 def check_download_refdate_gaps(
     template_filter: list[str] | None,
     calendar_name: str,
@@ -1858,7 +1242,6 @@ _CATEGORY_KEYS = {
     "meta": ["unresolved-errors", "invalid-downloads"],
     "templates": ["stale-etl", "missing-etl-source"],
     "gaps": ["date-gaps"],
-    "validations": ["validations"],
     "downloads": ["download-refdate-gaps"],
 }
 
@@ -1867,7 +1250,6 @@ def run_doctor(
     categories: list[str] | None = None,
     template_filter: list[str] | None = None,
     last_days: int = 30,
-    validations_config: Path | None = None,
     calendar_name: str = "B3",
 ) -> DoctorReport:
     """Run all (or selected) diagnostic checks and return a DoctorReport.
@@ -1875,24 +1257,17 @@ def run_doctor(
     Args:
         categories: Optional list of category keys to restrict checks.
             Valid values: "raw", "db", "meta", "templates", "gaps",
-            "validations", "downloads". If None, all checks are run.
+            "downloads". If None, all checks are run.
         template_filter: Restrict the date-gaps, stale-etl, missing-etl-source
             and downloads checks to these template IDs.
         last_days: For the gaps and downloads categories, only look back this
             many days; a negative value (-1) reviews the full history.
-        validations_config: Path to a validations YAML file. Required for the
-            "validations" category. If None and "validations" is explicitly
-            requested, a ValueError is raised; if None during a broad run, the
-            validation checks are skipped with an informational note.
         calendar_name: Business calendar for the gaps and downloads
             categories (default "B3").
 
     Returns:
         DoctorReport aggregating all issues found.
 
-    Raises:
-        ValueError: If "validations" is explicitly requested without
-            validations_config.
     """
     report = DoctorReport()
 
@@ -1903,27 +1278,6 @@ def run_doctor(
             active_codes.update(_CATEGORY_KEYS.get(cat_key, []))
     else:
         active_codes = {code for codes in _CATEGORY_KEYS.values() for code in codes}
-
-    # Validations require an explicit spec file (WIL-91). With no file, an
-    # explicit `--category validations` is a usage error, while a broad run
-    # skips the validation checks with an informational note. Generic over the
-    # whole validations category so future rule types inherit this policy.
-    validation_codes = set(_CATEGORY_KEYS["validations"])
-    explicit_validations = categories is not None and "validations" in categories
-    if validations_config is None and (active_codes & validation_codes):
-        if explicit_validations:
-            raise ValueError("the 'validations' category requires --validations-file")
-        active_codes -= validation_codes
-        report.issues.append(
-            Issue(
-                category="Data Validation",
-                code="validations-skipped",
-                severity="info",
-                description="validations skipped: no --validations-file provided",
-                details=[],
-                fixable=False,
-            )
-        )
 
     check_map: dict[str, Callable[[], list[Issue]]] = {
         "orphan-raw": check_orphan_raw,
@@ -1942,8 +1296,6 @@ def run_doctor(
             template_filter, calendar_name, last_days
         ),
     }
-    if validations_config is not None:
-        check_map["validations"] = lambda: check_validations(validations_config)
 
     for code, check_fn in check_map.items():
         if code not in active_codes:
