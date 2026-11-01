@@ -15,6 +15,7 @@ from typing import Any
 import yaml
 
 from .doctor import (
+    DoctorReport,
     Issue,
     _as_date,
     _calendar_completeness_gaps,
@@ -637,3 +638,158 @@ def run_rules(index: dict[str, Any]) -> list[Issue]:
                     )
                 )
     return issues
+
+
+def _config_error(description: str) -> Issue:
+    """Build an error issue for a rule definition problem."""
+    return Issue(
+        category="Data Validation",
+        code="validation-config-error",
+        severity="error",
+        description=description,
+    )
+
+
+def _add_rules(
+    index: dict[str, list[Any]],
+    key: str,
+    rules: Any,
+    source: str,
+    problems: list[Issue],
+) -> None:
+    """Append ``rules`` to ``index[key]``, or record a problem if not a list."""
+    if not isinstance(rules, list):
+        problems.append(_config_error(f"{source}: rules for {key} must be a list"))
+        return
+    index.setdefault(key, []).extend(rules)
+
+
+def collect_rules(
+    rules_file: Path | None = None,
+) -> tuple[dict[str, list[Any]], set[str], list[Issue]]:
+    """Build the per-dataset rule index.
+
+    Sources, merged as a union (nothing overrides anything): the inline
+    ``validations:`` blocks of every discovered template, every
+    ``validations/*.yaml`` file in each template folder, and ``rules_file``.
+
+    Args:
+        rules_file: Optional extra rules file (same format as folder files).
+
+    Returns:
+        ``(index, known_datasets, problems)``: the rules per ``layer.dataset``,
+        every dataset that some template produces, and the rule definition
+        problems found while collecting.
+    """
+    from .dependency_graph import TemplateDependencyGraph
+    from .template import get_template_folders
+
+    graph = TemplateDependencyGraph()
+    known = {
+        out.dataset_id.replace("/", ".", 1)
+        for outs in graph.outputs.values()
+        for out in outs
+    }
+    index: dict[str, list[Any]] = {}
+    problems: list[Issue] = []
+
+    for tid, tpl in graph.templates.items():
+        top = getattr(tpl, "validations", None)
+        layer = tpl.writer.layer.value
+        source = f"template {tid}"
+        if tpl.datasets:
+            if top is not None:
+                problems.append(
+                    _config_error(
+                        f"{source}: it writes several datasets, so put "
+                        "'validations:' inside each 'datasets:' entry"
+                    )
+                )
+            for key, dataset in tpl.datasets.items():
+                if dataset.validations is not None:
+                    _add_rules(
+                        index,
+                        f"{layer}.{tid}-{key}",
+                        dataset.validations,
+                        source,
+                        problems,
+                    )
+        elif top is not None:
+            _add_rules(index, f"{layer}.{tpl.writer.dataset}", top, source, problems)
+
+    files = [
+        f
+        for folder in get_template_folders()
+        if not folder.bundled
+        for f in sorted((folder.root / "validations").glob("*.yaml"))
+    ]
+    if rules_file is not None:
+        files.append(Path(rules_file))
+    for path in files:
+        try:
+            mapping = load_rules_file(path)
+        except Exception as exc:
+            problems.append(_config_error(f"{path}: cannot load rules ({exc})"))
+            continue
+        for key, rules in mapping.items():
+            if key not in known:
+                problems.append(
+                    _config_error(
+                        f"{path}: unknown dataset '{key}' (no template produces it)"
+                    )
+                )
+                continue
+            _add_rules(index, key, rules, str(path), problems)
+    return index, known, problems
+
+
+def validate_datasets(
+    datasets: list[str] | None = None, rules_file: Path | None = None
+) -> DoctorReport:
+    """Check datasets against their validation rules.
+
+    Args:
+        datasets: ``layer.dataset`` names to check. None checks every dataset
+            that has rules.
+        rules_file: Optional extra rules file.
+
+    Returns:
+        A report with rule failures, skipped rules, notes and rule definition
+        problems.
+
+    Raises:
+        FileNotFoundError: If ``rules_file`` is given but does not exist.
+        ValueError: If a requested dataset is not produced by any template.
+    """
+    if rules_file is not None and not Path(rules_file).is_file():
+        raise FileNotFoundError(f"rules file not found: {rules_file}")
+    index, known, problems = collect_rules(rules_file)
+    if datasets:
+        unknown = [d for d in datasets if d not in known]
+        if unknown:
+            raise ValueError(
+                f"unknown dataset(s): {', '.join(unknown)} (no template produces them)"
+            )
+    issues = list(problems)
+    for key in datasets or sorted(index):
+        rules = index.get(key)
+        if not rules:
+            issues.append(
+                Issue(
+                    category="Data Validation",
+                    code="no-rules",
+                    severity="info",
+                    description=f"no rules for {key}",
+                )
+            )
+            continue
+        issues.append(
+            Issue(
+                category="Data Validation",
+                code="validation-run",
+                severity="info",
+                description=f"{key}: {len(rules)} rule(s) checked",
+            )
+        )
+        issues.extend(run_rules({key: rules}))
+    return DoctorReport(issues=issues)

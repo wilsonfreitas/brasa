@@ -41,11 +41,13 @@ class DatasetConfig:
         name: The output name for this dataset (e.g., 'indexes_info')
         tag: The source identifier/XML tag (e.g., 'IndxInf')
         fields: Field definitions for this dataset
+        validations: Inline validation rules for this dataset (``brasa validate``)
     """
 
     name: str
     tag: str
     fields: Fieldset
+    validations: list | None = None
 
 
 class MarketDataETL:
@@ -637,6 +639,7 @@ class MarketDataTemplate:
                 name=dataset_name,
                 tag=tag,
                 fields=fs,
+                validations=dataset_config.get("validations"),
             )
         # Clear top-level fields when using datasets
         self.fields = None
