@@ -10,8 +10,9 @@ the `brasa` command do not change.
 
 ### Upgrading from 0.4
 
-1. `pip install brasa-core` — or `pip install -U brasa-marketdata`, which now
-   installs brasa-core.
+1. `pip uninstall brasa-marketdata && pip install brasa-core`.
+   (`pip install -U brasa-marketdata` only prints this command and keeps
+   0.4.0 installed.)
 2. Run `brasa init`. It keeps your data directory and clones the official
    templates into `<data path>/templates`. Use `brasa init --templates
    <url|path>` for a fork or for a folder you already have.
@@ -28,7 +29,8 @@ the `brasa` command do not change.
   Run `brasa init` or set BRASA_TEMPLATE_PATH." and name any configured
   folder that is missing; `brasa info` still works. (WIL-205)
 - The distribution is renamed `brasa-marketdata` → `brasa-core`. A last
-  `brasa-marketdata` 0.5.0 has no code and depends on `brasa-core`. (WIL-205)
+  `brasa-marketdata` 0.5.0 installs nothing: it stops with the command to
+  switch, and an installed 0.4.0 keeps working. (WIL-205)
 - `brasa doctor` has no validations category and no `--validations-file`;
   use `brasa validate`. (WIL-201)
 - Templates are read only from a folder's `templates/` subfolder. (WIL-198)
