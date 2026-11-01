@@ -34,6 +34,9 @@
 3. **[2026-10-31] Linear docs: auto-links and silent no-op patches**
    Do instead: Keep domain-like file names (`steps.py`, `x.md`) out of Linear document headings — they become links even in backticks. A `save_document` patch whose anchor touches auto-linked text or an issue mention (`WIL-123`) can no-op silently: check `updatedAt` changed, or resend the full content.
 
+4. **[2026-10-31] zsh does not word-split unquoted variables**
+   Do instead: Don't pass a file list as `$F` to ruff/pytest (it becomes ONE argument); list paths inline or use an array (`files=(a b); cmd $files`).
+
 ## Domain Behavior Guardrails
 
 1. **[2026-04-20] YAML field types: date(), numeric(), string, integer, character, category**
