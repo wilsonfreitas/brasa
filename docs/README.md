@@ -362,7 +362,7 @@ See: [Architecture - Extensibility](ARCHITECTURE.md#extensibility)
 - `brasa/etl.py`: ETL transformations (988 lines)
 - `brasa/queries.py`: Query layer (329 lines)
 - `brasa/util.py`: Utilities (205 lines)
-- `brasa/files/templates/*.yaml`: 100+ template definitions
+- Templates: the brasa-templates repo (cloned by `brasa init`), not this package
 
 ### External Documentation
 - [B3 Data Documentation](https://www.b3.com.br/)

@@ -44,8 +44,12 @@ Pick **one** of the following.
 ### Option A — from PyPI (released version)
 
 ```bash
-pip install brasa
+pip install brasa-core
 ```
+
+The distribution is `brasa-core` since 0.5.0 (it was `brasa-marketdata` until
+0.4.0); the import name and the command are `brasa`. The PyPI project called
+`brasa` is an unrelated tool.
 
 ### Option B — from GitHub (latest `main`)
 

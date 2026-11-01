@@ -16,7 +16,7 @@ Brasa follows a modular, template-driven architecture that separates concerns ac
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
 │                    Template Layer                            │
-│  - YAML configuration files (brasa/files/templates/*.yaml)              │
+│  - YAML templates in template folders (<folder>/templates/*.yaml)  │
 │  - MarketDataTemplate (engine.py)                           │
 └─────────────────────────────────────────────────────────────┘
                             ↓
@@ -511,7 +511,7 @@ show(dataset_name, n=10) -> pd.DataFrame
 
 ### Adding New Data Sources
 
-1. Create YAML template in `brasa/files/templates/`
+1. Create a YAML template in a template folder's `templates/` (official ones: the brasa-templates repo; see TEMPLATES.md)
 2. Implement downloader function if needed
 3. Implement parser function if needed
 4. Optional: Add ETL function for transformations

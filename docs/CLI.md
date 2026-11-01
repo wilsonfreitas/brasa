@@ -90,8 +90,12 @@ template folders:
   /home/user/my-workspace  (no brasa.toml)
   /home/user/brasa-templates  brasa-templates requires brasa >=0.5.0.dev0,<0.6  OK
       origin https://github.com/wilsonfreitas/brasa-templates  commit 3f2a1c9
-  /path/to/site-packages/brasa/files/templates  (bundled)
 ```
+
+With no template folder, the block shows ``none (run `brasa init` or set
+BRASA_TEMPLATE_PATH)``, and a configured folder that doesn't exist is listed as
+`not found (skipped)`. Commands that load templates then fail with "No template
+folders configured. Run `brasa init` or set BRASA_TEMPLATE_PATH."
 
 Exit code is `0` when brasa is configured and the data path exists on disk, `1` otherwise (not configured, missing directory, invalid config file, or a template folder whose `brasa.toml` is invalid or does not accept the installed version) — useful as a preflight in scripts: `brasa info && brasa run-all`.
 
@@ -476,9 +480,8 @@ $ brasa map
 
 List all discovered templates and the template folder each one comes from (see
 [Template folders](TEMPLATES.md#template-folders)). A folder whose
-`brasa.toml` has a `name` is shown as `name (path)`; templates still bundled
-with the package show `bundled`. A template that overrides one with the same
-name in a lower-priority folder is marked `*shadows`.
+`brasa.toml` has a `name` is shown as `name (path)`. A template that overrides
+one with the same name in a lower-priority folder is marked `*shadows`.
 
 ```bash
 brasa list-templates
@@ -486,7 +489,7 @@ brasa list-templates
 
 ```
 NAME              SOURCE
-b3-futures        bundled
+b3-futures        brasa-templates (/home/me/brasa/templates)
 my-custom-etl     /home/me/my-templates
 b3-cotahist       my-ws (/home/me/my-workspace)  *shadows
 ```

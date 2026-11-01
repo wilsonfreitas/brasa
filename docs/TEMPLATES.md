@@ -553,7 +553,7 @@ fields:
 
 Produces a deterministic lookup table by joining and mapping `sector`/`subsector` values from `staging.brasa-companies` to standard GICS, ICB, and normalized sector taxonomies using a single `sql_query` step.
 
-**Source:** `staging.brasa-companies` (produced by `brasa/files/templates/brasa-companies.yaml`)
+**Source:** `staging.brasa-companies` (produced by the `brasa-companies` template)
 **Output:** `staging.brasa-industry-sectors`
 
 ```yaml
@@ -1500,7 +1500,7 @@ def detect_template_type(template):
 
 ### Code Architecture
 
-- **Templates:** [brasa/files/templates/](../brasa/files/templates/) - YAML template definitions
+- **Templates:** [brasa-templates](https://github.com/wilsonfreitas/brasa-templates) - the official YAML template definitions (a template folder; brasa ships no templates)
 - **Template Engine:** [brasa/engine/template.py](../brasa/engine/template.py) - Template loader, parser, schema
 - **Pipeline Engine:** [brasa/engine/pipeline/](../brasa/engine/pipeline/) - Step registry, context, execution
 - **Processing:** [brasa/engine/processing.py](../brasa/engine/processing.py) - Orchestrates download/read/ETL/write
@@ -1668,9 +1668,11 @@ brasa searches folders in this order; the first folder that defines a name
 wins:
 
 1. the `BRASA_TEMPLATE_PATH` environment variable,
-2. `template_path` in `~/.config/brasa/config.toml`,
-3. the templates bundled with the package (until they move to the
-   brasa-templates repo).
+2. `template_path` in `~/.config/brasa/config.toml`.
+
+brasa ships no templates (since 0.5.0). With no folder, commands that load
+templates fail with "No template folders configured. Run `brasa init` or set
+BRASA_TEMPLATE_PATH.", and name any configured folder that doesn't exist.
 
 Both settings use the same format: folders separated by the OS path separator
 (`:` on Linux/macOS, `;` on Windows); `~` and `$VARS` are expanded; missing
