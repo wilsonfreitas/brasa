@@ -44,20 +44,30 @@ def load_config() -> dict:
         return tomllib.load(f)
 
 
+def save_config_value(key: str, value: str) -> None:
+    """Persist ``key = value`` in the user config file, keeping other keys.
+
+    Args:
+        key: Config key, e.g. ``"data_path"`` or ``"template_path"``.
+        value: The string value to store.
+    """
+    path = config_file_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    config = load_config()
+    config[key] = str(value)
+    # json.dumps produces a valid TOML basic string (escapes \ and ").
+    # ponytail: string values only — all brasa config keys are strings.
+    lines = "".join(f"{k} = {json.dumps(str(v))}\n" for k, v in config.items())
+    path.write_text(lines, encoding="utf-8")
+
+
 def save_data_path(data_path: str) -> None:
     """Persist *data_path* into the user config file, keeping other keys.
 
     Args:
         data_path: Absolute path of the brasa data directory.
     """
-    path = config_file_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    config = load_config()
-    config["data_path"] = str(data_path)
-    # json.dumps produces a valid TOML basic string (escapes \ and ").
-    # ponytail: string values only — all brasa config keys are strings.
-    lines = "".join(f"{k} = {json.dumps(str(v))}\n" for k, v in config.items())
-    path.write_text(lines, encoding="utf-8")
+    save_config_value("data_path", data_path)
 
 
 def resolve_data_path() -> str:

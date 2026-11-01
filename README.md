@@ -26,7 +26,11 @@ under a single *brasa home*. On a fresh install, configure it once:
 
 This suggests a platform default (e.g. `~/.local/share/brasa` on Linux),
 lets you confirm or type another path, and persists the choice in
-`~/.config/brasa/config.toml`. Non-interactive variants:
+`~/.config/brasa/config.toml`. It also sets up your templates: it clones the
+official [brasa-templates](https://github.com/wilsonfreitas/brasa-templates)
+repo into `<data path>/templates` (use `--templates <url|path>` for a fork or
+a folder you already have). Get template updates later with
+`brasa update-templates`. Non-interactive variants:
 
     brasa init --data-path /data/brasa   # explicit path, no prompt
     brasa init --yes                     # accept the default, no prompt

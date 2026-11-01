@@ -53,8 +53,8 @@ Precedence for both: env var → config file → default.
 
 Where brasa looks for template folders, in priority order: the
 `BRASA_TEMPLATE_PATH` environment variable first, then the `template_path` key
-in `~/.config/brasa/config.toml`. Both take folders separated by the OS path
-separator. See [Template folders](TEMPLATES.md#template-folders) for the
+in `~/.config/brasa/config.toml` (written by `brasa init`). Both take folders
+separated by the OS path separator. See [Template folders](TEMPLATES.md#template-folders) for the
 folder layout, the precedence rules and `brasa.toml` version requirements.
 
 ```toml
