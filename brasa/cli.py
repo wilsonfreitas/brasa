@@ -159,6 +159,14 @@ parser_init.add_argument(
     action="store_true",
     help="accept the suggested default without prompting",
 )
+parser_init.add_argument(
+    "--templates",
+    metavar="URL_OR_PATH",
+    help=(
+        "template folder: a git URL to clone into <data path>/templates, or an "
+        "existing folder (default: clone the official brasa-templates repo)"
+    ),
+)
 
 parser_info = subparsers.add_parser(
     "info", help="show version and environment configuration status"
@@ -473,6 +481,11 @@ parser_list_templates = subparsers.add_parser(
 parser_list_plans = subparsers.add_parser(
     "list-plans",
     help="list download plans found in the template folders",
+)
+
+parser_update_templates = subparsers.add_parser(
+    "update-templates",
+    help="update the template folders that are git clones (git pull --ff-only)",
 )
 
 parser_graph = subparsers.add_parser(
@@ -916,6 +929,34 @@ def _cmd_init(args) -> None:
             f"Note: BRASA_DATA_PATH is set ({env_override}) "
             "and takes precedence over the config file."
         )
+    _init_templates(chosen_path, getattr(args, "templates", None))
+
+
+def _init_templates(data_path: Path, templates: str | None) -> None:
+    """Run the template-folder step of ``brasa init``.
+
+    Args:
+        data_path: The chosen brasa data directory.
+        templates: ``--templates`` value: a git URL, an existing folder, or
+            None (keep a configured ``template_path``, else clone the
+            official repo).
+    """
+    from .engine.config import load_config, save_config_value
+    from .engine.template_git import setup_template_folder
+
+    current = load_config().get("template_path")
+    if current and templates is None:
+        print(f"Template folders kept: {current}")
+        return
+    try:
+        folder, message = setup_template_folder(data_path, templates)
+    except TemplateFolderError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+    save_config_value("template_path", str(folder))
+    print(f"Templates: {message}")
+    if current and current != str(folder):
+        print(f"template_path changed: {current} -> {folder}")
 
 
 def _cmd_info() -> None:
@@ -978,6 +1019,7 @@ def _print_template_folders() -> bool:
         mismatch).
     """
     from .engine.template import get_template_folders
+    from .engine.template_git import git_info
 
     try:
         folders = get_template_folders()
@@ -996,7 +1038,28 @@ def _print_template_folders() -> bool:
             check = f"requires brasa {f.requires}  OK"
             label = f"{f.name} {check}" if f.name else check
         print(f"  {f.root}  {label}")
+        if not f.bundled:
+            url, commit = git_info(f.root)
+            if commit:
+                print(f"      origin {url or '(none)'}  commit {commit}")
     return any(f.error for f in folders)
+
+
+def _update_templates() -> None:
+    """Run ``brasa update-templates`` and exit 1 if anything went wrong."""
+    from .engine.template import get_template_folders
+    from .engine.template_git import update_template_folders
+
+    results = update_template_folders()
+    if not results:
+        print("No template folders to update.")
+    for root, message, _ok in results:
+        print(f"{root}: {message}")
+    errors = [f.error for f in get_template_folders() if f.error]
+    for error in errors:
+        print(f"Error: {error}", file=sys.stderr)
+    if errors or not all(ok for _, _, ok in results):
+        sys.exit(1)
 
 
 def _print_plans() -> None:
@@ -1504,6 +1567,9 @@ def _run_command(args) -> None:  # noqa: PLR0912, PLR0915
 
     elif args.command == "list-plans":
         _print_plans()
+
+    elif args.command == "update-templates":
+        _update_templates()
 
     elif args.command == "graph":
         from .engine.dependency_graph import TemplateDependencyGraph

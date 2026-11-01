@@ -30,6 +30,7 @@ brasa <command> [options]
 | Templates | `map` | Global dependency-ordered staleness report |
 | Templates | `list-templates` | List discovered templates and their source |
 | Templates | `list-plans` | List download plans found in the template folders |
+| Templates | `update-templates` | Update template folders that are git clones |
 | Datasets | `head` | Preview first N rows of a dataset |
 | Datasets | `list-datasets` | List all registered datasets |
 | Datasets | `describe-dataset` | Show schema and metadata for a dataset |
@@ -61,6 +62,9 @@ brasa init [--data-path PATH] [--yes]
 |--------|-------------|
 | `--data-path PATH` | Use `PATH` directly, without prompting (scripts/CI) |
 | `-y`, `--yes` | Accept the suggested default without prompting |
+| `--templates URL_OR_PATH` | Template folder: a git URL (e.g. your fork) cloned into `<data path>/templates`, or an existing folder used as it is. Default: clone the official brasa-templates repo |
+
+After the data directory, `init` sets up your templates and writes `template_path` to the config file. With no `--templates` it keeps an existing `template_path`, or clones `https://github.com/wilsonfreitas/brasa-templates` into `<data path>/templates` (an existing clone there is reused). It needs `git`; without it, download the repo yourself and pass `--templates <path>`. The remote URL lives only in the clone's git settings — to switch a clone to your fork, run `git remote set-url origin <fork>` or `brasa init --templates <fork-url>`.
 
 Without flags in an interactive terminal, `init` suggests a default (the previously persisted path, or the platform data dir such as `~/.local/share/brasa`) and asks for confirmation or a custom path. With non-interactive stdin it accepts the default automatically. Re-running `init` reconfigures: the current persisted value becomes the suggestion. The cache substructure (`raw/`, `db/`, `meta/`, metadata DB) is created lazily on first use.
 
@@ -85,6 +89,7 @@ config:     /home/user/.config/brasa/config.toml  (data_path = /other/path — o
 template folders:
   /home/user/my-workspace  (no brasa.toml)
   /home/user/brasa-templates  brasa-templates requires brasa >=0.5.0.dev0,<0.6  OK
+      origin https://github.com/wilsonfreitas/brasa-templates  commit 3f2a1c9
   /path/to/site-packages/brasa/files/templates  (bundled)
 ```
 
@@ -502,6 +507,24 @@ NAME      DESCRIPTION                    SOURCE
 daily-b3  Daily B3 market data download  brasa-templates (/home/me/brasa/templates)
 daily     My daily list                  /home/me/my-workspace  *shadows
 ```
+
+---
+
+### `update-templates`
+
+Updates every template folder that is a git clone with `git pull --ff-only`.
+It never merges and never overwrites your local changes; updates only happen
+when you run this command.
+
+```
+$ brasa update-templates
+/home/me/my-workspace: skipped (no upstream branch)
+/home/me/brasa/templates: updated 3f2a1c9 -> 8e41d07
+```
+
+Folders that aren't clones are skipped. After pulling, each folder's
+`brasa.toml` version requirement is checked again. Exit code 1 if git refused
+an update or a folder no longer fits the installed brasa.
 
 ---
 
