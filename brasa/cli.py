@@ -184,8 +184,12 @@ parser_download.add_argument(
 )
 parser_download.add_argument(
     "--plan",
-    metavar="FILE",
-    help="path to a download plan YAML file (mutually exclusive with template names)",
+    metavar="PLAN",
+    help=(
+        "download plan: a name from the template folders' plans/ (see "
+        "`brasa list-plans`) or a path to a plan YAML file (mutually exclusive "
+        "with template names)"
+    ),
 )
 parser_download.add_argument(
     "template",
@@ -463,7 +467,12 @@ parser_list_unprocessed.add_argument(
 
 parser_list_templates = subparsers.add_parser(
     "list-templates",
-    help="list available templates and their source (bundled or user path)",
+    help="list available templates and the template folder each comes from",
+)
+
+parser_list_plans = subparsers.add_parser(
+    "list-plans",
+    help="list download plans found in the template folders",
 )
 
 parser_graph = subparsers.add_parser(
@@ -990,6 +999,33 @@ def _print_template_folders() -> bool:
     return any(f.error for f in folders)
 
 
+def _print_plans() -> None:
+    """Print the ``brasa list-plans`` table: name, description, source."""
+    import yaml
+
+    from .engine.template import list_plan_sources
+
+    rows = []
+    for e in list_plan_sources():
+        try:
+            data = yaml.safe_load(e.path.read_text(encoding="utf-8"))
+            desc = str(data.get("description") or "")
+        except Exception:
+            desc = "(unreadable plan file)"
+        source = f"{e.source_name} ({e.source})" if e.source_name else str(e.source)
+        if e.shadows:
+            source += "  *shadows"
+        rows.append((e.name, desc, source))
+    if not rows:
+        print("No download plans found in the template folders.")
+        return
+    name_w = max(len("NAME"), *(len(r[0]) for r in rows))
+    desc_w = max(len("DESCRIPTION"), *(len(r[1]) for r in rows))
+    print(f"{'NAME':<{name_w}}  {'DESCRIPTION':<{desc_w}}  SOURCE")
+    for name, desc, source in rows:
+        print(f"{name:<{name_w}}  {desc:<{desc_w}}  {source}")
+
+
 def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.command == "init":
@@ -1052,9 +1088,13 @@ def _run_command(args) -> None:  # noqa: PLR0912, PLR0915
             sys.exit(1)
 
         if plan_file:
-            from .engine.download_plan import DownloadPlan, execute_download_plan
+            from .engine.download_plan import execute_download_plan, load_plan
 
-            plan = DownloadPlan.from_file(plan_file)
+            try:
+                plan = load_plan(plan_file)
+            except (FileNotFoundError, ValueError) as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                sys.exit(1)
             errors = plan.validate()
             if errors:
                 for err in errors:
@@ -1461,6 +1501,9 @@ def _run_command(args) -> None:  # noqa: PLR0912, PLR0915
                 if e.shadows:
                     source += "  *shadows"
                 print(f"{e.name:<{name_width}}  {source}")
+
+    elif args.command == "list-plans":
+        _print_plans()
 
     elif args.command == "graph":
         from .engine.dependency_graph import TemplateDependencyGraph

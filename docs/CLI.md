@@ -29,6 +29,7 @@ brasa <command> [options]
 | Templates | `graph` | Export dependency graph (DOT, ASCII, PNG, SVG, PDF) |
 | Templates | `map` | Global dependency-ordered staleness report |
 | Templates | `list-templates` | List discovered templates and their source |
+| Templates | `list-plans` | List download plans found in the template folders |
 | Datasets | `head` | Preview first N rows of a dataset |
 | Datasets | `list-datasets` | List all registered datasets |
 | Datasets | `describe-dataset` | Show schema and metadata for a dataset |
@@ -108,7 +109,7 @@ brasa download <template> [<template> ...] [options]
 | `--arg KEY=VALUE` | Pass typed arguments to the download (repeatable) |
 | `--calendar {B3,ANBIMA}` | Default calendar for date arguments (default: B3) |
 | `--force` | Re-download even if files exist in cache |
-| `--plan FILE` | Use a download plan YAML file instead of template names |
+| `--plan PLAN` | Use a download plan instead of template names: a plan name from `plans/` in your template folders (see `list-plans`) or a path to a plan YAML file |
 | `-v / --verbose` | Show each download task on its own line |
 | `-q / --quiet` | Only show summary if there are errors |
 | `--report FILE` | Save download report to file (.json or .txt) |
@@ -170,13 +171,14 @@ brasa download b3-cotahist-daily --arg refdate=@2026-03-15 --force -v
 **Download using a plan file:**
 
 ```bash
-brasa download --plan daily-b3.yaml
+brasa download --plan daily-b3            # by name
+brasa download --plan ./daily-b3.yaml     # by path
 ```
 
 **Override dates in a plan:**
 
 ```bash
-brasa download --plan daily-b3.yaml --arg refdate=@2026-01
+brasa download --plan daily-b3 --arg refdate=@2026-01
 ```
 
 #### Flag precedence with `--plan`
@@ -486,6 +488,20 @@ b3-cotahist       my-ws (/home/me/my-workspace)  *shadows
 
 If a folder's `brasa.toml` is invalid or does not accept the installed brasa
 version, the command stops with an error naming the folder (exit code 1).
+
+---
+
+### `list-plans`
+
+List the download plans found in the `plans/` folder of your template folders
+(see [DOWNLOAD_PLAN.md](DOWNLOAD_PLAN.md#plans-by-name)). Run one with
+`brasa download --plan NAME`.
+
+```
+NAME      DESCRIPTION                    SOURCE
+daily-b3  Daily B3 market data download  brasa-templates (/home/me/brasa/templates)
+daily     My daily list                  /home/me/my-workspace  *shadows
+```
 
 ---
 

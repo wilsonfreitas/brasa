@@ -92,3 +92,50 @@ def test_plan_folder_version_mismatch_is_error(tmp_path, monkeypatch):
     _env(monkeypatch, root)
     with pytest.raises(TemplateFolderError, match="requires brasa >=99"):
         load_plan("daily")
+
+
+# ---------------------------------------------------------------------------
+# CLI (Task 2)
+# ---------------------------------------------------------------------------
+
+
+def test_list_plans_output(tmp_path, monkeypatch, capsys):
+    from brasa import cli
+
+    root = tmp_path / "ws"
+    _plan(root, "daily", description="daily B3 recipe")
+    (root / "brasa.toml").write_text('name = "my-ws"\nrequires-brasa = ">=0.0"\n')
+    _env(monkeypatch, root)
+    cli.main(["list-plans"])
+    out = capsys.readouterr().out
+    assert out.splitlines()[0].split() == ["NAME", "DESCRIPTION", "SOURCE"]
+    line = next(ln for ln in out.splitlines() if ln.startswith("daily "))
+    assert "daily B3 recipe" in line
+    assert f"my-ws ({root})" in line
+
+
+def test_list_plans_survives_broken_file(tmp_path, monkeypatch, capsys):
+    from brasa import cli
+
+    root = tmp_path / "ws"
+    _plan(root, "good")
+    (root / "plans" / "bad.yaml").write_text("name: [unclosed\n")
+    _env(monkeypatch, root)
+    cli.main(["list-plans"])
+    out = capsys.readouterr().out
+    assert "good" in out
+    bad = next(ln for ln in out.splitlines() if ln.startswith("bad "))
+    assert "(unreadable plan file)" in bad
+
+
+def test_download_unknown_plan_exits_1(tmp_path, monkeypatch, capsys):
+    from brasa import cli
+
+    _plan(tmp_path / "ws", "daily")
+    _env(monkeypatch, tmp_path / "ws")
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["download", "--plan", "nope"])
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert "Download plan 'nope' not found" in err
+    assert "daily" in err
