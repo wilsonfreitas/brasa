@@ -1,0 +1,17 @@
+id: b3-indexes-composition-consolidated
+description: Consolidated information on B3 index compositions
+
+etl:
+  pipeline:
+    - step: load
+      input: b3-indexes-composition
+      layer: input
+
+    - step: flatten_columns
+      columns:
+        - indexes
+      separator: ","
+
+writer:
+  dataset: b3-indexes-composition
+  layer: staging

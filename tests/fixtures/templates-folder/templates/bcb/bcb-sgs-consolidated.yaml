@@ -1,0 +1,45 @@
+id: bcb-sgs-consolidated
+description: Séries temporais do SGS (BCB) deduplicated e com símbolo mapeado
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - input.bcb-sgs
+      query: |
+        SELECT
+          refdate,
+          CASE code
+            WHEN 4389 THEN 'CDI'
+            WHEN 1178 THEN 'SELIC'
+            WHEN 432  THEN 'SETA'
+            WHEN 433  THEN 'IPCA'
+            WHEN 189  THEN 'IGPM'
+          END AS symbol,
+          value
+        FROM (
+          SELECT *,
+            ROW_NUMBER() OVER (
+              PARTITION BY refdate, code
+              ORDER BY downloaded_at DESC
+            ) AS rn
+          FROM 'input.bcb-sgs'
+          WHERE code IN (4389, 1178, 432, 433, 189)
+        )
+        WHERE rn = 1
+
+writer:
+  layer: staging
+  dataset: bcb-sgs
+  partitioning: [symbol]
+
+fields:
+  - name: refdate
+    description: Data de referência
+    type: date(format='%Y-%m-%d')
+  - name: symbol
+    description: Símbolo da série (ex. IPCA, CDI)
+    type: character
+  - name: value
+    description: Valor da série
+    type: numeric

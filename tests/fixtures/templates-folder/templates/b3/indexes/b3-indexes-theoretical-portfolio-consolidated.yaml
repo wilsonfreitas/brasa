@@ -1,0 +1,12 @@
+id: b3-indexes-theoretical-portfolio-consolidated
+description: Consolidated information on B3 index theoretical portfolios
+
+etl:
+  pipeline:
+    - step: load
+      input: b3-indexes-theoretical-portfolio
+      layer: input
+
+writer:
+  dataset: b3-indexes-theoretical-portfolio
+  layer: staging
