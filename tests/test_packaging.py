@@ -38,11 +38,13 @@ def test_sql_ddl_files_resolve():
     assert package_path("sql", "create-dataset-catalog.sql").exists()
 
 
-def test_package_version_is_pep440_dev_version():
+def test_package_version_matches_pyproject():
+    import tomllib
+
     from packaging.version import Version
 
     from brasa.engine.resources import package_version
 
-    v = Version(package_version())
-    assert v.base_version == "0.5.0"
-    assert v.is_devrelease
+    pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+    declared = tomllib.loads(pyproject.read_text())["project"]["version"]
+    assert Version(package_version()) == Version(declared)  # PEP 440, installed
