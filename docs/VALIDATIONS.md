@@ -1,50 +1,99 @@
-# Data Validations (`brasa doctor --category validations`)
+# Data Validations (`brasa validate`)
 
-`brasa doctor` can validate the **content** of stored datasets against a
-declarative spec file — currently the `calendar-completeness` rule, which
-checks that each configured series has a row for every business day of a
-calendar across its observed range.
+`brasa validate` checks the **data** stored in your datalake against
+declarative rules — e.g. "this dataset has a row on every B3 business day" or
+"no duplicate `(refdate, symbol)` keys". It does not check template files
+(those are checked by tests).
 
-Validations are **spec-driven**: you pass the spec explicitly with
-`--validations-file`. There is no bundled default.
+**Put a rule on the dataset that makes the promise.** A raw input such as
+`input.b3-bvbg086` mirrors its source, gaps included, so it only gets
+structural rules (`no-duplicates`, `not-null`). An ETL output that patches
+known source gaps is where a completeness rule belongs.
+
+## Where rules live
+
+Rules come from three places, merged together (nothing overrides anything):
+
+1. **Inline, in templates** — rules that are true for every user of the
+   dataset. The dataset is implicit:
+
+   ```yaml
+   # single-dataset and ETL templates: top level
+   id: b3-equities-returns
+   ...
+   validations:
+     - rule: calendar-completeness   # a row on every B3 business day
+       calendar: B3
+     - rule: no-duplicates
+       key: [refdate, symbol]
+   ```
+
+   ```yaml
+   # multi-dataset templates: inside each datasets entry
+   datasets:
+     indexes_info:
+       tag: IndxInf
+       fields: [...]
+       validations:
+         - rule: not-null
+           columns: [refdate, symbol]
+   ```
+
+2. **Rule files in template folders** — every `validations/*.yaml` in each
+   [template folder](TEMPLATES.md#template-folders). Typical use: personal
+   rules in your own workspace folder. Format: a mapping of `layer.dataset` to
+   a list of rules:
+
+   ```yaml
+   # ~/my-workspace/validations/mine.yaml
+   staging.b3-cotahist:
+     - rule: calendar-completeness
+       group_column: symbol
+       series:
+         BOVA11: { calendar: B3 }
+         IVVB11: { calendar: B3 }
+   ```
+
+3. **`--rules FILE`** — an extra one-off file in the same format.
 
 ## Usage
 
 ```bash
-# Run only the validations category against your spec
-brasa doctor --category validations --validations-file my-validations.yaml
-
-# Run every category; validations uses the given spec
-brasa doctor --validations-file my-validations.yaml
+brasa validate                                      # every dataset that has rules
+brasa validate staging.b3-equities-returns          # one dataset
+brasa validate staging.b3-cotahist input.b3-bvbg086 # several
+brasa validate --rules my.yaml staging.b3-cotahist  # plus an extra rules file
 ```
 
-### Behavior when no file is given
+What you see:
 
-| Invocation | Result |
-| --- | --- |
-| `doctor --category validations` (no file) | error, exit 2 |
-| `doctor` (all categories, no file) | validations **skipped** with a note; other categories run; exit unaffected |
-| any run with `--validations-file` | validations run against that file |
-
-> **Behavior change:** bare `brasa doctor` no longer runs validations by
-> default. Earlier versions shipped a packaged `validations.yaml`; that file is
-> now an example only (see below), and validations run solely against an
-> explicit `--validations-file`.
+- `staging.x: 3 rule(s) checked` (info) for every dataset that was checked,
+  followed by any rule failures (errors).
+- `no rules for staging.x` (info) when you ask for a dataset without rules.
+- `skipped: staging.x/USD — series 'USD' not found` or
+  `skipped: staging.x — dataset not in the datalake` (info) when a rule finds
+  nothing to check. Skips are shown so a typo in a series name is visible, but
+  they never fail the run — a partial datalake passes.
+- A rules-file key that no template produces is an **error**
+  (`unknown dataset 'staging.x' (no template produces it)`).
 
 ### Exit codes
 
 | Situation | Exit |
 | --- | --- |
-| `--category validations`, no file | 2 (usage error) |
-| bad / missing / empty `--validations-file` | 1 (config-error finding) |
-| bare `doctor`, no file | 0 (validations skipped) |
-| valid file, gaps found | 1 |
-| valid file, clean | 0 |
+| no rule failures (skips and notes are fine) | 0 |
+| rule failures, or invalid rule definitions | 1 |
+| a dataset argument that no template produces, or `--rules` file not found | 2 |
 
-## Spec format
+> **Changed in 0.5:** validations used to run as `brasa doctor --category
+> validations --validations-file FILE`. That category and flag are gone;
+> use `brasa validate` (with `--rules FILE` for the old file).
 
-The file is a mapping keyed by `"layer.dataset"`; each entry is a list of
-rules. Each rule has a `rule:` discriminator.
+## Rule format
+
+A rule is a mapping with a `rule:` discriminator. Rule files map each
+`"layer.dataset"` to a list of rules; an inline `validations:` block is the
+same list without the key.
 
 ```yaml
 staging.bcb-sgs:
@@ -74,9 +123,6 @@ Additionally, `calendar-completeness` supports a per-series `frequency`:
 Like `calendar`/`start`/`end`, `frequency` is placed per-series in the grouped
 (`series:`) shape or rule-level in the single-series shape; there is no
 rule-level → series inheritance.
-
-A full, working example lives at
-[`docs/examples/validations.yaml`](examples/validations.yaml).
 
 ### Rule: `no-unexpected-observations`
 
@@ -116,9 +162,3 @@ staging.b3-cotahist:
   - rule: no-duplicates
     key: [refdate, symbol]
 ```
-
-## Roadmap
-
-Additional rule types — monthly/quarterly frequency completeness, non-business-day
-observation flags, and value/null/duplicate rules with auto-fix — are tracked
-under WIL-85, WIL-92, and WIL-93.

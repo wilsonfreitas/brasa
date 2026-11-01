@@ -533,11 +533,8 @@ parser_doctor.add_argument(
     "--category",
     nargs="+",
     metavar="CATEGORY",
-    choices=["raw", "db", "meta", "templates", "gaps", "validations", "downloads"],
-    help=(
-        "run only specific categories: raw, db, meta, templates, gaps, "
-        "validations, downloads"
-    ),
+    choices=["raw", "db", "meta", "templates", "gaps", "downloads"],
+    help="run only specific categories: raw, db, meta, templates, gaps, downloads",
 )
 parser_doctor.add_argument(
     "--template",
@@ -576,10 +573,19 @@ parser_doctor.add_argument(
         "'all' or -1 reviews the full history (default: 30)"
     ),
 )
-parser_doctor.add_argument(
-    "--validations-file",
+
+parser_validate = subparsers.add_parser(
+    "validate", help="check datasets against their validation rules"
+)
+parser_validate.add_argument(
+    "dataset",
+    nargs="*",
+    help="datasets as layer.dataset (default: every dataset that has rules)",
+)
+parser_validate.add_argument(
+    "--rules",
     metavar="FILE",
-    help="path to a validations YAML file (required for the 'validations' category)",
+    help="extra rules file (YAML mapping of layer.dataset -> list of rules)",
 )
 
 parser_cache = subparsers.add_parser(
@@ -722,12 +728,12 @@ def _format_migration_report(report, verbose: bool = False) -> str:
     return "\n".join(lines)
 
 
-def _print_doctor_report(report) -> None:
-    """Print a formatted doctor report to stdout."""
+def _print_doctor_report(report, title: str = "Brasa Doctor") -> None:
+    """Print a formatted doctor (or validate) report to stdout."""
     SEV_PREFIX = {"error": "  \u2717", "warning": "  \u26a0", "info": "  i"}
 
-    print("\nBrasa Doctor")
-    print("════════════")
+    print(f"\n{title}")
+    print("═" * len(title))
 
     if not report.issues:
         print("\n  ✓  No issues found.")
@@ -1546,8 +1552,6 @@ def _run_command(args) -> None:  # noqa: PLR0912, PLR0915
         last_days = getattr(args, "last", 30)
         do_fix = getattr(args, "fix", False)
         skip_confirm = getattr(args, "yes", False)
-        validations_file = getattr(args, "validations_file", None)
-        validations_config = Path(validations_file) if validations_file else None
         calendar_name = getattr(args, "calendar", "B3")
 
         try:
@@ -1555,7 +1559,6 @@ def _run_command(args) -> None:  # noqa: PLR0912, PLR0915
                 categories=categories,
                 template_filter=template_filter,
                 last_days=last_days,
-                validations_config=validations_config,
                 calendar_name=calendar_name,
             )
         except ValueError as exc:
@@ -1584,6 +1587,21 @@ def _run_command(args) -> None:  # noqa: PLR0912, PLR0915
         elif do_fix:
             print("\nNo fixable issues found.")
 
+        if report.errors():
+            sys.exit(1)
+
+    elif args.command == "validate":
+        from .engine.validations import validate_datasets
+
+        rules = Path(args.rules) if args.rules else None
+        try:
+            for dataset in args.dataset:
+                _parse_layer_dataset(dataset)
+            report = validate_datasets(args.dataset or None, rules)
+        except (ValueError, FileNotFoundError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(2)
+        _print_doctor_report(report, title="Brasa Validate")
         if report.errors():
             sys.exit(1)
 

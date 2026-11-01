@@ -224,34 +224,6 @@ class TestListUnprocessedCommand:
         assert args.format == "table"
 
 
-class TestDoctorValidationsFile:
-    def test_validations_file_option_parses(self):
-        from brasa import cli
-
-        args = cli.parser.parse_args(
-            ["doctor", "--category", "validations", "--validations-file", "v.yaml"]
-        )
-        assert args.validations_file == "v.yaml"
-
-    def test_validations_file_defaults_none(self):
-        from brasa import cli
-
-        args = cli.parser.parse_args(["doctor"])
-        assert args.validations_file is None
-
-    def test_explicit_validations_without_file_exits_2(self, monkeypatch):
-        import sys
-
-        from brasa import cli
-
-        monkeypatch.setattr(
-            sys, "argv", ["brasa", "doctor", "--category", "validations"]
-        )
-        with pytest.raises(SystemExit) as exc:
-            cli.main()
-        assert exc.value.code == 2
-
-
 class TestListTemplatesCommand:
     def test_parser_registers_list_templates(self):
         from brasa import cli

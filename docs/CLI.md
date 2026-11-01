@@ -39,6 +39,7 @@ brasa <command> [options]
 | Database | `list-tables` | List available DuckDB tables/views |
 | Database | `query` | Execute SQL queries against the database |
 | Maintenance | `doctor` | Diagnose cache health issues |
+| Maintenance | `validate` | Check datasets against their validation rules |
 | Maintenance | `cache drop` | Drop a cache entry by meta id |
 
 ---
@@ -679,9 +680,37 @@ Note: Table names contain dots and hyphens, so they must be double-quoted in SQL
 
 ## Maintenance
 
+### `validate`
+
+Checks datasets against their validation rules. Rules check the **data** in
+your datalake, and come from three places (all merged): the `validations:`
+block inside templates, every `validations/*.yaml` file in your template
+folders, and an optional `--rules` file. See [VALIDATIONS.md](VALIDATIONS.md).
+
+```bash
+brasa validate [layer.dataset ...] [--rules FILE]
+```
+
+```bash
+brasa validate                                      # every dataset that has rules
+brasa validate staging.b3-equities-returns          # one dataset
+brasa validate staging.b3-cotahist input.b3-bvbg086 # several
+brasa validate --rules my.yaml staging.b3-cotahist  # plus an extra rules file
+```
+
+- Arguments are datasets (`layer.dataset`, as in `head`), not templates.
+- A dataset that no template produces is a usage error; a rules-file key that
+  no template produces is reported as an error (typos are never silent).
+- A known dataset without rules gets a "no rules for …" note.
+- A dataset you never downloaded, or a series that isn't in the data, is
+  reported as "skipped" (info) — not a failure.
+
+**Exit codes:** `0` no failures, `1` rule failures or invalid rule definitions,
+`2` usage errors (unknown dataset, `--rules` file not found).
+
 ### `doctor`
 
-Diagnoses cache health: orphan files, missing data, schema drift, metadata errors, stale ETL outputs, date gaps, download coverage, and declarative data validations.
+Diagnoses cache health: orphan files, missing data, schema drift, metadata errors, stale ETL outputs, date gaps and download coverage. Data validation rules run with [`brasa validate`](#validate).
 
 ```bash
 brasa doctor [options]
@@ -693,13 +722,12 @@ brasa doctor [options]
 |------|-------------|
 | `--fix` | Apply all auto-fixable issues |
 | `--yes` | Skip confirmation prompt when using `--fix` |
-| `--category {raw,db,meta,templates,gaps,validations,downloads}` | Run only specific check categories |
+| `--category {raw,db,meta,templates,gaps,downloads}` | Run only specific check categories |
 | `--template TEMPLATE [...]` | Restrict the `date-gaps`, `stale-etl`, `missing-etl-source` and `downloads` checks to specific templates |
 | `--calendar NAME` | Business calendar for the `gaps` and `downloads` categories (default: B3) |
 | `--last N\|all` | For the `gaps` and `downloads` categories, look back N days; `all` (or `-1`) reviews the full history (default: 30) |
-| `--validations-file FILE` | Path to a validations YAML file (required for the `validations` category) |
 
-**Exit codes:** `0` when no error-severity issue is found, `1` when at least one is, `2` on usage errors (e.g. `--category validations` without `--validations-file`). Suitable for CI.
+**Exit codes:** `0` when no error-severity issue is found, `1` when at least one is, `2` on usage errors. Suitable for CI.
 
 **Use Cases:**
 
@@ -718,12 +746,7 @@ brasa doctor --category gaps downloads --template b3-cotahist-daily --last all
 
 # Check specific templates
 brasa doctor --template b3-cotahist-daily b3-bvbg087
-
-# Check declarative completeness rules (e.g. CDI in staging.bcb-sgs)
-brasa doctor --category validations --validations-file validations.yaml
 ```
-
-The `validations` category always requires `--validations-file` — there is no packaged default rules file. On a broad run (no `--category`), validations are silently skipped with an info note when no file is given.
 
 #### Coverage categories — `gaps` vs `downloads`
 

@@ -1617,6 +1617,27 @@ reader:
 
 ---
 
+## Validation rules (`validations:`)
+
+A template can carry rules that check the data it writes; run them with
+`brasa validate`. Single-dataset and ETL templates put a `validations:` list at
+the top level; multi-dataset templates put one inside each `datasets:` entry (a
+top-level block on a multi-dataset template is an error, because it would not
+say which dataset it means). Rule types and options are documented in
+[VALIDATIONS.md](VALIDATIONS.md).
+
+```yaml
+validations:
+  - rule: calendar-completeness   # a row on every B3 business day
+    calendar: B3
+  - rule: no-duplicates
+    key: [refdate, symbol]
+```
+
+Older brasa versions ignore the `validations:` key.
+
+---
+
 ## Template folders
 
 brasa reads templates from **template folders**. A template folder is a
