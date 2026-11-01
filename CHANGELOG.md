@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- `sql_export` works with DuckDB 2.0, which a fresh install now gets: it
+  failed with `'DuckDBPyConnection' object has no attribute 'arrow'`, so
+  templates such as `b3-equities-register` could not be processed. The
+  output schema is now read through a DuckDB relation, which works from
+  DuckDB 1.2 to 2.0. CI also runs the tests on the newest DuckDB.
+  (WIL-207)
+
 ## v0.4.0 (2026-08-24) — Memory-safe run-all
 
 ### Features

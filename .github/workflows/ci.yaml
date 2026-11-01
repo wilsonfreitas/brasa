@@ -33,3 +33,8 @@ jobs:
 
       - name: Run tests (no integration, coverage gated at 65%)
         run: uv run pytest --no-integration --cov=brasa --cov-fail-under=65
+
+      # Fresh installs resolve the newest DuckDB, not the locked one (WIL-207).
+      - name: Run tests on the newest DuckDB
+        if: matrix.python-version == '3.12'
+        run: uv run --with "duckdb>=2" pytest --no-integration -q
