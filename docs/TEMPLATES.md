@@ -1655,7 +1655,9 @@ my-folder/
   skipped — park work-in-progress or retired templates there.
 - A template's file name (without `.yaml`) must equal its `id:`.
 - The same template name twice inside one folder is an error.
-- `plans/`, `validations/` and `steps.py` are reserved for upcoming features.
+- `plans/` holds [download plans](DOWNLOAD_PLAN.md#plans-by-name), `validations/`
+  holds [rule files](VALIDATIONS.md), and `steps.py` (or a `steps/` package)
+  holds [custom pipeline steps](CUSTOM_STEPS.md).
   A folder that has none of `templates/`, `plans/`, `validations/`,
   `steps.py`, `steps/` or `brasa.toml` gets a warning — usually an old folder
   with `.yaml` files at its top level; move them into `templates/`.
