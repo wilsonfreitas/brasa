@@ -265,7 +265,8 @@ class TestListTemplatesCommand:
         from brasa import cli
         from brasa.engine.template import clear_template_cache
 
-        (tmp_path / "b3-futures.yaml").write_text(
+        (tmp_path / "templates").mkdir()
+        (tmp_path / "templates" / "b3-futures.yaml").write_text(
             "id: b3-futures\n"
             "description: test\n"
             "etl:\n"
@@ -281,8 +282,76 @@ class TestListTemplatesCommand:
         clear_template_cache()
         out = capsys.readouterr().out
         assert "b3-futures" in out
-        assert "shadows bundled" in out
+        assert "*shadows" in out
         assert "bundled" in out  # at least one purely-bundled template
+
+    def test_list_templates_shows_folder_name(self, tmp_path, monkeypatch, capsys):
+        from brasa import cli
+        from brasa.engine.template import clear_template_cache
+
+        _write_folder(tmp_path, 'name = "my-ws"\nrequires-brasa = ">=0.0"\n')
+        monkeypatch.setenv("BRASA_TEMPLATE_PATH", str(tmp_path))
+        clear_template_cache()
+        cli.main(["list-templates"])
+        clear_template_cache()
+        out = capsys.readouterr().out
+        line = next(ln for ln in out.splitlines() if ln.startswith("my-tpl "))
+        assert f"my-ws ({tmp_path})" in line
+
+    def test_list_templates_version_mismatch_exits_1(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        from brasa import cli
+        from brasa.engine.template import clear_template_cache
+
+        _write_folder(tmp_path, 'requires-brasa = ">=99"\n')
+        monkeypatch.setenv("BRASA_TEMPLATE_PATH", str(tmp_path))
+        clear_template_cache()
+        with pytest.raises(SystemExit) as exc:
+            cli.main(["list-templates"])
+        clear_template_cache()
+        assert exc.value.code == 1
+        err = capsys.readouterr().err
+        assert "Error: Template folder" in err
+        assert "requires brasa >=99" in err
+
+
+def _write_folder(root, manifest: str) -> None:
+    """Template folder with one ETL template (`my-tpl`) and a brasa.toml."""
+    (root / "templates").mkdir(parents=True, exist_ok=True)
+    (root / "templates" / "my-tpl.yaml").write_text(
+        "id: my-tpl\n"
+        "description: test\n"
+        "etl:\n"
+        "  pipeline:\n"
+        "    - step: sql_query\n"
+        "      datasets: [input.b3-bvbg086]\n"
+        "      query: SELECT 1\n"
+    )
+    (root / "brasa.toml").write_text(manifest)
+
+
+class TestInfoTemplateFolders:
+    def test_info_lists_template_folders(self, tmp_path, monkeypatch, capsys):
+        from brasa import cli
+
+        _write_folder(tmp_path, 'name = "my-ws"\nrequires-brasa = ">=0.0"\n')
+        monkeypatch.setenv("BRASA_TEMPLATE_PATH", str(tmp_path))
+        cli.main(["info"])  # returns normally (exit 0)
+        out = capsys.readouterr().out
+        assert "template folders:" in out
+        assert f"{tmp_path}  my-ws requires brasa >=0.0  OK" in out
+        assert "(bundled)" in out
+
+    def test_info_template_folder_mismatch_exits_1(self, tmp_path, monkeypatch, capsys):
+        from brasa import cli
+
+        _write_folder(tmp_path, 'requires-brasa = ">=99"\n')
+        monkeypatch.setenv("BRASA_TEMPLATE_PATH", str(tmp_path))
+        with pytest.raises(SystemExit) as exc:
+            cli.main(["info"])
+        assert exc.value.code == 1
+        assert "ERROR: Template folder" in capsys.readouterr().out
 
 
 class TestDoctorDownloadsCategory:

@@ -1617,30 +1617,83 @@ reader:
 
 ---
 
-## User-defined templates (`BRASA_TEMPLATE_PATH`)
+## Template folders
 
-By default brasa discovers only the templates bundled inside the package. Set
-`BRASA_TEMPLATE_PATH` to add your own template directories:
+brasa reads templates from **template folders**. A template folder is a
+directory with this layout:
+
+```
+my-folder/
+  brasa.toml      # optional: which brasa versions this folder works with
+  templates/      # every *.yaml below here is a template (any depth)
+  ...             # anything else (tests/, data/, docs/, .github/) is ignored
+```
+
+- Only files under `templates/` are read as templates. Subfolders are fine
+  (`templates/b3/...`). Paths with a `legacy` folder below `templates/` are
+  skipped — park work-in-progress or retired templates there.
+- A template's file name (without `.yaml`) must equal its `id:`.
+- The same template name twice inside one folder is an error.
+- `plans/`, `validations/` and `steps.py` are reserved for upcoming features.
+  A folder that has none of `templates/`, `plans/`, `validations/`,
+  `steps.py`, `steps/` or `brasa.toml` gets a warning — usually an old folder
+  with `.yaml` files at its top level; move them into `templates/`.
+
+### Where brasa looks
+
+brasa searches folders in this order; the first folder that defines a name
+wins:
+
+1. the `BRASA_TEMPLATE_PATH` environment variable,
+2. `template_path` in `~/.config/brasa/config.toml`,
+3. the templates bundled with the package (until they move to the
+   brasa-templates repo).
+
+Both settings use the same format: folders separated by the OS path separator
+(`:` on Linux/macOS, `;` on Windows); `~` and `$VARS` are expanded; missing
+folders are skipped; a folder listed twice is read once.
 
 ```bash
 export BRASA_TEMPLATE_PATH="$HOME/my-templates:/opt/team/templates"
 ```
 
-- Entries are separated by the OS path separator (`:` on Linux/macOS) and
-  searched **in order, before** the bundled templates. `~` and `$VARS` are
-  expanded; non-existent directories are skipped silently.
-- Each directory is scanned recursively for `*.yaml` (paths containing a
-  `legacy` component are ignored, as for bundled templates).
-- A template's filename stem must equal its `id:` (same rule as bundled
-  templates).
-- **Name collisions:** the first root to define a name wins, so a user template
-  overrides a bundled one with the same name (useful for forking/patching a
-  bundled template).
-- All template kinds are supported (download, import, and `etl.pipeline`), and
-  user templates participate in dependency resolution — a user ETL template may
-  depend on a bundled dataset.
+```toml
+# ~/.config/brasa/config.toml
+data_path = "/home/me/brasa"
+template_path = "/home/me/my-workspace:/home/me/brasa-templates"
+```
 
-Run `brasa list-templates` to see every template and its source.
+A template in a higher folder overrides one with the same name in a lower
+folder — useful for patching a template locally. `brasa list-templates` shows
+where each template comes from and marks overrides with `*shadows`. All
+template kinds work from any folder (download, import and `etl.pipeline`), and
+templates in different folders can depend on each other.
+
+### Version requirement (`brasa.toml`)
+
+A folder can declare which brasa versions it works with:
+
+```toml
+name = "my-templates"            # optional, shown by list-templates and info
+requires-brasa = ">=0.5,<0.6"    # a PEP 440 version specifier
+```
+
+- No `brasa.toml` means no check.
+- If the installed brasa doesn't match, loading templates stops with an error
+  that names the folder, the requirement and the installed version.
+  `brasa info` shows the check result for every folder.
+- A `brasa.toml` without a valid `requires-brasa` is also an error.
+- Development versions count: `0.6.0.dev0` satisfies `>=0.6.0.dev0` but not
+  `>=0.6` (a dev release comes before its final release).
+- Policy for shared repos such as the official brasa-templates: always set the
+  upper bound at the next minor version (`<0.(next minor)`), because any 0.x
+  minor release may change the template format.
+
+### Templates are code
+
+Templates can run Python: the `exec_code` and `apply_lambda` steps, and
+`function:` references that import Python functions. Adding a template folder
+is like installing a package — **only add folders you trust**.
 
 ---
 

@@ -6,7 +6,6 @@ import subprocess
 import sys
 import tomllib
 from contextlib import suppress
-from importlib import metadata
 from pathlib import Path
 
 import pandas as pd
@@ -19,7 +18,8 @@ from . import (
     retrieve_template,
 )
 from .engine import CacheManager, Verbosity, sync_catalog_from_disk
-from .engine.exceptions import BrasaNotConfiguredError
+from .engine.exceptions import BrasaNotConfiguredError, TemplateFolderError
+from .engine.resources import package_version
 from .queries import BrasaDB, describe_dataset, get_dataset, list_datasets
 from .util import parse_arg_value
 
@@ -141,7 +141,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     "--version",
     action="version",
-    version=f"brasa {metadata.version('brasa-marketdata')}",
+    version=f"brasa {package_version()}",
 )
 
 subparsers = parser.add_subparsers(dest="command", title="Commands")
@@ -911,7 +911,7 @@ def _cmd_info() -> None:
     """
     from .engine.config import config_file_path, load_config
 
-    print(f"brasa {metadata.version('brasa-marketdata')}")
+    print(f"brasa {package_version()}")
     print()
 
     env_path = os.environ.get("BRASA_DATA_PATH")
@@ -949,8 +949,39 @@ def _cmd_info() -> None:
             f"config:     {cfg_file}  "
             f"(data_path = {cfg_path} — overridden by BRASA_DATA_PATH)"
         )
-    if not exists:
+
+    folder_error = _print_template_folders()
+    if not exists or folder_error:
         sys.exit(1)
+
+
+def _print_template_folders() -> bool:
+    """Print the ``template folders`` block of ``brasa info``.
+
+    Returns:
+        True when any folder has an error (bad ``brasa.toml`` or version
+        mismatch).
+    """
+    from .engine.template import get_template_folders
+
+    try:
+        folders = get_template_folders()
+    except tomllib.TOMLDecodeError:
+        folders = []  # the invalid config file is reported by `_cmd_info`
+    print()
+    print("template folders:")
+    for f in folders:
+        if f.bundled:
+            label = "(bundled)"
+        elif f.error:
+            label = f"ERROR: {f.error}"
+        elif f.requires is None:
+            label = "(no brasa.toml)"
+        else:
+            check = f"requires brasa {f.requires}  OK"
+            label = f"{f.name} {check}" if f.name else check
+        print(f"  {f.root}  {label}")
+    return any(f.error for f in folders)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -969,6 +1000,9 @@ def main(argv: list[str] | None = None) -> None:
             "Run `brasa init` to set up your data directory, or set BRASA_DATA_PATH.",
             file=sys.stderr,
         )
+        sys.exit(1)
+    except TemplateFolderError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -1414,10 +1448,12 @@ def _run_command(args) -> None:  # noqa: PLR0912, PLR0915
             for e in entries:
                 if e.source.resolve() == bundled_root:
                     source = "bundled"
+                elif e.source_name:
+                    source = f"{e.source_name} ({e.source})"
                 else:
-                    source = f"{e.source} (user)"
+                    source = str(e.source)
                 if e.shadows:
-                    source += " *shadows bundled"
+                    source += "  *shadows"
                 print(f"{e.name:<{name_width}}  {source}")
 
     elif args.command == "graph":

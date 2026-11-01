@@ -22,7 +22,8 @@ etl:
 """
 
 
-def _write_template(directory: Path, name: str) -> Path:
+def _write_template(root: Path, name: str) -> Path:
+    directory = root / "templates"  # template folders keep templates in templates/
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{name}.yaml"
     path.write_text(_ETL.format(name=name))
