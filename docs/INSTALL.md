@@ -98,13 +98,22 @@ you confirm or type another path, and persists the choice in
 ```
 Brasa home ready at /home/you/.local/share/brasa
 Configuration saved to /home/you/.config/brasa/config.toml
+Templates: cloned https://github.com/wilsonfreitas/brasa-templates into /home/you/.local/share/brasa/templates
 ```
+
+`init` also sets up your **templates**: it clones the official brasa-templates
+repo into `<brasa home>/templates` (this needs `git`) and saves that folder as
+`template_path` in the config file. Use `--templates <url>` to clone your fork
+instead, or `--templates <path>` to use a folder you already have. Running
+`init` again keeps the configured templates. Get updates with
+`brasa update-templates`.
 
 Non-interactive variants for scripts and CI:
 
 ```bash
 brasa init --data-path /data/brasa   # explicit path, no prompt
 brasa init --yes                     # accept the default, no prompt
+brasa init --templates ~/dev/brasa-templates   # use an existing templates folder
 ```
 
 The `BRASA_DATA_PATH` environment variable, when set, always takes precedence
