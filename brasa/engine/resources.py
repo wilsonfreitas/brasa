@@ -1,7 +1,11 @@
-"""Helpers for resolving data files bundled inside the brasa package."""
+"""Helpers for package data bundled inside brasa and the installed version."""
 
+from importlib import metadata
 from importlib.resources import files
 from pathlib import Path
+
+# The PyPI distribution name (renamed to "brasa-core" in WIL-205).
+DISTRIBUTION = "brasa-marketdata"
 
 
 def package_path(*parts: str) -> Path:
@@ -17,3 +21,12 @@ def package_path(*parts: str) -> Path:
     """
     base = Path(str(files("brasa")))
     return base.joinpath("files", *parts)
+
+
+def package_version() -> str:
+    """Return the installed brasa version.
+
+    Returns:
+        The version of the installed distribution, e.g. ``"0.5.0.dev0"``.
+    """
+    return metadata.version(DISTRIBUTION)

@@ -6,7 +6,6 @@ import subprocess
 import sys
 import tomllib
 from contextlib import suppress
-from importlib import metadata
 from pathlib import Path
 
 import pandas as pd
@@ -20,6 +19,7 @@ from . import (
 )
 from .engine import CacheManager, Verbosity, sync_catalog_from_disk
 from .engine.exceptions import BrasaNotConfiguredError
+from .engine.resources import package_version
 from .queries import BrasaDB, describe_dataset, get_dataset, list_datasets
 from .util import parse_arg_value
 
@@ -141,7 +141,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     "--version",
     action="version",
-    version=f"brasa {metadata.version('brasa-marketdata')}",
+    version=f"brasa {package_version()}",
 )
 
 subparsers = parser.add_subparsers(dest="command", title="Commands")
@@ -911,7 +911,7 @@ def _cmd_info() -> None:
     """
     from .engine.config import config_file_path, load_config
 
-    print(f"brasa {metadata.version('brasa-marketdata')}")
+    print(f"brasa {package_version()}")
     print()
 
     env_path = os.environ.get("BRASA_DATA_PATH")

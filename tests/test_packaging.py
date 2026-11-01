@@ -37,3 +37,13 @@ def test_list_templates_excludes_legacy():
 def test_sql_ddl_files_resolve():
     assert package_path("sql", "create-meta-db.sql").exists()
     assert package_path("sql", "create-dataset-catalog.sql").exists()
+
+
+def test_package_version_is_pep440_dev_version():
+    from packaging.version import Version
+
+    from brasa.engine.resources import package_version
+
+    v = Version(package_version())
+    assert v.base_version == "0.5.0"
+    assert v.is_devrelease
