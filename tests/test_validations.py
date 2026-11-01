@@ -228,3 +228,70 @@ def test_validate_reports_gap_from_inline_rule(folder):
     report = validate_datasets(["staging.val-etl"])
     assert report.errors() == []
     assert "staging.val-etl: 1 rule(s) checked" in report.issues[0].description
+
+
+# ---------------------------------------------------------------------------
+# CLI (Task 3)
+# ---------------------------------------------------------------------------
+
+
+def _gap_folder(folder, *, complete: bool) -> None:
+    _tpl(folder, "val-cli", _ETL.format(name="val-cli") + _INLINE)
+    cal = Calendar.load("ANBIMA")
+    days = [
+        d.date() if hasattr(d, "date") else d
+        for d in cal.seq(date(2020, 1, 2), date(2020, 1, 31))
+    ]
+    _write_series_parquet(
+        "staging/val-cli", None, days if complete else days[:5] + days[6:]
+    )
+
+
+def test_validate_unknown_dataset_exits_2(folder, capsys):
+    from brasa import cli
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["validate", "staging.nope"])
+    assert exc.value.code == 2
+    assert "unknown dataset(s): staging.nope" in capsys.readouterr().err
+
+
+def test_validate_missing_rules_file_exits_2(folder, tmp_path, capsys):
+    from brasa import cli
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["validate", "--rules", str(tmp_path / "nope.yaml")])
+    assert exc.value.code == 2
+    assert "rules file not found" in capsys.readouterr().err
+
+
+def test_validate_rule_failure_exits_1(folder, capsys):
+    from brasa import cli
+
+    _gap_folder(folder, complete=False)
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["validate", "staging.val-cli"])
+    assert exc.value.code == 1
+    out = capsys.readouterr().out
+    assert "Brasa Validate" in out
+    assert "missing ANBIMA business day" in out
+
+
+def test_validate_clean_exits_0(folder, capsys):
+    from brasa import cli
+
+    _gap_folder(folder, complete=True)
+    cli.main(["validate", "staging.val-cli"])  # returns normally (exit 0)
+    out = capsys.readouterr().out
+    assert "Brasa Validate" in out
+    assert "staging.val-cli: 1 rule(s) checked" in out
+
+
+def test_doctor_rejects_validations_category():
+    from brasa import cli
+
+    with pytest.raises(SystemExit) as exc:
+        cli.parser.parse_args(["doctor", "--category", "validations"])
+    assert exc.value.code == 2
+    with pytest.raises(SystemExit):
+        cli.parser.parse_args(["doctor", "--validations-file", "x.yaml"])
