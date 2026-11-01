@@ -1,7 +1,7 @@
 [project]
-name = "brasa-marketdata"
-version = "0.5.0.dev0"
-description = "Python library to extract finance market data from brazillian financial institutions: B3, ANBIMA, Tesouro Direto, CVM."
+name = "brasa-core"
+version = "0.5.0"
+description = "Template-driven ETL engine: download, parse, transform and query datasets described by YAML templates (official templates for Brazilian market and economic data: brasa-templates)."
 authors = [{ name = "wilsonfreitas", email = "wilson.freitas@gmail.com" }]
 license = "MIT"
 readme = "README.md"
@@ -36,9 +36,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["brasa"]
-
-[tool.hatch.build]
-exclude = ["**/legacy/**"]
 
 [tool.hatch.build.targets.sdist]
 include = ["/brasa", "/README.md", "/LICENSE", "/pyproject.toml"]

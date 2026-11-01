@@ -1,12 +1,20 @@
 # brasa
 
-Extract finance market data from brazillian financial institutions: B3, ANBIMA, Tesouro Direto, CVM.
+A template-driven ETL engine: download, parse, transform and query datasets
+described by YAML templates. The official templates —
+[brasa-templates](https://github.com/wilsonfreitas/brasa-templates) — cover
+Brazilian market and economic data (B3, ANBIMA, CVM, BCB).
 
 ## Installation
 
-Install from PyPI (published as `brasa-marketdata`; the import name is still `brasa`):
+Install from PyPI as `brasa-core` (the import name and the command are `brasa`),
+then run `brasa init` to choose a data directory and get the templates:
 
-    pip install brasa-marketdata
+    pip install brasa-core
+    brasa init
+
+Until 0.4.0 the distribution was called `brasa-marketdata`; since 0.5.0 it is
+`brasa-core`, and the templates live in brasa-templates instead of the package.
 
 Or directly from GitHub (latest `main`):
 
@@ -14,7 +22,7 @@ Or directly from GitHub (latest `main`):
 
 With `uv`:
 
-    uv add brasa-marketdata
+    uv add brasa-core
     uv add git+https://github.com/wilsonfreitas/brasa.git
 
 ## Data directory (`brasa init` / `BRASA_DATA_PATH`)
@@ -97,10 +105,10 @@ and [docs/TEMPLATES.md](docs/TEMPLATES.md#importing-local-files-importer) for fu
 ## Publishing to PyPI
 
 brasa is built with [hatchling](https://hatch.pypa.io/) and published manually
-under the distribution name `brasa-marketdata` (the PyPI name `brasa` was
-already taken by an unrelated project; `import brasa` is unaffected).
-Templates and SQL DDL are bundled inside the package (`brasa/files/`), so the
-built wheel is self-contained.
+under the distribution name `brasa-core` (the PyPI name `brasa` was already
+taken by an unrelated project; `import brasa` is unaffected; until 0.4.0 the
+name was `brasa-marketdata`). The SQL DDL ships inside the package
+(`brasa/files/sql/`); templates do not — they live in brasa-templates.
 
 1. Bump `version` in `pyproject.toml`.
 2. Build the wheel and sdist:
@@ -111,7 +119,7 @@ built wheel is self-contained.
 
    Distributions are written to `dist/`.
 
-3. (Optional) Verify the wheel bundles the data files:
+3. (Optional) Verify the wheel ships the SQL files and no templates:
 
    ```bash
    BRASA_BUILD_TEST=1 uv run pytest tests/test_packaging_wheel.py -v
@@ -121,8 +129,8 @@ built wheel is self-contained.
 
    ```bash
    python -m venv /tmp/brasa-smoke
-   /tmp/brasa-smoke/bin/pip install dist/brasa_marketdata-*.whl
-   /tmp/brasa-smoke/bin/python -c "import brasa; from brasa.engine.template import list_templates; print(len(list_templates()))"
+   /tmp/brasa-smoke/bin/pip install dist/brasa_core-*.whl
+   /tmp/brasa-smoke/bin/brasa --version
    ```
 
 5. Publish:

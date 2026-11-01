@@ -365,7 +365,7 @@ plt.show()
 List all available templates:
 
 ```bash
-ls brasa/files/templates/*.yaml
+brasa list-templates
 ```
 
 Common templates:
@@ -814,9 +814,9 @@ if cal.isbizday(datetime.today()):
 
 ### 4. Version Control Templates
 
-If you create custom templates, version control them:
+If you create custom templates in your own template folder, version control that folder:
 ```bash
-git add brasa/files/templates/my-custom-template.yaml
+git add templates/my-custom-template.yaml
 git commit -m "Add custom template"
 ```
 
@@ -839,7 +839,7 @@ print(f"Cache size: {cache_size:.2f} GB")
 
 ## Next Steps
 
-- Explore available templates in `brasa/files/templates/` directory
+- Explore available templates with `brasa list-templates`, or browse the brasa-templates repo
 - Check API reference for detailed function documentation
 - Consult architecture documentation for system internals
 

@@ -109,16 +109,14 @@ def update_template_folders() -> list[tuple[Path, str, bool]]:
     skipped.
 
     Returns:
-        ``(folder, message, ok)`` for each non-bundled folder, highest
-        priority first; ``ok`` is False only when git refused the update.
+        ``(folder, message, ok)`` for each template folder, highest priority
+        first; ``ok`` is False only when git refused the update.
     """
     from .template import get_template_folders
 
     has_git = shutil.which("git") is not None
     results: list[tuple[Path, str, bool]] = []
     for folder in get_template_folders():
-        if folder.bundled:
-            continue
         root = folder.root
         if not has_git or not _is_git_root(root):
             results.append((root, "skipped (not a git repository)", True))

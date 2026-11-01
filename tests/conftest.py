@@ -49,8 +49,8 @@ def setup_test_environment(tmp_path_factory):
 
     # Set the environment variable
     os.environ["BRASA_DATA_PATH"] = str(tmp_dir)
-    # Engine tests read templates from a frozen snapshot, never from the
-    # bundled templates or brasa-templates (WIL-197).
+    # Engine tests read templates from a frozen snapshot, never from
+    # brasa-templates (WIL-197); brasa itself ships no templates.
     os.environ["BRASA_TEMPLATE_PATH"] = str(
         Path(__file__).parent / "fixtures" / "templates-folder"
     )

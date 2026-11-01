@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**brasa** is a Python library for extracting, processing, and querying financial market data from Brazilian institutions (B3, ANBIMA, Tesouro Direto, CVM, BCB). It uses a template-driven ETL architecture where YAML templates in `brasa/files/templates/` declaratively define download, parsing, transformation, and storage pipelines.
+**brasa** (PyPI: `brasa-core`) is a template-driven ETL engine for extracting, processing, and querying data — mainly financial market and economic data from Brazilian institutions (B3, ANBIMA, CVM, BCB). YAML templates declaratively define download, parsing, transformation, and storage pipelines. Since 0.5.0 the templates are **not** in this package: they live in template folders — the official ones in the sibling repo `brasa-templates` (`~/dev/python/brasa-templates`, cloned by `brasa init`).
 
 ## Important: Always Use uv
 
@@ -47,7 +47,7 @@ uv run pre-commit run --all-files
 YAML Template → Download → Cache (raw/) → Parse/Read → Parquet (db/) → ETL → Query
 ```
 
-1. **Templates** (`brasa/files/templates/**/*.yaml`): Declarative pipeline configs defining how to download, parse, and store each dataset. SQL DDL lives in `brasa/files/sql/`. Use pipeline-based templates (not legacy function-based).
+1. **Templates** (`<folder>/templates/**/*.yaml` in a template folder; folders come from `BRASA_TEMPLATE_PATH`, then `template_path` in `config.toml`): Declarative pipeline configs defining how to download, parse, and store each dataset. Template, plan and validation-rule changes belong in the brasa-templates repo. Engine tests read the frozen copy in `tests/fixtures/templates-folder/`. SQL DDL lives in `brasa/files/sql/`. Use pipeline-based templates (not legacy function-based).
 2. **Downloaders** (`brasa/downloaders/`): HTTP/API clients that fetch raw data files.
 3. **Cache** (`brasa/engine/`): `CacheManager` singleton manages file storage, metadata (SQLite), and checksum-based deduplication. Data path resolved via `BRASA_DATA_PATH` env var or `~/.config/brasa/config.toml` (written by `brasa init`); no implicit default — see `brasa/engine/config.py`.
 4. **Parsers/Readers** (`brasa/parsers/`, `brasa/readers/`): Parse raw files (CSV, FWF, XML, JSON) into DataFrames.

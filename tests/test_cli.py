@@ -231,31 +231,49 @@ class TestListTemplatesCommand:
         args = cli.parser.parse_args(["list-templates"])
         assert args.command == "list-templates"
 
-    def test_lists_bundled_and_marks_user_shadow(self, tmp_path, monkeypatch, capsys):
+    def test_lists_sources_and_marks_shadow(self, tmp_path, monkeypatch, capsys):
+        import os
         import sys
 
         from brasa import cli
         from brasa.engine.template import clear_template_cache
 
-        (tmp_path / "templates").mkdir()
-        (tmp_path / "templates" / "b3-futures.yaml").write_text(
-            "id: b3-futures\n"
-            "description: test\n"
-            "etl:\n"
-            "  pipeline:\n"
-            "    - step: sql_query\n"
-            "      datasets: [input.b3-bvbg086]\n"
-            "      query: SELECT 1\n"
+        first, second = tmp_path / "first", tmp_path / "second"
+        for root, names in ((first, ["b3-futures"]), (second, ["b3-futures", "x"])):
+            (root / "templates").mkdir(parents=True)
+            for name in names:
+                (root / "templates" / f"{name}.yaml").write_text(
+                    f"id: {name}\n"
+                    "description: test\n"
+                    "etl:\n"
+                    "  pipeline:\n"
+                    "    - step: sql_query\n"
+                    "      datasets: [input.b3-bvbg086]\n"
+                    "      query: SELECT 1\n"
+                )
+        monkeypatch.setenv(
+            "BRASA_TEMPLATE_PATH", os.pathsep.join([str(first), str(second)])
         )
-        monkeypatch.setenv("BRASA_TEMPLATE_PATH", str(tmp_path))
         clear_template_cache()
         monkeypatch.setattr(sys, "argv", ["brasa", "list-templates"])
         cli.main()
         clear_template_cache()
-        out = capsys.readouterr().out
-        assert "b3-futures" in out
-        assert "*shadows" in out
-        assert "bundled" in out  # at least one purely-bundled template
+        lines = capsys.readouterr().out.splitlines()
+        futures = next(ln for ln in lines if ln.startswith("b3-futures "))
+        assert f"{first}  *shadows" in futures
+        assert next(ln for ln in lines if ln.startswith("x ")).endswith(str(second))
+
+    def test_list_templates_without_folder_exits_1(self, monkeypatch, capsys):
+        from brasa import cli
+        from brasa.engine.template import NO_TEMPLATE_FOLDERS, clear_template_cache
+
+        monkeypatch.delenv("BRASA_TEMPLATE_PATH", raising=False)
+        clear_template_cache()
+        with pytest.raises(SystemExit) as exc:
+            cli.main(["list-templates"])
+        clear_template_cache()
+        assert exc.value.code == 1
+        assert NO_TEMPLATE_FOLDERS in capsys.readouterr().err
 
     def test_list_templates_shows_folder_name(self, tmp_path, monkeypatch, capsys):
         from brasa import cli
@@ -313,7 +331,16 @@ class TestInfoTemplateFolders:
         out = capsys.readouterr().out
         assert "template folders:" in out
         assert f"{tmp_path}  my-ws requires brasa >=0.0  OK" in out
-        assert "(bundled)" in out
+
+    def test_info_without_template_folder(self, tmp_path, monkeypatch, capsys):
+        from brasa import cli
+
+        missing = tmp_path / "deleted-clone"
+        monkeypatch.setenv("BRASA_TEMPLATE_PATH", str(missing))
+        cli.main(["info"])  # still works (exit 0): info needs no templates
+        out = capsys.readouterr().out
+        assert "none (run `brasa init` or set BRASA_TEMPLATE_PATH)" in out
+        assert f"{missing}  not found (skipped)" in out
 
     def test_info_template_folder_mismatch_exits_1(self, tmp_path, monkeypatch, capsys):
         from brasa import cli

@@ -14,7 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
     os.environ.get("BRASA_BUILD_TEST") != "1",
     reason="set BRASA_BUILD_TEST=1 to build and inspect the wheel",
 )
-def test_wheel_bundles_templates_and_sql_without_legacy(tmp_path):
+def test_wheel_ships_sql_and_no_templates(tmp_path):
     subprocess.run(
         ["uv", "build", "--wheel", "--out-dir", str(tmp_path)],
         cwd=REPO_ROOT,
@@ -26,9 +26,7 @@ def test_wheel_bundles_templates_and_sql_without_legacy(tmp_path):
     with zipfile.ZipFile(wheels[0]) as zf:
         names = zf.namelist()
 
-    assert any(
-        n.startswith("brasa/files/templates/") and n.endswith(".yaml") for n in names
-    ), "templates missing from wheel"
+    # Templates live in template folders (brasa-templates) since 0.5.0.
+    assert not any(n.endswith(".yaml") for n in names), "templates leaked into wheel"
     assert "brasa/files/sql/create-meta-db.sql" in names
     assert "brasa/files/sql/create-dataset-catalog.sql" in names
-    assert not any("/legacy/" in n for n in names), "legacy paths leaked into wheel"

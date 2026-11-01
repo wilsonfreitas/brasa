@@ -720,7 +720,6 @@ def collect_rules(
     files = [
         f
         for folder in get_template_folders()
-        if not folder.bundled
         for f in sorted((folder.root / "validations").glob("*.yaml"))
     ]
     if rules_file is not None:

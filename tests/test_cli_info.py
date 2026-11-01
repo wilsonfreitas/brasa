@@ -10,7 +10,7 @@ def test_version_flag(capsys):
         cli.main(["--version"])
     assert exc.value.code == 0
     out = capsys.readouterr().out.strip()
-    assert out == f"brasa {metadata.version('brasa-marketdata')}"
+    assert out == f"brasa {metadata.version('brasa-core')}"
 
 
 @pytest.fixture
