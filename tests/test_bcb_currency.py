@@ -52,7 +52,7 @@ def test_bcb_currency_downloader_serializes_dataframe_to_json():
     mock_ptax.assert_called_once_with()
     fake_ptax.get_endpoint.assert_called_once_with("CotacaoMoedaPeriodo")
     fake_query.parameters.assert_called_once_with(
-        moeda="USD", dataInicial="01/02/2025", dataFinalCotacao="01/02/2025"
+        moeda="USD", dataInicial=date(2025, 1, 2), dataFinalCotacao=date(2025, 1, 2)
     )
     assert isinstance(result, io.BytesIO)
     data = json.loads(result.read().decode("utf8"))
