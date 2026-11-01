@@ -581,9 +581,11 @@ class SqlExportStep(PipelineStep):
                     f"COPY ({query}) TO '{output_path}/data.parquet' (FORMAT PARQUET)"
                 )
 
-            # Cheap schema read (no rows) for catalog registration
+            # Cheap schema read (no rows) for catalog registration. Use a
+            # relation: DuckDB 2.0 dropped connection.arrow(), and 1.2 has no
+            # connection.to_arrow_table(); relation.to_arrow_table() is in both.
             output_schema = (
-                conn.execute(f"SELECT * FROM ({query}) LIMIT 0").arrow().schema
+                conn.sql(f"SELECT * FROM ({query}) LIMIT 0").to_arrow_table().schema
             )
         except Exception as e:
             raise RuntimeError(f"sql_export failed: {e!s}") from e
