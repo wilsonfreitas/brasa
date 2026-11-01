@@ -49,6 +49,18 @@ Brasa's internal ETL queries (`run_query`, `sql_export` steps and staleness chec
 
 Precedence for both: env var → config file → default.
 
+### BRASA_TEMPLATE_PATH and `template_path`
+
+Where brasa looks for template folders, in priority order: the
+`BRASA_TEMPLATE_PATH` environment variable first, then the `template_path` key
+in `~/.config/brasa/config.toml`. Both take folders separated by the OS path
+separator. See [Template folders](TEMPLATES.md#template-folders) for the
+folder layout, the precedence rules and `brasa.toml` version requirements.
+
+```toml
+template_path = "/home/me/my-workspace:/home/me/brasa-templates"
+```
+
 ## Template Configuration
 
 Template structure, downloader/reader/writer/fields configuration, and worked examples are documented in [TEMPLATES.md](TEMPLATES.md). The legacy function-based template format previously described here was removed.

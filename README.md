@@ -37,6 +37,11 @@ one-off overrides. Commands that read or write data fail with a clear
 error until one of the two is configured; template introspection commands
 (`list-templates`, `deps`, `graph`) work without any configuration.
 
+Templates can live in your own template folders too (`BRASA_TEMPLATE_PATH`
+or `template_path` in the config file). Templates are code — they can run
+Python — so only add folders you trust; see
+[Template folders](docs/TEMPLATES.md#template-folders).
+
 ## Changelog
 
 ### Deterministic Download Status Codes

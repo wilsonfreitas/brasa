@@ -10,6 +10,7 @@ import logging
 import os
 import random
 import time
+import tomllib
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -17,13 +18,16 @@ from typing import IO, TYPE_CHECKING, Any, ClassVar
 
 import pandas as pd
 import yaml
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
 
 from brasa.fieldsets import Fieldset
 from brasa.fieldsets.field import Field
 
+from .config import load_config
 from .core import load_function_by_name
+from .exceptions import TemplateFolderError
 from .layers import DEFAULT_ETL_LAYER, DEFAULT_LAYER, DataLayer
-from .resources import package_path
+from .resources import DISTRIBUTION, package_path, package_version
 
 if TYPE_CHECKING:
     from .cache import CacheMetadata
@@ -684,24 +688,36 @@ class MarketDataTemplate:
 _template_cache: dict[str, MarketDataTemplate] = {}
 
 
-def _get_template_roots() -> list[Path]:
-    """Return the ordered template search roots.
+# Folders already warned about (one warning per folder per process).
+_warned_folders: set[Path] = set()
 
-    ``BRASA_TEMPLATE_PATH`` entries (split on ``os.pathsep``, in listed order)
-    come first; the bundled package templates directory comes last. Entries are
-    expanded (``~`` and ``$VARS``), non-existent directories are skipped, and
-    roots are de-duplicated by resolved absolute path (first occurrence wins).
+# Any of these makes a directory a template folder, even without templates/.
+_FOLDER_PARTS = ("templates", "plans", "validations", "steps.py", "steps", "brasa.toml")
+
+
+def _get_template_roots() -> list[tuple[Path, bool]]:
+    """Return the ordered template folder roots.
+
+    ``BRASA_TEMPLATE_PATH`` entries come first, then the ``template_path``
+    entries from the user config file (both split on ``os.pathsep``, in listed
+    order), and the bundled package templates directory last (transitional:
+    removed in the 0.5.0 cutover). Entries are expanded (``~`` and ``$VARS``),
+    non-existent directories are skipped, and roots are de-duplicated by
+    resolved absolute path (first occurrence wins).
 
     Returns:
-        Existing directories to scan, in priority order.
+        ``(root, bundled)`` pairs for existing directories, in priority order.
     """
-    raw = os.environ.get("BRASA_TEMPLATE_PATH", "")
-    entries = [e for e in raw.split(os.pathsep) if e]
-    entries.append(str(package_path("templates")))
+    chunks = [
+        os.environ.get("BRASA_TEMPLATE_PATH", ""),
+        str(load_config().get("template_path", "")),
+    ]
+    entries = [(e, False) for chunk in chunks for e in chunk.split(os.pathsep) if e]
+    entries.append((str(package_path("templates")), True))
 
-    roots: list[Path] = []
+    roots: list[tuple[Path, bool]] = []
     seen: set[Path] = set()
-    for entry in entries:
+    for entry, bundled in entries:
         path = Path(os.path.expandvars(entry)).expanduser()
         if not path.is_dir():
             continue
@@ -709,8 +725,107 @@ def _get_template_roots() -> list[Path]:
         if resolved in seen:
             continue
         seen.add(resolved)
-        roots.append(path)
+        roots.append((path, bundled))
     return roots
+
+
+@dataclass(frozen=True)
+class TemplateFolder:
+    """A template folder and the status of its ``brasa.toml``.
+
+    Attributes:
+        root: The folder itself.
+        templates_dir: Where templates are read from: ``root/templates`` when
+            it exists, the root itself for the bundled folder, else None.
+        name: The ``name`` declared in ``brasa.toml``, if any.
+        requires: The ``requires-brasa`` specifier from ``brasa.toml``, if any.
+        error: A printable problem (bad manifest or version mismatch), if any.
+        bundled: True for the transitional bundled package folder.
+    """
+
+    root: Path
+    templates_dir: Path | None
+    name: str | None = None
+    requires: str | None = None
+    error: str | None = None
+    bundled: bool = False
+
+
+def _read_manifest(root: Path) -> tuple[str | None, str | None, str | None]:
+    """Read ``root/brasa.toml`` and check it against the installed version.
+
+    Args:
+        root: The template folder.
+
+    Returns:
+        ``(name, requires, error)``; all None when the folder has no manifest.
+    """
+    manifest = root / "brasa.toml"
+    if not manifest.is_file():
+        return None, None, None
+    try:
+        data = tomllib.loads(manifest.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as exc:
+        return None, None, f"{manifest}: invalid TOML ({exc})"
+    name = data["name"] if isinstance(data.get("name"), str) else None
+    value = data.get("requires-brasa")
+    if value is None:
+        return name, None, f"{manifest}: missing 'requires-brasa'"
+    try:
+        spec = SpecifierSet(value) if isinstance(value, str) and value.strip() else None
+    except InvalidSpecifier:
+        spec = None
+    if spec is None:
+        return name, None, f"{manifest}: invalid 'requires-brasa' value {value!r}"
+    version = package_version()
+    if not spec.contains(version, prereleases=True):
+        return (
+            name,
+            value,
+            f"Template folder {root} requires brasa {value} (installed: {version}). "
+            f"Upgrade with `pip install -U {DISTRIBUTION}`, or update the templates "
+            "in that folder.",
+        )
+    return name, value, None
+
+
+def get_template_folders() -> list[TemplateFolder]:
+    """Return the template folders in priority order, with manifest status.
+
+    Never raises for a bad or mismatched ``brasa.toml``: the problem goes in
+    the folder's ``error`` so that ``brasa info`` can show it. Loading
+    templates raises it (see :func:`_discover_templates`).
+
+    Returns:
+        One :class:`TemplateFolder` per existing folder, highest priority first.
+    """
+    folders: list[TemplateFolder] = []
+    for root, bundled in _get_template_roots():
+        if bundled:
+            folders.append(TemplateFolder(root=root, templates_dir=root, bundled=True))
+            continue
+        templates_dir: Path | None = root / "templates"
+        if not templates_dir.is_dir():
+            templates_dir = None
+            looks_like_folder = any((root / p).exists() for p in _FOLDER_PARTS)
+            if not looks_like_folder and root not in _warned_folders:
+                _warned_folders.add(root)
+                n = len(list(root.glob("*.yaml")))
+                hint = (
+                    f" (found {n} .yaml file(s) at its top level: move them into "
+                    f"{root / 'templates'})"
+                    if n
+                    else ""
+                )
+                logger.warning(
+                    "Template folder %s has no templates/ subfolder; "
+                    "no templates loaded from it%s",
+                    root,
+                    hint,
+                )
+        name, requires, error = _read_manifest(root)
+        folders.append(TemplateFolder(root, templates_dir, name, requires, error))
+    return folders
 
 
 @dataclass(frozen=True)
@@ -720,42 +835,68 @@ class TemplateEntry:
     Attributes:
         name: The template name (YAML file stem).
         path: The winning YAML file that will be loaded for this name.
-        source: The root directory the winner came from.
-        shadows: True when a lower-priority root also defines this name
+        source: The template folder the winner came from.
+        shadows: True when a lower-priority folder also defines this name
             (display-only; never affects which file loads).
+        source_name: The ``name`` from the source folder's ``brasa.toml``.
     """
 
     name: str
     path: Path
     source: Path
     shadows: bool
+    source_name: str | None = None
 
 
 def _discover_templates() -> dict[str, TemplateEntry]:
-    """Discover templates across all roots, first root wins.
+    """Discover templates across all template folders, first folder wins.
 
-    Each root is scanned recursively for ``*.yaml`` (excluding any path with a
-    ``legacy`` component). The first root to define a given name wins; a
-    later root defining the same name flips the winner's ``shadows`` to True.
+    Templates are read from each folder's ``templates/`` subfolder (the
+    bundled folder is scanned directly), recursively, skipping any path with a
+    ``legacy`` component below it. The first folder to define a name wins; a
+    later folder defining the same name flips the winner's ``shadows``.
 
     Returns:
         Mapping of template name to its winning :class:`TemplateEntry`.
+
+    Raises:
+        TemplateFolderError: If a folder's ``brasa.toml`` is invalid or does
+            not accept the installed version, or a folder defines the same
+            template name twice.
     """
+    folders = get_template_folders()
+    errors = [f.error for f in folders if f.error]
+    if errors:
+        raise TemplateFolderError("\n".join(errors))
+
     winners: dict[str, TemplateEntry] = {}
-    for root in _get_template_roots():
-        for f in root.rglob("*.yaml"):
-            # Kept as a feature: `legacy` path components are never
-            # discovered — park WIP/retired templates in a legacy/ folder
+    for folder in folders:
+        if folder.templates_dir is None:
+            continue
+        local: dict[str, Path] = {}
+        for f in sorted(folder.templates_dir.rglob("*.yaml")):
+            # Kept as a feature: `legacy` path components below the templates
+            # dir are never discovered — park WIP/retired templates there
             # (hatch also excludes **/legacy/** from the wheel).
-            if "legacy" in f.parts:
+            if "legacy" in f.relative_to(folder.templates_dir).parts:
                 continue
             name = f.stem
+            if name in local:
+                raise TemplateFolderError(
+                    f"Duplicate template name '{name}' in template folder "
+                    f"{folder.root}: {local[name]} and {f}"
+                )
+            local[name] = f
             existing = winners.get(name)
             if existing is None:
                 winners[name] = TemplateEntry(
-                    name=name, path=f, source=root, shadows=False
+                    name=name,
+                    path=f,
+                    source=folder.root,
+                    shadows=False,
+                    source_name=folder.name,
                 )
-            elif existing.source != root and not existing.shadows:
+            elif not existing.shadows:
                 winners[name] = replace(existing, shadows=True)
     return winners
 
@@ -785,6 +926,7 @@ def clear_template_cache() -> None:
     Useful for development and testing when templates are modified.
     """
     _template_cache.clear()
+    _warned_folders.clear()
 
 
 def retrieve_template(template_name: str) -> MarketDataTemplate:

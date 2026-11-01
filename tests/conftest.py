@@ -58,6 +58,18 @@ def setup_test_environment(tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
+def isolate_user_config(tmp_path, monkeypatch):
+    """Point brasa's config file at a temp path for every test.
+
+    Tests must never read or write the real ``~/.config/brasa/config.toml``:
+    its ``template_path`` would leak user folders into template discovery.
+    """
+    monkeypatch.setattr(
+        "brasa.engine.config.config_file_path", lambda: tmp_path / "config.toml"
+    )
+
+
+@pytest.fixture(autouse=True)
 def cleanup_cache_between_tests():
     """
     Cleanup cache directories after each test to ensure test isolation.

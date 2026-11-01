@@ -74,6 +74,16 @@ class BrasaNotConfiguredError(Exception):
     pass
 
 
+class TemplateFolderError(Exception):
+    """Raised when a template folder cannot be used.
+
+    Its ``brasa.toml`` is invalid or does not accept the installed brasa
+    version, or the folder defines the same template name twice.
+    """
+
+    pass
+
+
 #: Domain exceptions that carry classification meaning for the engine.
 #: Pipeline executors re-raise these unwrapped so callers can match on type.
 DOMAIN_EXCEPTIONS: tuple[type[Exception], ...] = (

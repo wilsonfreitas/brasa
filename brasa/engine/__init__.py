@@ -76,6 +76,7 @@ from .exceptions import (
     DownloadException,
     DuplicatedFolderException,
     InvalidContentException,
+    TemplateFolderError,
 )
 
 # Layers
@@ -111,6 +112,7 @@ from .template import (
     MarketDataTemplate,
     MarketDataWriter,
     clear_template_cache,
+    get_template_folders,
     list_templates,
     retrieve_template,
 )
@@ -152,6 +154,7 @@ __all__ = [
     "TaskResult",
     "TaskStatus",
     "TemplateDependencyGraph",
+    "TemplateFolderError",
     "TemplateStatus",
     "Verbosity",
     "build_pipeline_map",
@@ -163,6 +166,7 @@ __all__ = [
     "download_marketdata",
     "execute_download_plan",
     "get_marketdata",
+    "get_template_folders",
     "import_marketdata",
     "json_convert_from_object",
     "json_convert_to_object",
