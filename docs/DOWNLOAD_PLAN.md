@@ -5,15 +5,39 @@ download in one command. It replaces ad-hoc scripts with a reproducible,
 version-controllable configuration.
 
 ```bash
-# Run a plan
-brasa download --plan daily-b3.yaml
+# Run a plan by name (from the plans/ folder of your template folders)
+brasa download --plan daily-b3
+
+# ... or by path, for a plan file anywhere
+brasa download --plan ./daily-b3.yaml
 
 # Override dates from the command line
-brasa download --plan daily-b3.yaml -d 2026-01 --calendar B3
+brasa download --plan daily-b3 --arg refdate=@2026-01 --calendar B3
 
 # Save an aggregate report
-brasa download --plan daily-b3.yaml --report report.json
+brasa download --plan daily-b3 --report report.json
 ```
+
+## Plans by name
+
+Plans live in the `plans/` folder of a [template folder](TEMPLATES.md#template-folders)
+— shared recipes in brasa-templates, personal plans in your own workspace
+folder. Call them by name; `brasa list-plans` shows what's available:
+
+```
+$ brasa list-plans
+NAME      DESCRIPTION                    SOURCE
+daily-b3  Daily B3 market data download  brasa-templates (/home/me/brasa/templates)
+```
+
+- `--plan VALUE` is a **path** when it contains `/` or ends in `.yaml`/`.yml`;
+  otherwise it is a **name**.
+- Folders are searched in order (`BRASA_TEMPLATE_PATH`, then `template_path`
+  in the config file); the first folder with that plan name wins. To change an
+  official recipe, put a plan with the same name in your own folder —
+  `list-plans` marks the override with `*shadows`.
+- A plan in a `plans/` folder must have `name:` equal to its file name
+  (like a template's `id:`).
 
 ---
 
@@ -73,7 +97,7 @@ tasks:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `template` | yes | Template name (must exist in `brasa/files/templates/`) |
+| `template` | yes | Template name (any template brasa can find — see `brasa list-templates`) |
 | `args` | no | Extra arguments passed to `download_marketdata` |
 | `reprocess` | no | Overrides `defaults.reprocess` for this task |
 
@@ -81,7 +105,7 @@ tasks:
 
 ## Refdate strings
 
-The `refdate` field accepts the same strings as the CLI `--date` / `-d` flag,
+The `refdate` field accepts the same date-range strings as the CLI's `--arg refdate=@…` (without the `@`),
 parsed by `DateRangeParser`:
 
 | String | Meaning |
@@ -109,14 +133,14 @@ The `calendar` field controls which business calendar is used:
 When a task runs, brasa determines the effective `refdate` using this priority
 order (highest to lowest):
 
-1. **CLI `--date`** — overrides everything when provided
+1. **CLI `--arg refdate=@…`** — overrides everything when provided
 2. **Task `args.refdate`** — per-task value in the YAML
 3. **`defaults.refdate`** — plan-wide default
 
 ```bash
 # Plan says refdate: "2025:"
 # CLI overrides it to a single month:
-brasa download --plan daily-b3.yaml -d 2026-01
+brasa download --plan daily-b3 --arg refdate=@2026-01
 ```
 
 ---
@@ -173,8 +197,8 @@ task entry.
 
 | Flag | Description |
 |------|-------------|
-| `--plan FILE` | Path to a download plan YAML file |
-| `-d / --date` | Override `defaults.refdate` for all tasks |
+| `--plan PLAN` | A plan name (from `plans/` in your template folders) or a path to a plan YAML file |
+| `--arg refdate=@…` | Override `defaults.refdate` for all tasks |
 | `--calendar` | Override `defaults.calendar` for date parsing |
 | `-v / --verbose` | Verbose output — one line per download |
 | `-q / --quiet` | Quiet — only print on errors |
@@ -187,19 +211,19 @@ error.
 
 ```bash
 # Basic: use dates from the plan
-brasa download --plan daily-b3.yaml
+brasa download --plan daily-b3
 
 # Override the plan's refdate with a specific month
-brasa download --plan daily-b3.yaml -d 2026-03
+brasa download --plan daily-b3 --arg refdate=@2026-03
 
 # Use a different calendar
-brasa download --plan daily-b3.yaml -d 2026-03 --calendar ANBIMA
+brasa download --plan daily-b3 --arg refdate=@2026-03 --calendar ANBIMA
 
 # Verbose output + save report
-brasa download --plan daily-b3.yaml -v --report /tmp/report.json
+brasa download --plan daily-b3 -v --report /tmp/report.json
 
 # Quiet mode — only shows failures
-brasa download --plan daily-b3.yaml -q
+brasa download --plan daily-b3 -q
 ```
 
 ---
@@ -280,10 +304,10 @@ brasa download --plan my-plan.yaml
 # Error: Unknown template: 'b3-nonexistent'
 ```
 
-Fix: check `brasa/files/templates/` for the correct name or run:
+Fix: check the name with:
 
 ```bash
-uv run python -m brasa.cli deps --list   # or inspect brasa/files/templates/ directory
+brasa list-templates
 ```
 
 ### Continue-on-error (during execution)

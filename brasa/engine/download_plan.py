@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from collections import Counter
 from dataclasses import dataclass, field
@@ -331,6 +332,37 @@ class DownloadPlanReport:
 # ---------------------------------------------------------------------------
 # Argument resolution
 # ---------------------------------------------------------------------------
+
+
+def load_plan(value: str) -> DownloadPlan:
+    """Load a download plan by path or by name.
+
+    A value containing a path separator or ending in ``.yaml``/``.yml`` is a
+    path; anything else is a plan name looked up in the ``plans/`` folder of
+    each template folder (first folder wins).
+
+    Args:
+        value: A plan name (e.g. ``"daily-b3"``) or a path to a plan file.
+
+    Returns:
+        The loaded plan.
+
+    Raises:
+        FileNotFoundError: If a path is given and does not exist.
+        ValueError: If the name is unknown, or a discovered plan's ``name:``
+            does not match its file name.
+    """
+    if "/" in value or os.sep in value or value.endswith((".yaml", ".yml")):
+        return DownloadPlan.from_file(value)
+    from .template import find_plan
+
+    path = find_plan(value)
+    plan = DownloadPlan.from_file(path)
+    if plan.name != path.stem:
+        raise ValueError(
+            f"Plan {path}: name '{plan.name}' must match the file name '{path.stem}'"
+        )
+    return plan
 
 
 def resolve_plan_args(args: dict, calendar: str = "B3") -> dict:

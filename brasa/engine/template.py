@@ -851,6 +851,20 @@ class TemplateEntry:
     source_name: str | None = None
 
 
+def _checked_folders() -> list[TemplateFolder]:
+    """Return the template folders, raising if any of them has an error.
+
+    Raises:
+        TemplateFolderError: All folder errors (bad or mismatched
+            ``brasa.toml``), one per line.
+    """
+    folders = get_template_folders()
+    errors = [f.error for f in folders if f.error]
+    if errors:
+        raise TemplateFolderError("\n".join(errors))
+    return folders
+
+
 def _discover_templates() -> dict[str, TemplateEntry]:
     """Discover templates across all template folders, first folder wins.
 
@@ -867,11 +881,7 @@ def _discover_templates() -> dict[str, TemplateEntry]:
             not accept the installed version, or a folder defines the same
             template name twice.
     """
-    folders = get_template_folders()
-    errors = [f.error for f in folders if f.error]
-    if errors:
-        raise TemplateFolderError("\n".join(errors))
-
+    folders = _checked_folders()
     winners: dict[str, TemplateEntry] = {}
     for folder in folders:
         if folder.templates_dir is None:
@@ -921,6 +931,80 @@ def list_template_sources() -> list[TemplateEntry]:
         One :class:`TemplateEntry` per template name, for provenance display.
     """
     return [entry for _, entry in sorted(_discover_templates().items())]
+
+
+@dataclass(frozen=True)
+class PlanEntry:
+    """A discovered download plan and where it came from.
+
+    Attributes:
+        name: The plan name (YAML file stem).
+        path: The winning plan file.
+        source: The template folder the winner came from.
+        shadows: True when a lower-priority folder also has this plan name.
+        source_name: The ``name`` from the source folder's ``brasa.toml``.
+    """
+
+    name: str
+    path: Path
+    source: Path
+    shadows: bool
+    source_name: str | None = None
+
+
+def _discover_plans() -> dict[str, PlanEntry]:
+    """Discover download plans in each folder's ``plans/``, first folder wins.
+
+    Returns:
+        Mapping of plan name to its winning :class:`PlanEntry`.
+
+    Raises:
+        TemplateFolderError: If a folder's ``brasa.toml`` is invalid or does
+            not accept the installed version.
+    """
+    winners: dict[str, PlanEntry] = {}
+    for folder in _checked_folders():
+        if folder.bundled:
+            continue
+        for f in sorted((folder.root / "plans").glob("*.yaml")):
+            existing = winners.get(f.stem)
+            if existing is None:
+                winners[f.stem] = PlanEntry(f.stem, f, folder.root, False, folder.name)
+            elif not existing.shadows:
+                winners[f.stem] = replace(existing, shadows=True)
+    return winners
+
+
+def list_plan_sources() -> list[PlanEntry]:
+    """Return the discovered download plans, sorted by name.
+
+    Returns:
+        One :class:`PlanEntry` per plan name.
+    """
+    return [entry for _, entry in sorted(_discover_plans().items())]
+
+
+def find_plan(name: str) -> Path:
+    """Return the file of the download plan called ``name``.
+
+    Args:
+        name: The plan name (file stem in a folder's ``plans/``).
+
+    Returns:
+        Path of the winning plan file.
+
+    Raises:
+        ValueError: If no template folder has a plan with that name.
+    """
+    plans = _discover_plans()
+    if name in plans:
+        return plans[name].path
+    hint = (
+        f"Available plans: {', '.join(sorted(plans))}"
+        if plans
+        else "No plans found in the template folders."
+    )
+    raise ValueError(f"Download plan '{name}' not found. {hint}")
 
 
 def clear_template_cache() -> None:
