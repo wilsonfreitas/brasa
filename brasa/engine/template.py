@@ -6,9 +6,12 @@ that define how to download, read, and write market data from various sources.
 
 from __future__ import annotations
 
+import hashlib
+import importlib.util
 import logging
 import os
 import random
+import sys
 import time
 import tomllib
 from dataclasses import dataclass, replace
@@ -865,6 +868,59 @@ def _checked_folders() -> list[TemplateFolder]:
     return folders
 
 
+# Custom step modules already imported, by resolved file path.
+_loaded_step_files: set[Path] = set()
+
+
+def _import_steps(path: Path) -> None:
+    """Import one custom steps module under a unique module name.
+
+    Args:
+        path: A folder's ``steps.py`` or ``steps/__init__.py``.
+
+    Raises:
+        TemplateFolderError: If the import fails (a syntax error, a step name
+            that is already registered, ...); the message names the file.
+    """
+    digest = hashlib.sha256(str(path.parent.resolve()).encode()).hexdigest()[:12]
+    name = f"brasa_user_steps_{digest}"
+    package = path.name == "__init__.py"
+    spec = importlib.util.spec_from_file_location(
+        name, path, submodule_search_locations=[str(path.parent)] if package else None
+    )
+    if spec is None or spec.loader is None:
+        raise TemplateFolderError(f"Failed to import custom steps from {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception as exc:
+        del sys.modules[name]
+        raise TemplateFolderError(
+            f"Failed to import custom steps from {path}: {exc}"
+        ) from exc
+
+
+def _load_folder_steps(folders: list[TemplateFolder]) -> None:
+    """Import each folder's ``steps.py`` and ``steps/`` package, once per process.
+
+    Importing runs the modules' ``@StepRegistry.register`` decorators, so
+    their steps become available to templates. A failed import is retried
+    (and fails again) on the next discovery.
+
+    Args:
+        folders: The template folders, in priority order.
+    """
+    for folder in folders:
+        if folder.bundled:
+            continue
+        for path in (folder.root / "steps.py", folder.root / "steps" / "__init__.py"):
+            key = path.resolve()
+            if path.is_file() and key not in _loaded_step_files:
+                _import_steps(path)
+                _loaded_step_files.add(key)
+
+
 def _discover_templates() -> dict[str, TemplateEntry]:
     """Discover templates across all template folders, first folder wins.
 
@@ -882,6 +938,7 @@ def _discover_templates() -> dict[str, TemplateEntry]:
             template name twice.
     """
     folders = _checked_folders()
+    _load_folder_steps(folders)
     winners: dict[str, TemplateEntry] = {}
     for folder in folders:
         if folder.templates_dir is None:
