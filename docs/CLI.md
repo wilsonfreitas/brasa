@@ -64,7 +64,7 @@ Without flags in an interactive terminal, `init` suggests a default (the previou
 
 ### `info`
 
-Shows the brasa version, whether brasa is configured, how it is configured (`BRASA_DATA_PATH` environment variable or the config file written by `brasa init`), and the resolved data path. `brasa --version` prints just the first line.
+Shows the brasa version, whether brasa is configured, how it is configured (`BRASA_DATA_PATH` environment variable or the config file written by `brasa init`), the resolved data path, and the template folders with the result of their `brasa.toml` version check. `brasa --version` prints just the first line.
 
 ```bash
 brasa info
@@ -74,14 +74,19 @@ brasa --version
 Example output:
 
 ```
-brasa 0.2.0
+brasa 0.5.0.dev0
 
 data path:  /home/user/brasa-data  (exists)
 source:     BRASA_DATA_PATH environment variable
 config:     /home/user/.config/brasa/config.toml  (data_path = /other/path — overridden by BRASA_DATA_PATH)
+
+template folders:
+  /home/user/my-workspace  (no brasa.toml)
+  /home/user/brasa-templates  brasa-templates requires brasa >=0.5.0.dev0,<0.6  OK
+  /path/to/site-packages/brasa/files/templates  (bundled)
 ```
 
-Exit code is `0` when brasa is configured and the data path exists on disk, `1` otherwise (not configured, missing directory, or invalid config file) — useful as a preflight in scripts: `brasa info && brasa run-all`.
+Exit code is `0` when brasa is configured and the data path exists on disk, `1` otherwise (not configured, missing directory, invalid config file, or a template folder whose `brasa.toml` is invalid or does not accept the installed version) — useful as a preflight in scripts: `brasa info && brasa run-all`.
 
 ---
 
@@ -461,9 +466,11 @@ $ brasa map
 
 ### `list-templates`
 
-List all discovered templates and where each comes from — `bundled`, or a user
-directory from `BRASA_TEMPLATE_PATH`. User templates that override a bundled
-name are marked `*shadows bundled`.
+List all discovered templates and the template folder each one comes from (see
+[Template folders](TEMPLATES.md#template-folders)). A folder whose
+`brasa.toml` has a `name` is shown as `name (path)`; templates still bundled
+with the package show `bundled`. A template that overrides one with the same
+name in a lower-priority folder is marked `*shadows`.
 
 ```bash
 brasa list-templates
@@ -472,9 +479,12 @@ brasa list-templates
 ```
 NAME              SOURCE
 b3-futures        bundled
-my-custom-etl     /home/me/my-templates (user)
-b3-cotahist       /home/me/my-templates (user) *shadows bundled
+my-custom-etl     /home/me/my-templates
+b3-cotahist       my-ws (/home/me/my-workspace)  *shadows
 ```
+
+If a folder's `brasa.toml` is invalid or does not accept the installed brasa
+version, the command stops with an error naming the folder (exit code 1).
 
 ---
 
