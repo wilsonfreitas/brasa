@@ -4,15 +4,15 @@ from importlib import metadata
 from importlib.resources import files
 from pathlib import Path
 
-# The PyPI distribution name (renamed to "brasa-core" in WIL-205).
-DISTRIBUTION = "brasa-marketdata"
+# The PyPI distribution name (it was "brasa-marketdata" until 0.4.0).
+DISTRIBUTION = "brasa-core"
 
 
 def package_path(*parts: str) -> Path:
     """Resolve a path to a data file bundled in the brasa package.
 
     Args:
-        *parts: Path components under ``brasa/files`` — e.g. ``"templates"`` or
+        *parts: Path components under ``brasa/files`` — e.g.
             ``"sql", "create-meta-db.sql"``.
 
     Returns:
