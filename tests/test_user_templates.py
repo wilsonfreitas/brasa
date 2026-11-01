@@ -4,7 +4,9 @@ from pathlib import Path
 
 import pytest
 
+from brasa.engine.exceptions import TemplateFolderError
 from brasa.engine.template import (
+    NO_TEMPLATE_FOLDERS,
     clear_template_cache,
     list_template_sources,
     list_templates,
@@ -46,16 +48,23 @@ def test_user_template_discovered_and_loads(tmp_path, monkeypatch):
     assert tmpl.id == "my-user-tpl"
 
 
-def test_user_template_shadows_bundled(tmp_path, monkeypatch):
-    # 'b3-futures' is a bundled template; a user file with the same name wins.
-    _write_template(tmp_path, "b3-futures")
-    monkeypatch.setenv("BRASA_TEMPLATE_PATH", str(tmp_path))
+def test_first_folder_shadows_later_folder(tmp_path, monkeypatch):
+    import os
+
+    first, second = tmp_path / "first", tmp_path / "second"
+    _write_template(first, "b3-futures").write_text(
+        _ETL.format(name="b3-futures").replace("test user template", "from first")
+    )
+    _write_template(second, "b3-futures")
+    monkeypatch.setenv(
+        "BRASA_TEMPLATE_PATH", os.pathsep.join([str(first), str(second)])
+    )
     clear_template_cache()
     tmpl = retrieve_template("b3-futures")
-    assert tmpl.description == "test user template"  # the user file, not bundled
+    assert tmpl.description == "from first"
     entry = next(e for e in list_template_sources() if e.name == "b3-futures")
     assert entry.shadows is True
-    assert entry.source.resolve() == tmp_path.resolve()
+    assert entry.source.resolve() == first.resolve()
 
 
 def test_nonexistent_root_skipped(tmp_path, monkeypatch):
@@ -80,11 +89,20 @@ def test_user_etl_enters_dependency_graph(tmp_path, monkeypatch):
     assert "my-user-etl" in graph.templates
 
 
-def test_unset_env_is_bundled_only(tmp_path, monkeypatch):
+def test_no_template_folder_is_an_error(monkeypatch):
+    # brasa ships no templates: without a folder, loading templates fails clearly.
     monkeypatch.delenv("BRASA_TEMPLATE_PATH", raising=False)
     clear_template_cache()
-    names = list_templates()
-    assert "b3-futures" in names  # bundled still present
-    assert "my-user-tpl" not in names  # nothing user-defined leaks in
-    sources = list_template_sources()
-    assert all(e.shadows is False for e in sources)  # no shadows without user roots
+    with pytest.raises(TemplateFolderError) as exc:
+        list_templates()
+    assert str(exc.value) == NO_TEMPLATE_FOLDERS
+
+
+def test_missing_configured_folder_is_named(tmp_path, monkeypatch):
+    missing = tmp_path / "deleted-clone"
+    monkeypatch.setenv("BRASA_TEMPLATE_PATH", str(missing))
+    clear_template_cache()
+    with pytest.raises(TemplateFolderError) as exc:
+        list_templates()
+    assert str(exc.value).startswith(NO_TEMPLATE_FOLDERS)
+    assert f"Configured but not found: {missing}" in str(exc.value)

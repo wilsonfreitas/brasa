@@ -1,4 +1,4 @@
-"""Tests that package data (templates, SQL DDL) ships inside the brasa package."""
+"""Tests that SQL DDL ships inside the brasa package, and templates do not."""
 
 from pathlib import Path
 
@@ -17,11 +17,10 @@ def test_package_path_is_under_brasa_package():
     assert _brasa_root() in sql.resolve().parents
 
 
-def test_templates_dir_under_package_with_yaml():
-    tdir = package_path("templates")
-    assert tdir.exists()
-    assert _brasa_root() in tdir.resolve().parents
-    assert any(tdir.rglob("*.yaml"))
+def test_package_ships_no_templates():
+    # Since 0.5.0 templates come only from template folders (`brasa init`).
+    assert not package_path("templates").exists()
+    assert not any(_brasa_root().rglob("*.yaml"))
 
 
 def test_list_templates_excludes_legacy():

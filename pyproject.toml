@@ -37,9 +37,6 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["brasa"]
 
-[tool.hatch.build]
-exclude = ["**/legacy/**"]
-
 [tool.hatch.build.targets.sdist]
 include = ["/brasa", "/README.md", "/LICENSE", "/pyproject.toml"]
 

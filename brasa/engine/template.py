@@ -30,7 +30,7 @@ from .config import load_config
 from .core import load_function_by_name
 from .exceptions import TemplateFolderError
 from .layers import DEFAULT_ETL_LAYER, DEFAULT_LAYER, DataLayer
-from .resources import DISTRIBUTION, package_path, package_version
+from .resources import DISTRIBUTION, package_version
 
 if TYPE_CHECKING:
     from .cache import CacheMetadata
@@ -701,38 +701,65 @@ _warned_folders: set[Path] = set()
 _FOLDER_PARTS = ("templates", "plans", "validations", "steps.py", "steps", "brasa.toml")
 
 
-def _get_template_roots() -> list[tuple[Path, bool]]:
-    """Return the ordered template folder roots.
+NO_TEMPLATE_FOLDERS = (
+    "No template folders configured. Run `brasa init` or set BRASA_TEMPLATE_PATH."
+)
+
+
+def _configured_entries() -> list[Path]:
+    """Return the configured template folder paths, in priority order.
 
     ``BRASA_TEMPLATE_PATH`` entries come first, then the ``template_path``
     entries from the user config file (both split on ``os.pathsep``, in listed
-    order), and the bundled package templates directory last (transitional:
-    removed in the 0.5.0 cutover). Entries are expanded (``~`` and ``$VARS``),
-    non-existent directories are skipped, and roots are de-duplicated by
-    resolved absolute path (first occurrence wins).
+    order). Entries are expanded (``~`` and ``$VARS``); they may not exist.
 
     Returns:
-        ``(root, bundled)`` pairs for existing directories, in priority order.
+        The configured paths.
     """
     chunks = [
         os.environ.get("BRASA_TEMPLATE_PATH", ""),
         str(load_config().get("template_path", "")),
     ]
-    entries = [(e, False) for chunk in chunks for e in chunk.split(os.pathsep) if e]
-    entries.append((str(package_path("templates")), True))
+    return [
+        Path(os.path.expandvars(e)).expanduser()
+        for chunk in chunks
+        for e in chunk.split(os.pathsep)
+        if e
+    ]
 
-    roots: list[tuple[Path, bool]] = []
+
+def _get_template_roots() -> list[Path]:
+    """Return the configured template folders that exist, in priority order.
+
+    Non-existent directories are skipped, and roots are de-duplicated by
+    resolved absolute path (first occurrence wins).
+
+    Returns:
+        Existing template folder roots, highest priority first.
+    """
+    roots: list[Path] = []
     seen: set[Path] = set()
-    for entry, bundled in entries:
-        path = Path(os.path.expandvars(entry)).expanduser()
+    for path in _configured_entries():
         if not path.is_dir():
             continue
         resolved = path.resolve()
         if resolved in seen:
             continue
         seen.add(resolved)
-        roots.append((path, bundled))
+        roots.append(path)
     return roots
+
+
+def missing_template_folders() -> list[Path]:
+    """Return the configured template folders that don't exist.
+
+    They are skipped when templates load; ``brasa info`` and the
+    no-folder error name them.
+
+    Returns:
+        The missing paths, in priority order.
+    """
+    return [path for path in _configured_entries() if not path.is_dir()]
 
 
 @dataclass(frozen=True)
@@ -742,11 +769,10 @@ class TemplateFolder:
     Attributes:
         root: The folder itself.
         templates_dir: Where templates are read from: ``root/templates`` when
-            it exists, the root itself for the bundled folder, else None.
+            it exists, else None.
         name: The ``name`` declared in ``brasa.toml``, if any.
         requires: The ``requires-brasa`` specifier from ``brasa.toml``, if any.
         error: A printable problem (bad manifest or version mismatch), if any.
-        bundled: True for the transitional bundled package folder.
     """
 
     root: Path
@@ -754,7 +780,6 @@ class TemplateFolder:
     name: str | None = None
     requires: str | None = None
     error: str | None = None
-    bundled: bool = False
 
 
 def _read_manifest(root: Path) -> tuple[str | None, str | None, str | None]:
@@ -806,10 +831,7 @@ def get_template_folders() -> list[TemplateFolder]:
         One :class:`TemplateFolder` per existing folder, highest priority first.
     """
     folders: list[TemplateFolder] = []
-    for root, bundled in _get_template_roots():
-        if bundled:
-            folders.append(TemplateFolder(root=root, templates_dir=root, bundled=True))
-            continue
+    for root in _get_template_roots():
         templates_dir: Path | None = root / "templates"
         if not templates_dir.is_dir():
             templates_dir = None
@@ -858,10 +880,19 @@ def _checked_folders() -> list[TemplateFolder]:
     """Return the template folders, raising if any of them has an error.
 
     Raises:
-        TemplateFolderError: All folder errors (bad or mismatched
-            ``brasa.toml``), one per line.
+        TemplateFolderError: When no template folder exists (naming any
+            configured folder that is missing), or with all folder errors
+            (bad or mismatched ``brasa.toml``), one per line.
     """
     folders = get_template_folders()
+    if not folders:
+        missing = missing_template_folders()
+        detail = (
+            "\nConfigured but not found: " + ", ".join(map(str, missing))
+            if missing
+            else ""
+        )
+        raise TemplateFolderError(NO_TEMPLATE_FOLDERS + detail)
     errors = [f.error for f in folders if f.error]
     if errors:
         raise TemplateFolderError("\n".join(errors))
@@ -912,8 +943,6 @@ def _load_folder_steps(folders: list[TemplateFolder]) -> None:
         folders: The template folders, in priority order.
     """
     for folder in folders:
-        if folder.bundled:
-            continue
         for path in (folder.root / "steps.py", folder.root / "steps" / "__init__.py"):
             key = path.resolve()
             if path.is_file() and key not in _loaded_step_files:
@@ -924,9 +953,8 @@ def _load_folder_steps(folders: list[TemplateFolder]) -> None:
 def _discover_templates() -> dict[str, TemplateEntry]:
     """Discover templates across all template folders, first folder wins.
 
-    Templates are read from each folder's ``templates/`` subfolder (the
-    bundled folder is scanned directly), recursively, skipping any path with a
-    ``legacy`` component below it. The first folder to define a name wins; a
+    Templates are read from each folder's ``templates/`` subfolder,
+    recursively, skipping any path with a ``legacy`` component below it. The first folder to define a name wins; a
     later folder defining the same name flips the winner's ``shadows``.
 
     Returns:
@@ -946,8 +974,7 @@ def _discover_templates() -> dict[str, TemplateEntry]:
         local: dict[str, Path] = {}
         for f in sorted(folder.templates_dir.rglob("*.yaml")):
             # Kept as a feature: `legacy` path components below the templates
-            # dir are never discovered — park WIP/retired templates there
-            # (hatch also excludes **/legacy/** from the wheel).
+            # dir are never discovered — park WIP/retired templates there.
             if "legacy" in f.relative_to(folder.templates_dir).parts:
                 continue
             name = f.stem
@@ -976,7 +1003,7 @@ def list_templates() -> list[str]:
 
     Returns:
         Sorted list of template names (without .yaml extension), discovered
-        across ``BRASA_TEMPLATE_PATH`` roots and the bundled package.
+        across the template folders.
     """
     return sorted(_discover_templates())
 
@@ -1021,8 +1048,6 @@ def _discover_plans() -> dict[str, PlanEntry]:
     """
     winners: dict[str, PlanEntry] = {}
     for folder in _checked_folders():
-        if folder.bundled:
-            continue
         for f in sorted((folder.root / "plans").glob("*.yaml")):
             existing = winners.get(f.stem)
             if existing is None:

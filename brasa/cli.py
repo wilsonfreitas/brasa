@@ -1018,19 +1018,21 @@ def _print_template_folders() -> bool:
         True when any folder has an error (bad ``brasa.toml`` or version
         mismatch).
     """
-    from .engine.template import get_template_folders
+    from .engine.template import get_template_folders, missing_template_folders
     from .engine.template_git import git_info
 
     try:
         folders = get_template_folders()
+        missing = missing_template_folders()
     except tomllib.TOMLDecodeError:
-        folders = []  # the invalid config file is reported by `_cmd_info`
+        # the invalid config file is reported by `_cmd_info`
+        folders, missing = [], []
     print()
     print("template folders:")
+    if not folders:
+        print("  none (run `brasa init` or set BRASA_TEMPLATE_PATH)")
     for f in folders:
-        if f.bundled:
-            label = "(bundled)"
-        elif f.error:
+        if f.error:
             label = f"ERROR: {f.error}"
         elif f.requires is None:
             label = "(no brasa.toml)"
@@ -1038,10 +1040,11 @@ def _print_template_folders() -> bool:
             check = f"requires brasa {f.requires}  OK"
             label = f"{f.name} {check}" if f.name else check
         print(f"  {f.root}  {label}")
-        if not f.bundled:
-            url, commit = git_info(f.root)
-            if commit:
-                print(f"      origin {url or '(none)'}  commit {commit}")
+        url, commit = git_info(f.root)
+        if commit:
+            print(f"      origin {url or '(none)'}  commit {commit}")
+    for path in missing:
+        print(f"  {path}  not found (skipped)")
     return any(f.error for f in folders)
 
 
@@ -1544,10 +1547,8 @@ def _run_command(args) -> None:  # noqa: PLR0912, PLR0915
             print(f"{'Total':<{name_width}}  {total:>11}")
 
     elif args.command == "list-templates":
-        from .engine.resources import package_path
         from .engine.template import list_template_sources
 
-        bundled_root = package_path("templates").resolve()
         entries = list_template_sources()
         if not entries:
             print("No templates found.")
@@ -1555,9 +1556,7 @@ def _run_command(args) -> None:  # noqa: PLR0912, PLR0915
             name_width = max(len("NAME"), *(len(e.name) for e in entries))
             print(f"{'NAME':<{name_width}}  SOURCE")
             for e in entries:
-                if e.source.resolve() == bundled_root:
-                    source = "bundled"
-                elif e.source_name:
+                if e.source_name:
                     source = f"{e.source_name} ({e.source})"
                 else:
                     source = str(e.source)
