@@ -1,0 +1,98 @@
+id: b3-futures
+description: Contratos futuros da B3 — série canônica unificada (BD_Final 2006-2016 + BVBG 2016+)
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - input.b3-futures-bvbg
+        - input.b3-futures-bd
+      query: |+
+        -- Canonical futures series: union of the two sources with the
+        -- boundary declared once, here:
+        --   * b3-futures-bd (BD_Final): refdate < 2016-02-01
+        --   * b3-futures-bvbg (BVBG028+086): refdate >= 2016-02-01
+        -- plus 2016-02-29 taken from BD: bvbg086 has 0 rows that day (known
+        -- whole-market source gap) while BD carries the full session.
+        -- Both inputs keep their full ranges; the 2016-02..2017-08 overlap
+        -- stays in the inputs for cross-source validation.
+        -- 2021-06-10 (the other bvbg gap day) is beyond BD's range and
+        -- remains partial.
+        select
+          refdate, symbol, commodity, expiration_code, maturity_date,
+          contract_multiplier, open, high, low, close, average,
+          adjusted_quote, adjusted_tax, adjusted_value_contract,
+          traded_contracts, volume, open_interest
+        from 'input.b3-futures-bd'
+        where refdate < date '2016-02-01' or refdate = date '2016-02-29'
+        union all
+        select
+          refdate, symbol, commodity, expiration_code, maturity_date,
+          contract_multiplier, open, high, low, close, average,
+          adjusted_quote, adjusted_tax, adjusted_value_contract,
+          traded_contracts, volume, open_interest
+        from 'input.b3-futures-bvbg'
+        where refdate >= date '2016-02-01' and refdate <> date '2016-02-29'
+
+    - step: sort
+      by: [refdate, symbol]
+
+    - step: select_fields
+    - step: apply_fields
+
+writer:
+  layer: staging
+  partitioning: [commodity]
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Ticker symbol
+    type: string
+  - name: commodity
+    description: Commodity code
+    type: string
+  - name: expiration_code
+    description: Expiration code
+    type: string
+  - name: maturity_date
+    description: Maturity/expiration date
+    type: date
+  - name: contract_multiplier
+    description: Contract multiplier
+    type: numeric
+  - name: open
+    description: Opening price
+    type: numeric
+  - name: high
+    description: Highest price
+    type: numeric
+  - name: low
+    description: Lowest price
+    type: numeric
+  - name: close
+    description: Closing price
+    type: numeric
+  - name: average
+    description: Average price
+    type: numeric
+  - name: adjusted_quote
+    description: Settlement price
+    type: numeric
+  - name: adjusted_tax
+    description: Settlement rate (decimal form)
+    type: numeric
+  - name: adjusted_value_contract
+    description: Settlement value per contract (R$)
+    type: numeric
+  - name: traded_contracts
+    description: Traded contracts
+    type: numeric
+  - name: volume
+    description: Financial volume
+    type: numeric
+  - name: open_interest
+    description: Open interest
+    type: numeric

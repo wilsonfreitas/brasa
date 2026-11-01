@@ -1,0 +1,204 @@
+id: b3-company-info
+description: Informação suplementar das companhias listadas na Bolsa
+
+dependencies:
+  - issuingCompany:
+      required: true
+      from:
+        datasets:
+          - staging.b3-equities-instrument-assets
+        query: "SELECT instrument_asset FROM 'staging.b3-equities-instrument-assets'"
+
+downloader:
+  function: brasa.downloaders.b3_url_encoded_download
+  validator: brasa.downloaders.validate_json_empty_file
+  url: https://sistemaswebb3-listados.b3.com.br/listedCompaniesProxy/CompanyCall/GetListedSupplementCompany
+  format: json
+  download_delay: 1
+  retry_attempts: 3
+  retry_delay: 3.0
+  retry_backoff: 2.0
+  args:
+    issuingCompany: ~
+    language: pt-br
+  extra-key: date
+
+reader:
+  locale: pt
+  pipeline:
+    steps:
+      - step: b3_read_company_info_json
+      - step: add_column_multi
+        name: issuingCompany
+        from:
+          where: download_args
+          key: issuingCompany
+      - step: add_column_multi
+        from:
+          where: extra_key
+        name: refdate
+      - step: apply_fields_multi
+
+writer:
+  partitioning: [issuingCompany, refdate]
+
+datasets:
+  info:
+    tag: ~
+    fields:
+      - name: stockCapital
+        description: Capital da companhia em ações
+        type: 'numeric(thousands=".", decimal=",")'
+      - name: quotedPerSharSince
+        description: Data de início de cotação
+        type: 'date(format="%d/%m/%Y")'
+      - name: commonSharesForm
+        description: Forma das ações ordinárias
+        type: string
+      - name: preferredSharesForm
+        description: Forma das ações preferenciais
+        type: string
+      - name: hasCommom
+        description: Forma das ações ordinárias
+        type: string
+      - name: hasPreferred
+        description: Forma das ações preferenciais
+        type: string
+      - name: roundLot
+        description: Lote padrão de negociação
+        type: integer
+      - name: tradingName
+        description: Nome da empresa
+        type: string
+      - name: numberCommonShares
+        description: Número total de ações ordinárias
+        type: 'numeric(thousands=".", decimal=",")'
+      - name: numberPreferredShares
+        description: Número total de ações preferenciais
+        type: 'numeric(thousands=".", decimal=",")'
+      - name: totalNumberShares
+        description: Número total de ações
+        type: 'numeric(thousands=".", decimal=",")'
+      - name: code
+        description: Código da empresa
+        type: string
+      - name: codeCVM
+        description: Código CVM da empresa
+        type: string
+      - name: segment
+        description: Segmento do mercado de capitais (Novo Mercado, ...)
+        type: string
+      - name: issuingCompany
+        description: Código da empresa (sem o número)
+        type: string
+      - name: refdate
+        description: Data de referência
+        type: date
+
+  cash_dividends:
+    tag: cashDividends
+    fields:
+      - name: assetIssued
+        description: Código do ativo emitido
+        type: string
+      - name: paymentDate
+        description: Data de início de pagamento do provento
+        type: 'date(format="%d/%m/%Y")'
+      - name: rate
+        description: Valor do provento (R$)
+        type: 'numeric(thousands=".", decimal=",")'
+      - name: relatedTo
+        description: Período de referência do provento
+        type: string
+      - name: approvedOn
+        description: Data em que foi deliberado
+        type: 'date(format="%d/%m/%Y")'
+      - name: isinCode
+        description: Código ISIN da companhia
+        type: string
+      - name: label
+        description: Tipo de provento
+        type: string
+      - name: lastDatePrior
+        description: Data COM (última data antes da ação ficar EX do provento)
+        type: 'date(format="%d/%m/%Y")'
+      - name: remarks
+        description: Comentários
+        type: string
+      - name: issuingCompany
+        description: Código da empresa (sem o número)
+        type: string
+      - name: refdate
+        description: Data de referência
+        type: date
+
+  stock_dividends:
+    tag: stockDividends
+    fields:
+      - name: assetIssued
+        description: Código do ativo emitido
+        type: string
+      - name: factor
+        description: Percentual ou fator de grupamento
+        type: 'numeric(thousands=".", decimal=",")'
+      - name: approvedOn
+        description: Data em que foi deliberado
+        type: 'date(format="%d/%m/%Y")'
+      - name: isinCode
+        description: Código ISIN
+        type: string
+      - name: label
+        description: Tipo do provento
+        type: string
+      - name: lastDatePrior
+        description: Data COM (última data antes da ação ficar EX do provento)
+        type: 'date(format="%d/%m/%Y")'
+      - name: remarks
+        description: Comentários
+        type: string
+      - name: issuingCompany
+        description: Código da empresa (sem o número)
+        type: string
+      - name: refdate
+        description: Data de referência
+        type: date
+
+  subscriptions:
+    tag: subscriptions
+    fields:
+      - name: assetIssued
+        description: Código do ativo emitido
+        type: string
+      - name: percentage
+        description: Percentual
+        type: 'numeric(thousands=".", decimal=",")'
+      - name: priceUnit
+        description: Preço Emissão (R$)
+        type: 'numeric(thousands=".", decimal=",")'
+      - name: tradingPeriod
+        description: Negociação de Direitos
+        type: string
+      - name: subscriptionDate
+        description: Data limite para subscrição
+        type: 'date(format="%d/%m/%Y")'
+      - name: approvedOn
+        description: Data em que foi deliberado
+        type: 'date(format="%d/%m/%Y")'
+      - name: isinCode
+        description: Código ISIN
+        type: string
+      - name: label
+        description: Tipo do evento
+        type: string
+      - name: lastDatePrior
+        description: Data COM (última data antes da ação ficar EX do provento)
+        type: 'date(format="%d/%m/%Y")'
+      - name: remarks
+        description: Comentários
+        type: string
+      - name: issuingCompany
+        description: Código da empresa (sem o número)
+        type: string
+      - name: refdate
+        description: Data de referência
+        type: date

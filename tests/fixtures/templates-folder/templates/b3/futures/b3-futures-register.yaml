@@ -1,0 +1,99 @@
+id: b3-futures-register
+description: Dataset de dados cadastrais de contratos futuros da B3
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - input.b3-bvbg028-future_contracts
+      query: |+
+        -- B3 Futures Register dataset
+        select
+          *
+        from
+          'input.b3-bvbg028-future_contracts'
+        where
+          refdate = (select max(refdate) from 'input.b3-bvbg028-future_contracts')
+
+    - step: select_fields
+    - step: apply_fields
+
+writer:
+  layer: staging
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Ticker symbol
+    type: string
+  - name: security_id
+    description: Security ID
+    type: string
+  - name: security_proprietary
+    description: Security proprietary code
+    type: string
+  - name: security_market
+    description: Security market code
+    type: string
+  - name: security_category
+    description: Security category
+    type: integer
+  - name: instrument_asset
+    description: Instrument asset code
+    type: string
+  - name: expiration_code
+    description: Expiration code
+    type: string
+  - name: instrument_asset_description
+    description: Instrument asset description
+    type: string
+  - name: instrument_market
+    description: Instrument market code
+    type: integer
+  - name: instrument_segment
+    description: Instrument segment code
+    type: integer
+  - name: instrument_description
+    description: Instrument description
+    type: string
+  - name: maturity_date
+    description: Maturity/expiration date
+    type: date
+  - name: trading_start_date
+    description: Trading start date
+    type: date
+  - name: trading_end_date
+    description: Trading end date
+    type: date
+  - name: value_type_code
+    description: Value type code
+    type: integer
+  - name: delivery_type
+    description: Delivery type
+    type: integer
+  - name: payment_type
+    description: Payment type
+    type: integer
+  - name: trading_currency
+    description: Trading currency
+    type: string
+  - name: isin
+    description: ISIN code
+    type: string
+  - name: contract_multiplier
+    description: Contract multiplier
+    type: numeric
+  - name: asset_settlement_indicator
+    description: Asset quotation quantity
+    type: numeric
+  - name: allocation_lot_size
+    description: Allocation round lot size
+    type: integer
+  - name: underlying_security_id
+    description: Underlying security ID
+    type: string
+  - name: underlying_security_proprietary
+    description: Underlying security proprietary code
+    type: integer

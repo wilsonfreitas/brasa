@@ -1,0 +1,71 @@
+# Migrated from legacy template (reader.function: brasa.readers.read_b3_economic_indicators_fwf)
+id: b3-economic-indicators-fwf
+description: Arquivo de Indicadores Econômicos
+
+downloader:
+  function: brasa.downloaders.b3_pregao_download
+  url: https://www.b3.com.br/pesquisapregao/download?filelist=ID%y%m%d.ex_
+  format: zip
+  retry_attempts: 3
+  retry_delay: 2.0
+  retry_backoff: 2.0
+  timeout: 90
+  args:
+    refdate: ~
+
+reader:
+  locale: pt
+  pipeline:
+    - step: read_fwf
+      dtype: str
+    - step: apply_fields
+
+writer:
+  layer: input
+  partitioning: [data_geracao_arquivo]
+
+fields:
+  - name: id_transacao
+    description: Identificação da transação
+    type: integer
+    width: 6
+  - name: compl_transacao
+    description: Complemento da transação
+    type: integer
+    width: 3
+  - name: tipo_registro
+    description: Tipo de registro
+    type: integer
+    width: 2
+  - name: data_geracao_arquivo
+    description: Data de geração do arquivo
+    type: date(format='%Y%m%d')
+    width: 8
+  - name: grupo_indicador
+    description: |+
+      Grupo do indicador econômico, com os seguintes níveis:
+       - IA: Indicadores Agropecuários
+       - DE: Títulos da Dívida Externa
+       - RT: Indicadores Gerais
+       - BV: Ibovespa
+       - ME: Moeda Estrangeira
+       - ID: Índice IDI
+    type: character
+    width: 2
+  - name: cod_indicador
+    description: Código do indicador
+    type: character
+    width: 25
+  - name: valor_indicador
+    description: Valor do indicador na data
+    # dec: num_casas_decimais — dynamic decimal applied in custom_simple step above
+    type: integer
+    width: 25
+  - name: num_casas_decimais
+    description: Número de decimais do valor
+    type: integer
+    width: 2
+  - name: reserva
+    description: Filler
+    type: character
+    width: 36

@@ -1,0 +1,47 @@
+id: brasa-prices
+description: Todos os preços de fechamento (formato longo)
+
+etl:
+  pipeline:
+    - step: sql_query
+      datasets:
+        - staging.b3-equities-adjusted-prices
+        - staging.b3-indexes-adjusted-prices
+        - staging.bcb-currency
+        - staging.b3-futures-win-adjusted
+        - staging.b3-futures-wdo-adjusted
+      query: |+
+        -- Long-format union of canonical closing prices. Symbol sets are
+        -- disjoint across sources; no dedup (legacy semantics).
+        select refdate, symbol, close
+        from 'staging.b3-equities-adjusted-prices'
+        union all
+        select refdate, symbol, close
+        from 'staging.b3-indexes-adjusted-prices'
+        union all
+        select refdate, symbol, close
+        from 'staging.bcb-currency'
+        union all
+        select refdate, symbol, price as close
+        from 'staging.b3-futures-win-adjusted'
+        union all
+        select refdate, symbol, price as close
+        from 'staging.b3-futures-wdo-adjusted'
+        order by refdate, symbol
+
+    - step: apply_fields
+
+writer:
+  layer: staging
+  partitioning: []
+
+fields:
+  - name: refdate
+    description: Reference date
+    type: date
+  - name: symbol
+    description: Instrument symbol (namespaced by source convention)
+    type: string
+  - name: close
+    description: Closing price
+    type: numeric
