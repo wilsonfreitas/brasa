@@ -18,12 +18,15 @@
    Do instead: Use Linear MCP functions (get_issue, save_issue, list_issues, save_comment) instead of gh CLI. Always pass plain text for markdown content—no escape sequences. If only `authenticate`/`complete_authentication` show up (2026-10-31), call `authenticate`, show the user the URL right away, and explore code while waiting.
 
 4. **[2026-11-01] Templates live in a separate repo: `~/dev/python/brasa-templates`**
-   Do instead: Template, plan and validation-rule changes go to brasa-templates (issues labelled `templates`; one Linear issue = one repo). Its CI tests against brasa `main` on GitHub, so push brasa first when templates need new engine code. brasa's own engine tests read the frozen copy in `tests/fixtures/templates-folder/` (change it only when an engine change needs it; WIL-214 replaces it over time).
+   Do instead: Template, plan and validation-rule changes go to brasa-templates (issues labelled `templates`; one Linear issue = one repo). It depends on `brasa-core` through the sibling path `../brasa`, and its CI checks out brasa `main` from GitHub: push brasa first, then brasa-templates. brasa's own engine tests read the frozen copy in `tests/fixtures/templates-folder/` (change it only when an engine change needs it; WIL-214 replaces it over time).
 
-5. **[2026-04-20] b3-bvbg028 dataset pattern: 9 common header fields + specific fields**
+5. **[2026-11-01] Release flow (brasa-core on PyPI)**
+   Do instead: Merge, push, wait for CI on both repos, then a lightweight tag `vX.Y.Z` on the merge commit (`git push origin vX.Y.Z`, never `--tags`). Build into `dist/` and run `uvx twine check`; Wilson runs `uv publish` with explicit file paths (a new PyPI project needs an account-wide token). GitHub release notes = the CHANGELOG section with `##` headings, one line per paragraph, plus a "Full Changelog" compare link. Then bump main to `X.Y.(Z+1).dev0`: brasa-templates' `requires-brasa = ">=0.5.0.dev0,<0.6"` rejects `0.6.0.dev0`, so a minor bump needs `requires-brasa` raised there first.
+
+6. **[2026-04-20] b3-bvbg028 dataset pattern: 9 common header fields + specific fields**
    Do instead: When adding a dataset block to `templates/b3/raw/b3-bvbg028.yaml` (in brasa-templates), always include: refdate, security_id, security_proprietary, security_market, instrument_asset, instrument_asset_description, instrument_market, instrument_segment, instrument_description. Then add dataset-specific fields.
 
-6. **[2026-04-20] DatasetCase spot_check must match fixture data from 2021-04-23**
+7. **[2026-04-20] DatasetCase spot_check must match fixture data from 2021-04-23**
    Do instead: When appending a DatasetCase to `tests/test_bvbg028_datasets.py` (in brasa-templates), verify all spot_check values against `data/IN210423.zip`. Use security_id as the lookup key and validate 18–25 key fields.
 
 ## Shell & Command Reliability
@@ -46,10 +49,13 @@
 6. **[2026-11-01] `brasa <listing> | head` prints a BrokenPipeError traceback**
    Do instead: Use `| sed -n 1,5p` (reads all input) until WIL-211 is fixed. Copy-paste blocks for Wilson: no `#` comments (zsh), sandbox runs inside `( export …; unset … )`.
 
+7. **[2026-11-01] `gh run list --commit SHA` also returns "Dependency Graph" runs**
+   Do instead: Add `--workflow CI` before `gh run watch`, or you watch GitHub's dependency job instead of the tests.
+
 ## Domain Behavior Guardrails
 
 1. **[2026-11-01] Template folders (WIL-198): strict layout, ordered folder list**
-   Do instead: A folder is `<folder>/{brasa.toml, templates/, plans/, validations/, steps.py}`; only `<folder>/templates/` holds templates. Order: `BRASA_TEMPLATE_PATH`, then `template_path` in config.toml, bundled last (until WIL-205). First folder wins (`brasa list-templates` shows source + `*shadows`). A `brasa.toml` `requires-brasa` mismatch is an error.
+   Do instead: A folder is `<folder>/{brasa.toml, templates/, plans/, validations/, steps.py}`; only `<folder>/templates/` holds templates. Order: `BRASA_TEMPLATE_PATH`, then `template_path` in config.toml; no bundled folder since 0.5.0 (none configured → "No template folders configured. Run `brasa init` or set BRASA_TEMPLATE_PATH."). First folder wins (`brasa list-templates` shows source + `*shadows`). A `brasa.toml` `requires-brasa` mismatch is an error.
 
 2. **[2026-04-20] YAML field types: date(), numeric(), string, integer, character, category**
    Do instead: Use `type: date` for dates without format parameter, `type: date(format='%Y%m%d')` for yyyymmdd format. Use `type: numeric` for decimals; specify `decimal=","` or `thousands="."` if needed. See `brasa/fieldsets/` for type adapters.
@@ -58,7 +64,7 @@
    Do instead: Put rules inline in the template that writes the dataset (`validations:`), or in a folder's `validations/*.yaml`, or pass `--rules FILE`. Exit 0 clean, 1 rule failure, 2 bad argument. Whole-market completeness can't see nearly empty days (2021-06-10 has 13 rows in bvbg086): add canary symbols.
 
 4. **[2026-06-12] `legacy/` folders are excluded from template discovery**
-   Do instead: To retire a template, `git mv` it into `templates/legacy/` — discovery skips any path with a `legacy` part below `templates/` (hatch also drops `**/legacy/**` from the wheel). Check test/template references to the id first.
+   Do instead: To retire a template, `git mv` it into `templates/legacy/` in its template folder — discovery skips any path with a `legacy` part below `templates/`. Check test/template references to the id first.
 
 5. **[2026-04-20] XML nested paths use forward slashes—handle optional and nested structures**
    Do instead: For nested XML like `<UndrlygInstrmId><OthrId><Id>`, use tag path `InstrmInf/DatasetName/UndrlygInstrmId/OthrId/Id`. Optional fields (may be null in some records) should still be declared in schema.
@@ -75,4 +81,7 @@
    Do instead: Use `linear-brasa-brainstorm` (Design Document, → Refined), `linear-brasa-plan` (Implementation Plan Document, → Planned), `linear-brasa-executor` (branch per issue, merge to main). Plans/designs live in issue Documents, not in description sections or separate repo files unless asked.
 
 2. **[2026-10-31] Verify by running software, not by document review**
-   Do instead: Keep design → plan → execute with every document in Linear as evidence, but don't wait for document approvals. End each issue with a short "try it" scenario (real datalake for read-only commands; scratch `BRASA_DATA_PATH` + `XDG_CONFIG_HOME` for anything that writes). For several issues, guide Wilson in use-case stages: dry-run each stage first, one stage per message, move issues to Done when his output matches.
+   Do instead: Keep design → plan → execute with every document in Linear as evidence, but don't wait for document approvals. End each issue with a short "try it" scenario (real datalake for read-only commands; scratch `BRASA_DATA_PATH` + `XDG_CONFIG_HOME` for anything that writes). For several issues, guide Wilson in use-case stages: dry-run each stage first, one stage per message, move issues to Done when Wilson's output matches.
+
+3. **[2026-11-01] Nothing public without Wilson's explicit yes**
+   Do instead: Ask before every push, tag, PyPI upload, GitHub release or repo creation; a yes covers only what was listed. Wilson runs PyPI uploads with their own token (never open or print `~/.pypirc`). Never create Linear issues without approval.
