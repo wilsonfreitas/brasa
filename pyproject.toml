@@ -1,6 +1,6 @@
 [project]
 name = "brasa-core"
-version = "0.5.0"
+version = "0.5.1.dev0"
 description = "Template-driven ETL engine: download, parse, transform and query datasets described by YAML templates (official templates for Brazilian market and economic data: brasa-templates)."
 authors = [{ name = "wilsonfreitas", email = "wilson.freitas@gmail.com" }]
 license = "MIT"
