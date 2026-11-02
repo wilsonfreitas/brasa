@@ -583,6 +583,17 @@ def test_smart_kwargs2() -> None:
     assert isinstance(kwargs_dict, list)
 
 
+@pytest.mark.parametrize(
+    "kwargs",
+    [{}, {"a": 1}, {"a": [1, 2]}, {"a": [1, 2], "b": [3, 4, 5]}, {"a": []}],
+)
+def test_kwargs_iterator_len_matches_iteration(kwargs) -> None:
+    # WIL-212: no kwargs (an importer with only --path) yields one {}, so the
+    # progress total must be 1, not 0.
+    args = KwargsIterator(kwargs)
+    assert len(args) == len(list(args))
+
+
 # --- merged from tests/test_date_normalization.py ---
 
 
