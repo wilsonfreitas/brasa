@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+
+- `brasa.downloaders.validate_bcb_currency_file`: a download validator that marks a
+  PTAX bulletin file invalid when a bulletin has no `dataHoraCotacao` (a provisional
+  quote the BCB replaces later), so the download is fetched again later (WIL-125).
+
 ### Fixed
 
 - `brasa <listing> | head` no longer ends with a `BrokenPipeError` traceback:

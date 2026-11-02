@@ -98,6 +98,32 @@ def validate_json_empty_file(fname: str) -> None:
             raise InvalidContentException("JSON 'results' is empty")
 
 
+def validate_bcb_currency_file(fname: str) -> None:
+    """Reject a PTAX bulletin file that holds a bulletin without a timestamp.
+
+    The PTAX API sometimes serves a provisional bulletin with
+    ``dataHoraCotacao: null`` whose prices differ from the official one
+    published later, so the whole download is invalid and should be fetched
+    again later (WIL-125).
+
+    Args:
+        fname: Path to the downloaded JSON file (a list of bulletins).
+
+    Raises:
+        InvalidContentException: If the file is empty or a bulletin has no
+            ``dataHoraCotacao``.
+    """
+    validate_json_empty_file(fname)
+    with Path(fname).open("rb") as fp:
+        bulletins = json.load(fp)
+    untimed = sum(1 for b in bulletins if b.get("dataHoraCotacao") is None)
+    if untimed:
+        raise InvalidContentException(
+            f"{untimed} bulletin(s) without dataHoraCotacao "
+            "(provisional quote): download again later"
+        )
+
+
 def _render_import_path(raw_path: str, kwargs: dict) -> str:
     """Render an import path pattern: strftime(refdate) then format(**rest).
 

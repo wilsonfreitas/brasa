@@ -11,6 +11,7 @@ from .helpers import (
     local_file_import,
     settlement_prices_download,
     simple_download,
+    validate_bcb_currency_file,
     validate_empty_file,
     validate_json_empty_file,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "local_file_import",
     "settlement_prices_download",
     "simple_download",
+    "validate_bcb_currency_file",
     "validate_empty_file",
     "validate_json_empty_file",
 ]
