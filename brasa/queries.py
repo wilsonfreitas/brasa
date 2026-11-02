@@ -934,40 +934,36 @@ def _get_indexes_names() -> list[str]:
     return list(df.indexes.unique())
 
 
+def _latest_symbols(dataset: ds.Dataset) -> list[str]:
+    """Return the distinct symbols on the latest refdate of a filtered dataset."""
+    tb = dataset.scanner(columns=["refdate", "symbol"]).to_table()
+    if tb.num_rows == 0:
+        return []
+    latest = tb.filter(pc.equal(tb["refdate"], pc.max(tb["refdate"])))
+    return latest["symbol"].unique().to_pylist()
+
+
 def _get_symbols_by_index(index, end_month=None) -> list[str]:
-    ds = get_dataset("b3-indexes-composition")
+    dataset = get_dataset("b3-indexes-composition", layer="staging").filter(
+        pc.field("indexes") == index
+    )
     if end_month is not None:
-        ds = ds.filter(pc.field("end_month") == end_month)
-    tb = ds.scanner(columns=["refdate"]).to_table()
-    max_date = pyarrow.compute.max(tb.column("refdate"))
-    df = (
-        get_dataset("b3-indexes-composition")
-        .filter(pc.field("refdate") == max_date)
-        .filter(pc.field("indexes") == index)
-        .scanner(columns=["code"])
-        .to_table()
-        .to_pandas()
-    )
-    return list(df.code.unique())
+        # end_month is any date in the portfolio's last month, e.g. "2024-12-31";
+        # the dataset stores the period as year + end_month (4, 8 or 12).
+        end = pd.Timestamp(end_month)
+        dataset = dataset.filter(
+            (pc.field("year") == end.year) & (pc.field("end_month") == end.month)
+        )
+    return _latest_symbols(dataset)
 
 
-def _get_funds_symbols(type: str) -> list[str]:
-    tb = (
-        get_dataset("b3-listed-funds-consolidated")
-        .scanner(columns=["refdate"])
-        .to_table()
+def _get_funds_symbols(fund_type: str) -> list[str]:
+    # Each fund type has its own latest refdate (B3 updates the lists apart).
+    return _latest_symbols(
+        get_dataset("b3-listed-funds", layer="staging").filter(
+            pc.field("fund_type") == fund_type
+        )
     )
-    max_date = pyarrow.compute.max(tb.column("refdate"))
-    symbols = (
-        get_dataset("b3-listed-funds-consolidated")
-        .filter(pc.field("refdate") == max_date)
-        .filter(pc.field("fund_type") == type)
-        .scanner(columns=["symbol"])
-        .to_table()
-        .to_pandas()
-        .iloc[:, 0]
-    )
-    return list(symbols)
 
 
 def get_symbols(type: str, **kwargs) -> list:
@@ -976,8 +972,8 @@ def get_symbols(type: str, **kwargs) -> list:
     type_handlers = {
         "etf": lambda: _get_funds_symbols("ETF"),
         "fii": lambda: _get_funds_symbols("FII"),
-        "fixed-income-etf": lambda: _get_funds_symbols("Fixed Income ETF"),
-        "fietf": lambda: _get_funds_symbols("Fixed Income ETF"),
+        "fixed-income-etf": lambda: _get_funds_symbols("ETF-RF"),
+        "fietf": lambda: _get_funds_symbols("ETF-RF"),
         "index": _get_indexes_names,
         "company": _get_companies_names,
         "company-cvm-code": _get_companies_cvm_codes,
@@ -994,12 +990,7 @@ def get_symbols(type: str, **kwargs) -> list:
         if "sector" in kwargs:
             return _get_equity_symbols(kwargs["sector"])
         if "index" in kwargs:
-            end_month = kwargs.get("end_month")
-            return (
-                _get_symbols_by_index(kwargs["index"], end_month)
-                if end_month
-                else _get_symbols_by_index(kwargs["index"])
-            )
+            return _get_symbols_by_index(kwargs["index"], kwargs.get("end_month"))
         return _get_equity_symbols()
 
     return []

@@ -301,6 +301,8 @@ Get list of symbols by type.
 - `"etf"`: Listed ETFs
 - `"fii"`: Real Estate Investment Funds
 - `"fixed-income-etf"` or `"fietf"`: Fixed income ETFs
+
+Fund lists come from `staging.b3-listed-funds`, each on the latest date its type was downloaded.
 - `"index"`: Stock indexes
 - `"company"`: Listed companies
 - `"company-cvm-code"`: CVM codes
@@ -331,7 +333,7 @@ tech_stocks = get_symbols("equity", sector="Tecnologia da Informação")
 # Get equities in index
 ibov_stocks = get_symbols("equity", index="IBOV")
 
-# Get IBOV stocks for specific end month
+# Get IBOV stocks for the portfolio ending in a given month (any date in that month)
 ibov_dec = get_symbols("equity", index="IBOV", end_month="2024-12-31")
 
 # Get industry sectors
