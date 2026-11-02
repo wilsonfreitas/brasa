@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- `brasa <listing> | head` no longer ends with a `BrokenPipeError` traceback:
+  the CLI stops quietly when the reader closes the pipe (WIL-211).
 - `get_industry_sectors()` and `get_symbols("equity")`, `get_symbols("equity", sector=...)`
   and `get_symbols("industry-sector" | "industry-subsector" | "industry-segment")`
   failed: they read `b3-equity-symbols-properties`, which no template produces.
