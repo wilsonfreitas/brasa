@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- `get_industry_sectors()` and `get_symbols("equity")`, `get_symbols("equity", sector=...)`
+  and `get_symbols("industry-sector" | "industry-subsector" | "industry-segment")`
+  failed: they read `b3-equity-symbols-properties`, which no template produces.
+  They now read `staging.brasa-companies` and `staging.b3-companies-symbols`;
+  the equity list keeps shares, units and BDRs (no rights or receipts) (WIL-206).
+
 ## v0.5.0 (2026-11-01) — brasa-core: templates move to brasa-templates
 
 The PyPI distribution is renamed from `brasa-marketdata` to **`brasa-core`**,

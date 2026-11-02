@@ -342,7 +342,7 @@ sectors = get_symbols("industry-sector")
 
 Get all industry sector classifications.
 
-**Returns**: `pd.DataFrame` with columns: `sector`, `subsector`, `segment`
+**Returns**: `pd.DataFrame` with columns: `sector`, `subsector`, `segment` (distinct values from `staging.brasa-companies`)
 
 **Example**:
 ```python
@@ -714,7 +714,6 @@ python -m brasa.cli query "SELECT * FROM 'b3-cotahist-daily'" -o output.parquet
 - `b3-companies-info`: Company info (processed)
 - `b3-companies-details`: Company details (processed)
 - `b3-companies-properties`: Merged company properties
-- `b3-equity-symbols-properties`: Symbol metadata
 - `b3-companies-cash-dividends`: Cash dividends (processed)
 - `b3-companies-stock-dividends`: Stock dividends
 - `b3-companies-subscriptions`: Subscription rights

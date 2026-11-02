@@ -842,23 +842,40 @@ def write_dataset(
 
 
 def _get_equity_symbols(sector=None) -> list[str]:
-    df = (
-        get_dataset("b3-equity-symbols-properties")
-        .scanner(columns=["symbol", "sector"])
+    # Same universe as b3-equities-returns: shares, units and BDRs (no rights,
+    # receipts or debentures).
+    symbols = (
+        get_dataset("b3-companies-symbols")
+        .filter(pc.field("instrument_type").isin(["EQUITY", "UNIT", "BDR"]))
+        .scanner(columns=["symbol", "code_cvm"])
         .to_table()
         .to_pandas()
     )
-    if sector is not None:
-        df = df[df.sector == sector]
+    if sector is None:
+        return list(symbols.symbol.unique())
+    companies = (
+        get_dataset("brasa-companies")
+        .scanner(columns=["code_cvm", "sector"])
+        .to_table()
+        .to_pandas()
+    )
+    df = symbols.merge(companies[companies.sector == sector], on="code_cvm")
     return list(df.symbol.unique())
 
 
 def get_industry_sectors() -> pd.DataFrame:
+    """Return the distinct B3 (sector, subsector, segment) classifications.
+
+    Returns:
+        DataFrame with columns ``sector``, ``subsector`` and ``segment``, read
+        from ``staging.brasa-companies``.
+    """
     return (
-        get_dataset("b3-equity-symbols-properties")
+        get_dataset("brasa-companies")
         .scanner(columns=["sector", "subsector", "segment"])
         .to_table()
         .to_pandas()
+        .dropna(subset=["sector"])
         .drop_duplicates()
         .sort_values(["sector", "subsector", "segment"])
         .reset_index(drop=True)
