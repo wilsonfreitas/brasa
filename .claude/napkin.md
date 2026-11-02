@@ -46,8 +46,8 @@
 5. **[2026-10-31] zsh does not word-split unquoted variables**
    Do instead: Don't pass a file list as `$F` to ruff/pytest (it becomes ONE argument); list paths inline or use an array (`files=(a b); cmd $files`). In zsh, `$?` after a pipe is the last command's status: use `${pipestatus[1]}`.
 
-6. **[2026-11-01] `brasa <listing> | head` prints a BrokenPipeError traceback**
-   Do instead: Use `| sed -n 1,5p` (reads all input) until WIL-211 is fixed. Copy-paste blocks for Wilson: no `#` comments (zsh), sandbox runs inside `( export …; unset … )`.
+6. **[2026-11-02] Copy-paste command blocks for Wilson**
+   Do instead: No `#` comments (zsh); sandbox or dev-template runs go inside `( export …; … )` so the env vars don't leak. `brasa … | head` is safe since WIL-211.
 
 7. **[2026-11-01] `gh run list --commit SHA` also returns "Dependency Graph" runs**
    Do instead: Add `--workflow CI` before `gh run watch`, or you watch GitHub's dependency job instead of the tests.
@@ -74,6 +74,9 @@
 
 7. **[2026-10-31] CLI dates use `--arg refdate=@YYYY-MM-DD`**
    Do instead: There is no `-d/--date` flag on `brasa download`. Use `--arg refdate=@2026-10-30`, ranges `@2026-01-01:2026-03-31`, calendars `@2026-01~ANBIMA`. Plans run by name: `brasa download --plan daily-b3`.
+
+8. **[2026-11-02] `brasa run` ignores template edits ("output is up to date")**
+   Do instead: Its staleness check only compares parquet file times. After changing an ETL template, re-run just that ETL with `brasa process <etl-id>`; `brasa run --force` also re-runs every upstream ETL (slow).
 
 ## User Directives
 
