@@ -1093,6 +1093,17 @@ def _print_plans() -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
+    try:
+        _main(argv)
+    except BrokenPipeError:
+        # The reader closed the pipe early (`brasa list-templates | head`): stop
+        # quietly. Pointing stdout at devnull keeps the flush at exit from
+        # raising again (recipe from the Python `signal` docs).
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        sys.exit(1)
+
+
+def _main(argv: list[str] | None) -> None:
     args = parser.parse_args(argv)
     if args.command == "init":
         _cmd_init(args)
