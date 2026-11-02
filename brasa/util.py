@@ -2,6 +2,7 @@ import hashlib
 import itertools
 import json
 import logging
+import math
 import pickle
 import re
 import warnings
@@ -235,14 +236,9 @@ def is_iterable(i):
 class KwargsIterator:
     def __init__(self, kwargs: dict) -> None:
         self.elements = [list(x) if is_iterable(x) else [x] for x in kwargs.values()]
-        if len(self.elements) == 0:
-            self.__len = 0
-            self.names = []
-        else:
-            self.__len = 1
-            for x in self.elements:
-                self.__len *= len(x)
-            self.names = list(kwargs.keys())
+        self.names = list(kwargs.keys())
+        # Matches itertools.product: no kwargs still yields one empty dict.
+        self.__len = math.prod(len(x) for x in self.elements)
 
     def __len__(self) -> int:
         return self.__len

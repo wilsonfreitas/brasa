@@ -17,6 +17,9 @@
   lists: they read the raw `input.b3-listed-funds` with old type names. They now
   read `staging.b3-listed-funds` with B3's current types (`ETF`, `FII`,
   `ETF-RF`), each on its own latest date (WIL-206).
+- `brasa download`/`brasa import` with no arguments (for example an `importer:`
+  template given only `--path`) showed the progress bar as `1/0`; it now shows
+  `1/1` (WIL-212).
 
 ## v0.5.0 (2026-11-01) — brasa-core: templates move to brasa-templates
 
