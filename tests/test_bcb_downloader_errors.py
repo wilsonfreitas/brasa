@@ -44,3 +44,25 @@ def test_b3_files_downloader_raises_on_non_200(monkeypatch):
     )
     with pytest.raises(DownloadException, match="status_code = 404"):
         downloader.download()
+
+
+def _write_bulletins(tmp_path, bulletins):
+    import json
+
+    path = tmp_path / "bulletins.json"
+    path.write_text(json.dumps(bulletins))
+    return str(path)
+
+
+def test_validate_bcb_currency_file_rejects_untimed_bulletin(tmp_path):
+    """WIL-125: a provisional bulletin without a timestamp invalidates the file."""
+    from brasa.downloaders import validate_bcb_currency_file
+    from brasa.engine.exceptions import InvalidContentException
+
+    good = {"dataHoraCotacao": "2026-06-19T13:03:25.555", "cotacaoVenda": 5.1442}
+    untimed = {"dataHoraCotacao": None, "cotacaoVenda": 5.1535}
+    validate_bcb_currency_file(_write_bulletins(tmp_path, [good]))
+    with pytest.raises(InvalidContentException, match="1 bulletin"):
+        validate_bcb_currency_file(_write_bulletins(tmp_path, [good, untimed]))
+    with pytest.raises(InvalidContentException, match="empty"):
+        validate_bcb_currency_file(_write_bulletins(tmp_path, []))
