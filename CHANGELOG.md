@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- `get_industry_sectors()` and `get_symbols("equity")`, `get_symbols("equity", sector=...)`
+  and `get_symbols("industry-sector" | "industry-subsector" | "industry-segment")`
+  failed: they read `b3-equity-symbols-properties`, which no template produces.
+  They now read `staging.brasa-companies` and `staging.b3-companies-symbols`;
+  the equity list keeps shares, units and BDRs (no rights or receipts) (WIL-206).
+- `get_symbols("equity", index=...)` failed (the composition column is now
+  `symbol`), and `end_month="2024-12-31"` now matches the dataset's `year` +
+  `end_month` period. `get_symbols("etf" | "fii" | "fietf")` returned empty
+  lists: they read the raw `input.b3-listed-funds` with old type names. They now
+  read `staging.b3-listed-funds` with B3's current types (`ETF`, `FII`,
+  `ETF-RF`), each on its own latest date (WIL-206).
+
 ## v0.5.0 (2026-11-01) — brasa-core: templates move to brasa-templates
 
 The PyPI distribution is renamed from `brasa-marketdata` to **`brasa-core`**,
