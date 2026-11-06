@@ -147,3 +147,6 @@ source = ["brasa"]
 [tool.coverage.report]
 skip_covered = false
 show_missing = false
+
+[tool.uv.sources]
+bizdays = { git = "https://github.com/wilsonfreitas/python-bizdays", rev = "feature/typing" }
