@@ -14,24 +14,18 @@ from pathlib import Path
 from tempfile import gettempdir
 from typing import IO, Any
 
-from bizdays import Calendar, get_option, set_option
+from bizdays import Calendar
 from regexparser import TextParser
-
-set_option("mode.datetype", "datetime")
 
 
 @contextmanager
-def bizdays_mode(mode: str):
+def bizdays_mode(mode: str):  # noqa: ARG001 - kept for callers until v2 port
     """Temporarily switch the bizdays global "mode" option.
 
     Restores the previous mode on exit, even if the block raises.
     """
-    previous = get_option("mode")
-    set_option("mode", mode)
-    try:
-        yield
-    finally:
-        set_option("mode", previous)
+    # bizdays v2 removed the global mode; results are always NumPy.
+    yield
 
 
 class SuppressUserWarnings:
@@ -260,7 +254,7 @@ class DateRange:
         if start is None and year is None:
             raise ValueError("Either start or year must be specified")
 
-        self.calendar = Calendar() if calendar is None else Calendar.load(calendar)
+        self.calendar = Calendar() if calendar is None else Calendar.load(name=calendar)
         if start is not None:
             start = self.calendar.following(start)
         if start is not None and end is None:
@@ -297,7 +291,9 @@ class DateRangeParser(TextParser):
     def __init__(self, calendar: str):
         super().__init__()
         self.calendar_name = calendar
-        self.calendar = Calendar() if calendar == "actual" else Calendar.load(calendar)
+        self.calendar = (
+            Calendar() if calendar == "actual" else Calendar.load(name=calendar)
+        )
 
     def parse_datetime_ms(self, _text, match):
         r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+)$"

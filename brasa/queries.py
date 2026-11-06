@@ -385,7 +385,7 @@ def get_returns(
         return df
 
     with bizdays_mode("pandas"):
-        cal = Calendar.load(calendar)
+        cal = Calendar.load(name=calendar)
         idx = cal.seq(df.index[0], df.index[-1])
     df = df.reindex(idx)
     return df
@@ -426,7 +426,7 @@ def get_prices(
         return df
 
     with bizdays_mode("pandas"):
-        cal = Calendar.load(calendar)
+        cal = Calendar.load(name=calendar)
         idx = cal.seq(df.index[0], df.index[-1])
     df = df.reindex(idx)
     return df

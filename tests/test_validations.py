@@ -213,7 +213,7 @@ def test_validate_dataset_without_rules_notes(folder):
 
 def test_validate_reports_gap_from_inline_rule(folder):
     _tpl(folder, "val-etl", _ETL.format(name="val-etl") + _INLINE)
-    cal = Calendar.load("ANBIMA")
+    cal = Calendar.load(name="ANBIMA")
     days = [
         d.date() if hasattr(d, "date") else d
         for d in cal.seq(date(2020, 1, 2), date(2020, 1, 31))
@@ -237,7 +237,7 @@ def test_validate_reports_gap_from_inline_rule(folder):
 
 def _gap_folder(folder, *, complete: bool) -> None:
     _tpl(folder, "val-cli", _ETL.format(name="val-cli") + _INLINE)
-    cal = Calendar.load("ANBIMA")
+    cal = Calendar.load(name="ANBIMA")
     days = [
         d.date() if hasattr(d, "date") else d
         for d in cal.seq(date(2020, 1, 2), date(2020, 1, 31))

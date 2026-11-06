@@ -447,7 +447,7 @@ def test_start_end_period() -> None:
 
 
 def test_start_no_end_period() -> None:
-    cal = Calendar.load("B3")
+    cal = Calendar.load(name="B3")
     p = DateRange(start=datetime(2023, 1, 1), calendar="B3")
     assert p.start == datetime(2023, 1, 2)
     assert p.end == cal.offset(datetime.today(), -1)
@@ -462,7 +462,7 @@ def test_year_period() -> None:
 def test_current_year_period() -> None:
     year = datetime.today().year
     p = DateRange(year=year, calendar="B3")
-    cal = Calendar.load("B3")
+    cal = Calendar.load(name="B3")
     assert p.start == cal.getdate("first bizday", year)
     assert p.end == cal.offset(datetime.today(), -1)
 

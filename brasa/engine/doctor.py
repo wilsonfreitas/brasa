@@ -244,7 +244,7 @@ def _calendar_completeness_gaps(
     """
     from bizdays import Calendar
 
-    cal = Calendar.load(calendar_name)
+    cal = Calendar.load(name=calendar_name)
 
     lower = _as_date(start_cfg) if start_cfg is not None else min(present_dates)
     if end_cfg is None:
@@ -285,7 +285,7 @@ def _unexpected_observations(
     """
     from bizdays import Calendar
 
-    cal = Calendar.load(calendar_name)
+    cal = Calendar.load(name=calendar_name)
     lower = _as_date(cal.startdate)
     upper = _as_date(cal.enddate)
     return sorted(
@@ -971,7 +971,7 @@ def check_date_gaps(  # noqa: PLR0912
     try:
         from bizdays import Calendar
 
-        Calendar.load(calendar_name)
+        Calendar.load(name=calendar_name)
     except Exception:
         return []
 

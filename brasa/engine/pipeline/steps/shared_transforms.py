@@ -155,7 +155,7 @@ def convert_future_maturity_codes_to_dates(
 
     from brasa.parsers.b3.futures_settlement_prices import maturity2date
 
-    cal: Any = Calendar.load(calendar)
+    cal: Any = Calendar.load(name=calendar)
     df = to_dataframe(data)
 
     df[date_column] = df[code_column].apply(
@@ -184,7 +184,7 @@ def adjust_following_bizdays(
 
     from bizdays import Calendar
 
-    cal: Any = Calendar.load(calendar)
+    cal: Any = Calendar.load(name=calendar)
     df = to_dataframe(data)
 
     df[adjusted_column] = cal.following(df[date_column])
@@ -213,7 +213,7 @@ def calculate_bizdays(
 
     from bizdays import Calendar
 
-    cal: Any = Calendar.load(calendar)
+    cal: Any = Calendar.load(name=calendar)
     df = to_dataframe(data)
 
     df[bizdays_column] = cal.bizdays(
@@ -351,7 +351,7 @@ def standard_terms_interpolation(
     """
     from bizdays import Calendar
 
-    cal: Any = Calendar.load(calendar)
+    cal: Any = Calendar.load(name=calendar)
     df = to_dataframe(data)
     terms_std = np.array(standard_terms)
     symbols_std = [f"{symbol_prefix}{t}" for t in standard_terms]
@@ -416,7 +416,7 @@ def adjust_prices_by_returns(
         price_columns = ["open", "high", "low", "close"]
     df = to_dataframe(data)
     with bizdays_mode("pandas"):
-        cal: Any = Calendar.load(calendar)
+        cal: Any = Calendar.load(name=calendar)
 
     def _adjust(group: pd.DataFrame) -> pd.DataFrame:
         group = group.set_index("refdate").sort_index(ascending=False)
