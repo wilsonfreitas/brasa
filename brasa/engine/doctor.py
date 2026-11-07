@@ -240,7 +240,7 @@ def _calendar_completeness_gaps(
         Sorted list of business days in the window that have no observation.
 
     Raises:
-        Exception: If the calendar name is unknown or start/end are malformed.
+        ValueError: If the calendar name is unknown or start/end are malformed.
     """
     from bizdays import Calendar
 
@@ -260,7 +260,7 @@ def _calendar_completeness_gaps(
     if lower > upper:
         return []
 
-    biz = [_as_date(d) for d in cal.seq(lower, upper)]
+    biz = cal.seq(lower, upper).tolist()
     return sorted(d for d in biz if d not in present_dates)
 
 
@@ -281,7 +281,7 @@ def _unexpected_observations(
         Sorted list of present dates the calendar marks as non-business days.
 
     Raises:
-        Exception: If the calendar name is unknown.
+        ValueError: If the calendar name is unknown.
     """
     from bizdays import Calendar
 

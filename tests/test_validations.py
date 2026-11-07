@@ -214,10 +214,7 @@ def test_validate_dataset_without_rules_notes(folder):
 def test_validate_reports_gap_from_inline_rule(folder):
     _tpl(folder, "val-etl", _ETL.format(name="val-etl") + _INLINE)
     cal = Calendar.load(name="ANBIMA")
-    days = [
-        d.date() if hasattr(d, "date") else d
-        for d in cal.seq(date(2020, 1, 2), date(2020, 1, 31))
-    ]
+    days = cal.seq(date(2020, 1, 2), date(2020, 1, 31)).tolist()
     _write_series_parquet("staging/val-etl", None, days[:5] + days[6:])
     report = validate_datasets(["staging.val-etl"])
     codes = [i.code for i in report.issues]
@@ -238,10 +235,7 @@ def test_validate_reports_gap_from_inline_rule(folder):
 def _gap_folder(folder, *, complete: bool) -> None:
     _tpl(folder, "val-cli", _ETL.format(name="val-cli") + _INLINE)
     cal = Calendar.load(name="ANBIMA")
-    days = [
-        d.date() if hasattr(d, "date") else d
-        for d in cal.seq(date(2020, 1, 2), date(2020, 1, 31))
-    ]
+    days = cal.seq(date(2020, 1, 2), date(2020, 1, 31)).tolist()
     _write_series_parquet(
         "staging/val-cli", None, days if complete else days[:5] + days[6:]
     )

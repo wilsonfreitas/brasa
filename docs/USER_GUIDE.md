@@ -806,7 +806,7 @@ from datetime import datetime
 from brasa.util import DateRange
 
 # Check if today is business day
-cal = Calendar.load("B3")
+cal = Calendar.load(name="B3")
 if cal.isbizday(datetime.today()):
     # Data might be available
     pass

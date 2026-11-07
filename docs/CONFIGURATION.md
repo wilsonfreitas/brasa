@@ -90,7 +90,7 @@ Brasa uses the `bizdays` library for business day calendars:
 from bizdays import Calendar
 
 # Load calendar
-cal = Calendar.load("B3")
+cal = Calendar.load(name="B3")
 
 # Check if business day
 cal.isbizday(datetime(2024, 1, 15))  # Returns bool

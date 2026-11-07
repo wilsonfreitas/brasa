@@ -187,7 +187,7 @@ def adjust_following_bizdays(
     cal: Any = Calendar.load(name=calendar)
     df = to_dataframe(data)
 
-    df[adjusted_column] = cal.following(df[date_column])
+    df[adjusted_column] = cal.following(df[date_column]).astype("datetime64[ns]")
     return df
 
 
@@ -216,10 +216,9 @@ def calculate_bizdays(
     cal: Any = Calendar.load(name=calendar)
     df = to_dataframe(data)
 
-    df[bizdays_column] = cal.bizdays(
-        df[start_date_column],
-        df[end_date_column],
-    )
+    days = cal.bizdays(df[start_date_column], df[end_date_column])
+    # bizdays v2 counts are float64; keep v1's int64 unless a NaT made a NaN.
+    df[bizdays_column] = days if np.isnan(days).any() else days.astype("int64")
     return df
 
 
@@ -369,7 +368,7 @@ def standard_terms_interpolation(
                 {
                     refdate_column: pd.Timestamp(refdate),
                     "symbol": symbols_std,
-                    "maturity_date": pd.to_datetime(maturities),
+                    "maturity_date": maturities.astype("datetime64[ns]"),
                     business_days_column: terms_std,
                     rate_column: interp_rates,
                 }
@@ -410,21 +409,18 @@ def adjust_prices_by_returns(
     """
     from bizdays import Calendar
 
-    from brasa.util import bizdays_mode
-
     if price_columns is None:
         price_columns = ["open", "high", "low", "close"]
     df = to_dataframe(data)
-    with bizdays_mode("pandas"):
-        cal: Any = Calendar.load(name=calendar)
+    cal: Any = Calendar.load(name=calendar)
 
     def _adjust(group: pd.DataFrame) -> pd.DataFrame:
         group = group.set_index("refdate").sort_index(ascending=False)
         rets = group[returns_column].copy()
         if fill_calendar_gaps:
             # Descending calendar sequence spanning the symbol's date range.
-            seq = list(cal.seq(rets.index[-1], rets.index[0]))
-            idx = pd.DatetimeIndex(sorted(seq, reverse=True))
+            seq = cal.seq(rets.index[-1], rets.index[0])
+            idx = pd.DatetimeIndex(seq[::-1]).as_unit("ns")
             rets = rets.reindex(idx, fill_value=0.0)
             group = group.reindex(idx, method="bfill")
         factor = np.exp(rets).cumprod().shift()
