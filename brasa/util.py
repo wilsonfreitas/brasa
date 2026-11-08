@@ -256,7 +256,9 @@ class DateRange:
         if start is None and year is None:
             raise ValueError("Either start or year must be specified")
 
-        self.calendar = Calendar() if calendar is None else Calendar.load(name=calendar)
+        self.calendar = (
+            Calendar() if calendar in (None, "actual") else Calendar.load(name=calendar)
+        )
 
         def yesterday() -> datetime:
             # lazy: v2 raises DateOutOfRange when today is past the calendar end
