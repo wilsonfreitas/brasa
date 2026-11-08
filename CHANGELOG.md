@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Changed
+
+- brasa now requires **bizdays ≥ 2.0.0**; upgrading brasa-core upgrades
+  bizdays too. bizdays 2.0.0 returns NumPy values; brasa converts them back, so
+  query results, written parquet and download arguments do not change. The
+  B3 calendar now runs to 2099; with bizdays 1.x it ended on 2026-12-31, and
+  B3 date ranges, `get_returns`/`get_prices` and the `-filled` adjusted-prices
+  ETLs would fail from 2027-01-01.
+
 ### Added
 
 - `brasa.downloaders.validate_bcb_currency_file`: a download validator that marks a
@@ -26,6 +35,10 @@
 - `brasa download`/`brasa import` with no arguments (for example an `importer:`
   template given only `--path`) showed the progress bar as `1/0`; it now shows
   `1/1` (WIL-212).
+- Date ranges on the `actual` calendar (every day counts) failed with
+  `Unknown calendar: 'actual'`, for example `--arg refdate=@2024-02~actual`;
+  only single dates worked. `--calendar actual` on `brasa download` and
+  `brasa import` was also rejected, although the docs list it (WIL-234).
 
 ## v0.5.0 (2026-11-01) — brasa-core: templates move to brasa-templates
 
