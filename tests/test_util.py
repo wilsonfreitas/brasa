@@ -447,10 +447,10 @@ def test_start_end_period() -> None:
 
 
 def test_start_no_end_period() -> None:
-    cal = Calendar.load("B3")
+    cal = Calendar.load(name="B3")
     p = DateRange(start=datetime(2023, 1, 1), calendar="B3")
     assert p.start == datetime(2023, 1, 2)
-    assert p.end == cal.offset(datetime.today(), -1)
+    assert p.end.date() == cal.offset(datetime.today(), -1).item()
 
 
 def test_year_period() -> None:
@@ -462,9 +462,9 @@ def test_year_period() -> None:
 def test_current_year_period() -> None:
     year = datetime.today().year
     p = DateRange(year=year, calendar="B3")
-    cal = Calendar.load("B3")
-    assert p.start == cal.getdate("first bizday", year)
-    assert p.end == cal.offset(datetime.today(), -1)
+    cal = Calendar.load(name="B3")
+    assert p.start.date() == cal.getdate("first bizday", year).item()
+    assert p.end.date() == cal.offset(datetime.today(), -1).item()
 
 
 def test_if_is_iter() -> None:
@@ -648,3 +648,18 @@ class TestChecksumNormalization:
             "tpl", DownloadArgs({"refdate": date(2025, 3, 13)})
         )
         assert h1 != h2
+
+
+def test_past_year_range_works_after_calendar_end(monkeypatch):
+    """bizdays v2 raises past the calendar end; past years must not need today."""
+    import brasa.util as util_mod
+
+    class FakeDatetime(datetime):
+        @classmethod
+        def today(cls):
+            return cls(2099, 12, 31)
+
+    monkeypatch.setattr(util_mod, "datetime", FakeDatetime)
+    p = DateRange(year=2020, month=3, calendar="B3")
+    assert p.start == datetime(2020, 3, 2)
+    assert p.end == datetime(2020, 3, 31)

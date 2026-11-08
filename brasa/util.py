@@ -7,31 +7,15 @@ import pickle
 import re
 import warnings
 import zipfile
-from contextlib import contextmanager, suppress
+from contextlib import suppress
 from datetime import date, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 from tempfile import gettempdir
 from typing import IO, Any
 
-from bizdays import Calendar, get_option, set_option
+from bizdays import Calendar
 from regexparser import TextParser
-
-set_option("mode.datetype", "datetime")
-
-
-@contextmanager
-def bizdays_mode(mode: str):
-    """Temporarily switch the bizdays global "mode" option.
-
-    Restores the previous mode on exit, even if the block raises.
-    """
-    previous = get_option("mode")
-    set_option("mode", mode)
-    try:
-        yield
-    finally:
-        set_option("mode", previous)
 
 
 class SuppressUserWarnings:
@@ -248,6 +232,18 @@ class KwargsIterator:
             yield dict(tuple(zip(self.names, kw, strict=False)))
 
 
+def _pydt(value: Any) -> Any:
+    """Convert bizdays v2 datetime64 results to the v1 ``datetime`` types.
+
+    Args:
+        value: A ``numpy.datetime64`` scalar or ``datetime64`` array.
+
+    Returns:
+        A ``datetime.datetime``, or a list of them for an array.
+    """
+    return value.astype("datetime64[us]").tolist()
+
+
 class DateRange:
     def __init__(
         self,
@@ -260,31 +256,30 @@ class DateRange:
         if start is None and year is None:
             raise ValueError("Either start or year must be specified")
 
-        self.calendar = Calendar() if calendar is None else Calendar.load(calendar)
+        self.calendar = Calendar() if calendar is None else Calendar.load(name=calendar)
+
+        def yesterday() -> datetime:
+            # lazy: v2 raises DateOutOfRange when today is past the calendar end
+            return _pydt(self.calendar.offset(datetime.today(), -1))
+
         if start is not None:
-            start = self.calendar.following(start)
+            start = _pydt(self.calendar.following(start))
         if start is not None and end is None:
-            end = self.calendar.offset(datetime.today(), -1)
+            end = yesterday()
         elif start is not None and end is not None:
-            end = min(
-                self.calendar.preceding(end), self.calendar.offset(datetime.today(), -1)
-            )
+            end = min(_pydt(self.calendar.preceding(end)), yesterday())
         if year is not None:
-            start = self.calendar.getdate("first bizday", year)
-            end = self.calendar.getdate("last bizday", year)
+            ref = year if month is None else f"{year}-{month:02d}"
+            start = _pydt(self.calendar.getdate("first bizday", ref))
+            end = _pydt(self.calendar.getdate("last bizday", ref))
             if end > datetime.today():
-                end = self.calendar.offset(datetime.today(), -1)
-        if year is not None and month is not None:
-            start = self.calendar.getdate("first bizday", year, month)
-            end = self.calendar.getdate("last bizday", year, month)
-            if end > datetime.today():
-                end = self.calendar.offset(datetime.today(), -1)
+                end = yesterday()
         self.year = year
         self.month = month
         self.start = start
         self.end = end
 
-        self.dates = self.calendar.seq(self.start, self.end)
+        self.dates = _pydt(self.calendar.seq(self.start, self.end))
 
     def __len__(self) -> int:
         return len(self.dates)
@@ -297,7 +292,9 @@ class DateRangeParser(TextParser):
     def __init__(self, calendar: str):
         super().__init__()
         self.calendar_name = calendar
-        self.calendar = Calendar() if calendar == "actual" else Calendar.load(calendar)
+        self.calendar = (
+            Calendar() if calendar == "actual" else Calendar.load(name=calendar)
+        )
 
     def parse_datetime_ms(self, _text, match):
         r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+)$"
@@ -327,17 +324,13 @@ class DateRangeParser(TextParser):
 
     def parse_month(self, _text, match):
         r"^(\d{4})-(\d{2})$"
-        year = int(match.group(1))
-        month = int(match.group(2))
-        start = self.calendar.getdate("first day", year, month)
-        end = self.calendar.getdate("last day", year, month)
+        start = self.calendar.getdate("first day", match.group())
+        end = self.calendar.getdate("last day", match.group())
         return DateRange(start=start, end=end, calendar=self.calendar_name)
 
     def parse_month_open_range(self, _text, match):
         r"^(\d{4})-(\d{2}):$"
-        year = int(match.group(1))
-        month = int(match.group(2))
-        start = self.calendar.getdate("first day", year, month)
+        start = self.calendar.getdate("first day", match.group()[:-1])
         return DateRange(start=start, calendar=self.calendar_name)
 
     def parse_date(self, _text, match):

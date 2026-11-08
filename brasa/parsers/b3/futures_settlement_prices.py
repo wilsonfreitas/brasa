@@ -1,5 +1,6 @@
 from datetime import datetime
 
+import pandas as pd
 from bizdays import Calendar
 
 
@@ -11,7 +12,7 @@ def maturity2date_newcode(x: str, cal: Calendar, expr: str) -> datetime:
     """
     year = int(x[-2:]) + 2000
     month = code2month_newcode(x[0])
-    return cal.getdate(expr, year, month)
+    return pd.Timestamp(cal.getdate(expr, f"{year}-{month:02d}")).to_pydatetime()
 
 
 def maturity2date_oldcode(x: str, cal: Calendar, expr: str) -> datetime:
@@ -22,7 +23,7 @@ def maturity2date_oldcode(x: str, cal: Calendar, expr: str) -> datetime:
     """
     year = int(x[-1:]) + 2000
     month = code2month_oldcode(x[:3])
-    return cal.getdate(expr, year, month)
+    return pd.Timestamp(cal.getdate(expr, f"{year}-{month:02d}")).to_pydatetime()
 
 
 def maturity2date(x: str, cal: Calendar, expr: str = "first day") -> datetime:

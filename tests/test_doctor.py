@@ -570,7 +570,7 @@ class TestDateGaps:
         ds_dir = Path(man.db_path("input/b3-cov-oneday"))
         newest = date.fromordinal(date.today().toordinal() - 30)
         # Walk back to a business day so the single-day window is on-calendar.
-        cal = Calendar.load("B3")
+        cal = Calendar.load(name="B3")
         while not cal.isbizday(newest):
             newest = date.fromordinal(newest.toordinal() - 1)
         older = date.fromordinal(newest.toordinal() - 90)
@@ -694,8 +694,8 @@ def _write_validations(tmp_path, body: str) -> Path:
 
 
 def _full_anbima_series(dataset_rel, symbol, start, end):
-    cal = Calendar.load("ANBIMA")
-    days = [d.date() if hasattr(d, "date") else d for d in cal.seq(start, end)]
+    cal = Calendar.load(name="ANBIMA")
+    days = cal.seq(start, end).tolist()
     _write_series_parquet(dataset_rel, symbol, days)
     return days
 
@@ -777,19 +777,13 @@ class TestReadSeriesDates:
 
 class TestCalendarCompletenessGaps:
     def test_complete_series_no_gaps(self):
-        cal = Calendar.load("ANBIMA")
-        days = [
-            d.date() if hasattr(d, "date") else d
-            for d in cal.seq(date(2020, 1, 2), date(2020, 3, 31))
-        ]
+        cal = Calendar.load(name="ANBIMA")
+        days = cal.seq(date(2020, 1, 2), date(2020, 3, 31)).tolist()
         assert _calendar_completeness_gaps(set(days), "ANBIMA", None, None) == []
 
     def test_missing_business_day_detected(self):
-        cal = Calendar.load("ANBIMA")
-        days = [
-            d.date() if hasattr(d, "date") else d
-            for d in cal.seq(date(2020, 1, 2), date(2020, 3, 31))
-        ]
+        cal = Calendar.load(name="ANBIMA")
+        days = cal.seq(date(2020, 1, 2), date(2020, 3, 31)).tolist()
         hole = days[10]
         present = set(days) - {hole}
         missing = _calendar_completeness_gaps(present, "ANBIMA", None, None)
@@ -797,29 +791,20 @@ class TestCalendarCompletenessGaps:
 
     def test_weekend_not_required(self):
         # only business days present; a Saturday inside the range is not a gap
-        cal = Calendar.load("ANBIMA")
-        days = [
-            d.date() if hasattr(d, "date") else d
-            for d in cal.seq(date(2020, 1, 2), date(2020, 1, 31))
-        ]
+        cal = Calendar.load(name="ANBIMA")
+        days = cal.seq(date(2020, 1, 2), date(2020, 1, 31)).tolist()
         assert _calendar_completeness_gaps(set(days), "ANBIMA", None, None) == []
 
     def test_explicit_start_extends_window(self):
-        cal = Calendar.load("ANBIMA")
-        days = [
-            d.date() if hasattr(d, "date") else d
-            for d in cal.seq(date(2020, 6, 1), date(2020, 6, 30))
-        ]
+        cal = Calendar.load(name="ANBIMA")
+        days = cal.seq(date(2020, 6, 1), date(2020, 6, 30)).tolist()
         missing = _calendar_completeness_gaps(set(days), "ANBIMA", "2020-05-01", None)
         # every business day in May is missing
-        may = [
-            d.date() if hasattr(d, "date") else d
-            for d in cal.seq(date(2020, 5, 1), date(2020, 5, 29))
-        ]
+        may = cal.seq(date(2020, 5, 1), date(2020, 5, 29)).tolist()
         assert set(may).issubset(set(missing))
 
     def test_unknown_calendar_raises(self):
-        with pytest.raises(Exception):  # noqa: B017 - bizdays raises bare Exception
+        with pytest.raises(ValueError):
             _calendar_completeness_gaps({date(2020, 1, 2)}, "NOPE", None, None)
 
     def test_bad_start_raises(self):
@@ -904,11 +889,8 @@ class TestCheckCalendarCompleteness:
         assert "dataset not in the datalake" in issues[0].description
 
     def test_single_series_shape(self, tmp_path):
-        cal = Calendar.load("ANBIMA")
-        days = [
-            d.date() if hasattr(d, "date") else d
-            for d in cal.seq(date(2020, 1, 2), date(2020, 1, 31))
-        ]
+        cal = Calendar.load(name="ANBIMA")
+        days = cal.seq(date(2020, 1, 2), date(2020, 1, 31)).tolist()
         _write_series_parquet("staging/cc-single", None, days[:5] + days[6:])
         cfg = _write_validations(
             tmp_path,
@@ -1130,7 +1112,7 @@ class TestUnexpectedObservations:
 
         from brasa.engine.doctor import _as_date, _unexpected_observations
 
-        cal = Calendar.load("B3")
+        cal = Calendar.load(name="B3")
         start = _as_date(cal.startdate)
         before = start.replace(year=start.year - 5)
         present = {before}  # out of coverage -> undeterminable -> not flagged
@@ -1450,11 +1432,8 @@ class TestDownloadRefdateGaps:
             )
 
     def test_interior_gap_is_error(self):
-        cal = Calendar.load("B3")
-        days = [
-            d.date() if hasattr(d, "date") else d
-            for d in cal.seq("2024-01-02", "2024-01-31")
-        ]
+        cal = Calendar.load(name="B3")
+        days = cal.seq("2024-01-02", "2024-01-31").tolist()
         present = days[:5] + days[10:]  # remove a run of 5 business days
         self._seed("dl-gap", present)
         issues = check_download_refdate_gaps(["dl-gap"], "B3", last_days=-1)
@@ -1465,11 +1444,8 @@ class TestDownloadRefdateGaps:
         assert str(days[9]) in gaps[0].details
 
     def test_complete_coverage_no_issue(self):
-        cal = Calendar.load("B3")
-        days = [
-            d.date() if hasattr(d, "date") else d
-            for d in cal.seq("2024-02-01", "2024-02-29")
-        ]
+        cal = Calendar.load(name="B3")
+        days = cal.seq("2024-02-01", "2024-02-29").tolist()
         self._seed("dl-ok", days)
         issues = check_download_refdate_gaps(["dl-ok"], "B3", last_days=-1)
         assert not [i for i in issues if i.code == "download-refdate-gaps"]
@@ -1492,11 +1468,8 @@ class TestDownloadRefdateGaps:
         assert warn[0].severity == "warning"
 
     def test_invalid_downloads_ignored(self):
-        cal = Calendar.load("B3")
-        days = [
-            d.date() if hasattr(d, "date") else d
-            for d in cal.seq("2024-04-01", "2024-04-30")
-        ]
+        cal = Calendar.load(name="B3")
+        days = cal.seq("2024-04-01", "2024-04-30").tolist()
         # seed every business day as valid EXCEPT days[3]
         self._seed("dl-inv", days[:3] + days[4:])
         # days[3] exists ONLY as an invalid download row
@@ -1512,11 +1485,8 @@ class TestDownloadRefdateGaps:
         assert check_download_refdate_gaps([], "B3") == []
 
     def test_coverage_info_emitted_when_clean(self):
-        cal = Calendar.load("B3")
-        days = [
-            d.date() if hasattr(d, "date") else d
-            for d in cal.seq("2024-06-03", "2024-06-28")
-        ]
+        cal = Calendar.load(name="B3")
+        days = cal.seq("2024-06-03", "2024-06-28").tolist()
         self._seed("dl-cov", days)
         issues = check_download_refdate_gaps(["dl-cov"], "B3", last_days=-1)
         cov = [i for i in issues if i.code == "download-refdate-coverage"]
@@ -1530,11 +1500,8 @@ class TestDownloadRefdateGaps:
         ) == cov[0].description
 
     def test_coverage_ratio_reflects_gaps_and_precedes_gap_issue(self):
-        cal = Calendar.load("B3")
-        days = [
-            d.date() if hasattr(d, "date") else d
-            for d in cal.seq("2024-06-03", "2024-06-28")
-        ]
+        cal = Calendar.load(name="B3")
+        days = cal.seq("2024-06-03", "2024-06-28").tolist()
         present = days[:5] + days[10:]
         self._seed("dl-cov-gap", present)
         issues = check_download_refdate_gaps(["dl-cov-gap"], "B3", last_days=-1)
@@ -1557,11 +1524,8 @@ class TestDownloadRefdateGaps:
         assert [i for i in issues if i.code == "download-refdate-extra"]
 
     def test_coverage_empty_window_message(self):
-        cal = Calendar.load("B3")
-        days = [
-            d.date() if hasattr(d, "date") else d
-            for d in cal.seq("2024-01-02", "2024-01-31")
-        ]
+        cal = Calendar.load(name="B3")
+        days = cal.seq("2024-01-02", "2024-01-31").tolist()
         self._seed("dl-cov-old", days)
         issues = check_download_refdate_gaps(["dl-cov-old"], "B3", last_days=30)
         assert len(issues) == 1
@@ -1579,11 +1543,8 @@ class TestDownloadRefdateGaps:
 
     def test_since_window_excludes_old_gaps(self):
         """Gaps older than the --since window are not reported."""
-        cal = Calendar.load("B3")
-        days = [
-            d.date() if hasattr(d, "date") else d
-            for d in cal.seq("2024-01-02", "2024-01-31")
-        ]
+        cal = Calendar.load(name="B3")
+        days = cal.seq("2024-01-02", "2024-01-31").tolist()
         self._seed("dl-old", days[:5] + days[10:])  # gap in Jan 2024
         issues = check_download_refdate_gaps(["dl-old"], "B3", last_days=30)
         assert not [i for i in issues if i.code == "download-refdate-gaps"]
@@ -1592,11 +1553,8 @@ class TestDownloadRefdateGaps:
         assert [i for i in issues if i.code == "download-refdate-gaps"]
 
     def test_integration_via_run_doctor(self):
-        cal = Calendar.load("B3")
-        days = [
-            d.date() if hasattr(d, "date") else d
-            for d in cal.seq("2024-05-02", "2024-05-31")
-        ]
+        cal = Calendar.load(name="B3")
+        days = cal.seq("2024-05-02", "2024-05-31").tolist()
         self._seed("dl-int", days[:5] + days[10:])
         report = run_doctor(
             categories=["downloads"],

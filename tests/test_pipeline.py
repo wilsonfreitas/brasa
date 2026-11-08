@@ -207,7 +207,7 @@ def test_standard_terms_interpolation_transform():
     mat_by_term = dict(
         zip(result["business_days"], result["maturity_date"], strict=True)
     )
-    cal = Calendar.load("ANBIMA")
+    cal = Calendar.load(name="ANBIMA")
     assert (
         pd.Timestamp(mat_by_term[252]).date()
         == pd.Timestamp(cal.offset(date(2020, 1, 2), 252)).date()

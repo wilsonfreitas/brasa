@@ -39,7 +39,7 @@ The library provides a structured framework for downloading raw data, parsing it
 - **pyarrow** (^19.0.0): Apache Arrow for efficient data storage
 - **duckdb** (^1.2.0): In-process analytical database
 - **lxml** (^4.9.2): XML/HTML parsing
-- **bizdays** (^1.0.15): Business days calendar operations
+- **bizdays** (^2.0.0): Business days calendar operations
 - **pyyaml** (^6.0): YAML configuration files
 - **python-bcb** (^0.3.2): Central Bank of Brazil data access
 

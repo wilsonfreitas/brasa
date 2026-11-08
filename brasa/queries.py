@@ -13,7 +13,6 @@ from bizdays import Calendar
 from .engine import CacheManager, DatasetCatalog, DatasetInfo, retrieve_template
 from .engine.exceptions import BrasaNotConfiguredError
 from .fieldsets import get_target_schema
-from .util import bizdays_mode
 
 logger = logging.getLogger(__name__)
 
@@ -384,9 +383,8 @@ def get_returns(
     if df.empty:
         return df
 
-    with bizdays_mode("pandas"):
-        cal = Calendar.load(calendar)
-        idx = cal.seq(df.index[0], df.index[-1])
+    cal = Calendar.load(name=calendar)
+    idx = pd.DatetimeIndex(cal.seq(df.index[0], df.index[-1])).as_unit("ns")
     df = df.reindex(idx)
     return df
 
@@ -425,9 +423,8 @@ def get_prices(
     if df.empty:
         return df
 
-    with bizdays_mode("pandas"):
-        cal = Calendar.load(calendar)
-        idx = cal.seq(df.index[0], df.index[-1])
+    cal = Calendar.load(name=calendar)
+    idx = pd.DatetimeIndex(cal.seq(df.index[0], df.index[-1])).as_unit("ns")
     df = df.reindex(idx)
     return df
 
