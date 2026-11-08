@@ -188,7 +188,7 @@ parser_download.add_argument(
     "--calendar",
     help="specify calendar to be used for creating date range (default: B3)",
     default=None,
-    choices=["B3", "ANBIMA"],
+    choices=["B3", "ANBIMA", "actual"],
 )
 parser_download.add_argument(
     "--plan",
@@ -242,7 +242,7 @@ parser_import.add_argument(
 parser_import.add_argument(
     "--calendar",
     default="B3",
-    choices=["B3", "ANBIMA"],
+    choices=["B3", "ANBIMA", "actual"],
     help="calendar for date range expansion",
 )
 parser_import.add_argument(

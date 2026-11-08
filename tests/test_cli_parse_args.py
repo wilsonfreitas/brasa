@@ -59,3 +59,12 @@ class TestDoctorLastOption:
 
         with pytest.raises(SystemExit):
             cli.parser.parse_args(["doctor", "--last", "everything"])
+
+
+def test_calendar_actual_is_accepted():
+    """WIL-234: --calendar actual reaches the date-range parser."""
+    from brasa.cli import parser
+
+    args = parser.parse_args(["download", "x", "--calendar", "actual"])
+    kwargs = _parse_download_args(["refdate=@2024"], args.calendar)
+    assert len(kwargs["refdate"]) == 366
