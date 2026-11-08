@@ -13,6 +13,7 @@ from bizdays import Calendar
 from brasa.engine.core import json_convert_from_object, json_convert_to_object
 from brasa.util import (
     DateRange,
+    DateRangeParser,
     DownloadArgs,
     KwargsIterator,
     SuppressUserWarnings,
@@ -663,3 +664,17 @@ def test_past_year_range_works_after_calendar_end(monkeypatch):
     p = DateRange(year=2020, month=3, calendar="B3")
     assert p.start == datetime(2020, 3, 2)
     assert p.end == datetime(2020, 3, 31)
+
+
+@pytest.mark.parametrize(
+    ("text", "first", "last", "size"),
+    [
+        ("2024", datetime(2024, 1, 1), datetime(2024, 12, 31), 366),
+        ("2024-02", datetime(2024, 2, 1), datetime(2024, 2, 29), 29),
+        ("2024-01-06:2024-01-07", datetime(2024, 1, 6), datetime(2024, 1, 7), 2),
+    ],
+)
+def test_actual_calendar_ranges_count_every_day(text, first, last, size):
+    """WIL-234: ranges on the actual calendar include weekends and holidays."""
+    p = DateRangeParser("actual").parse(text)
+    assert (p.start, p.end, len(p)) == (first, last, size)
