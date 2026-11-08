@@ -39,11 +39,15 @@ wheels = [
 
 [[package]]
 name = "bizdays"
-version = "1.0.20"
-source = { git = "https://github.com/wilsonfreitas/python-bizdays?rev=feature%2Ftyping#b4fdd136dc65995cdabdec1cdc794a4a0ad6679c" }
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
     { name = "pandas" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/78/48/d9c8850cb390b41f418ad403f0c64f1ff3cec9371b5ec3fe2205a32befd7/bizdays-2.0.0.tar.gz", hash = "sha256:da2a57bbcad22f72fb5b877b15bf9827f62243eff049123d5094cfca41ce7ac0", size = 96059, upload-time = "2026-11-08T12:30:56.45Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/96/2e/49d4586585b0009812711cb4d8bfa80c0ff0e85f37f2071e4735b42c1cc4/bizdays-2.0.0-py3-none-any.whl", hash = "sha256:ae5fb8f0f4e77d74098fae8ef0e43b5b7f61fac8a8b59567f42b17939cf1cd28", size = 34925, upload-time = "2026-11-08T12:30:55.215Z" },
 ]
 
 [[package]]
@@ -81,7 +85,7 @@ tests = [
 
 [package.metadata]
 requires-dist = [
-    { name = "bizdays", git = "https://github.com/wilsonfreitas/python-bizdays?rev=feature%2Ftyping" },
+    { name = "bizdays", specifier = ">=2.0.0" },
     { name = "duckdb", specifier = ">=1.2.0" },
     { name = "lxml", specifier = ">=4.9.2" },
     { name = "numpy", specifier = ">=2.0.0" },

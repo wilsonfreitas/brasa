@@ -8,7 +8,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "lxml>=4.9.2",
-    "bizdays>=1.0.15",
+    "bizdays>=2.0.0",
     "pandas>=2.0.0",
     "numpy>=2.0.0",
     "regexparser>=0.1.0",
@@ -147,6 +147,3 @@ source = ["brasa"]
 [tool.coverage.report]
 skip_covered = false
 show_missing = false
-
-[tool.uv.sources]
-bizdays = { git = "https://github.com/wilsonfreitas/python-bizdays", rev = "feature/typing" }
